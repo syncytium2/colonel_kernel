@@ -218,7 +218,9 @@ These do not block scaffolding, but should be settled deliberately:
 
 1. **Delta rasterization:** snap spike times to nearest sample, or anti-alias across adjacent
    samples? (Snapping = simpler/intuitive; anti-aliasing avoids quantization artifacts that
-   confuse deconvolution.)
+   confuse deconvolution.) **Resolved — see [ADR-0001](docs/adr/0001-delta-rasterization.md):**
+   snap to nearest sample for v1, behind a swappable `rasterize(...)` interface so anti-aliasing
+   can be toggled in later.
 2. **Input deltas:** unit-amplitude or weighted?
 3. **Sample rate / window length:** fixed, or user-defined? (For CSV ingestion, these come from the
    data's time column.)
