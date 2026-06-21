@@ -1,89 +1,202 @@
 <script>
-  import svelteLogo from './assets/svelte.svg'
-  import viteLogo from './assets/vite.svg'
-  import heroImg from './assets/hero.png'
-  import Counter from './lib/Counter.svelte'
+  import Plot from './lib/Plot.svelte';
+  import {
+    makeGrid,
+    rasterize,
+    buildKernel,
+    defaultParams,
+    convolveOnGrid,
+    KERNEL_LIBRARY,
+  } from './lib/core/index.js';
+
+  // --- controls (FOUNDATIONS §11) ---
+  // Surfaced by default: place spikes, shape the kernel, see the output.
+  // Advanced (collapsed): the global timebase.
+  let spikesText = $state('0.5, 1.0, 1.2');
+  let sampleRate = $state(100);
+  let duration = $state(2);
+  let kernelId = $state('calcium');
+  let params = $state(defaultParams('calcium'));
+
+  function selectKernel(id) {
+    kernelId = id;
+    params = defaultParams(id); // reset params to the new shape's defaults
+  }
+
+  // --- derived pipeline (all live) ---
+  const spikeTimes = $derived(
+    spikesText
+      .split(/[\s,]+/)
+      .map(Number)
+      .filter((t) => Number.isFinite(t)),
+  );
+  const grid = $derived(makeGrid({ sampleRate, duration }));
+  const raster = $derived(rasterize(spikeTimes, grid)); // snap + unit
+  const kernel = $derived(buildKernel(kernelId, params, grid.dt));
+  const output = $derived(convolveOnGrid(raster.samples, grid, kernel));
+
+  const kernelEntry = $derived(KERNEL_LIBRARY.find((k) => k.id === kernelId));
+  const gridTimes = $derived(Array.from(grid.times));
+  const rasterSamples = $derived(Array.from(raster.samples));
+  const kernelTimes = $derived(Array.from(kernel.times));
+  const kernelValues = $derived(Array.from(kernel.values));
+  const outTimes = $derived(Array.from(output.times));
+  const outValues = $derived(Array.from(output.values));
 </script>
 
-<section id="center">
-  <div class="hero">
-    <img src={heroImg} class="base" width="170" height="179" alt="" />
-    <img src={svelteLogo} class="framework" alt="Svelte logo" />
-    <img src={viteLogo} class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
-  </div>
-  <Counter />
-</section>
+<main>
+  <header>
+    <h1>colonel_kernel</h1>
+    <p class="sub">Tab 1 — forward convolution: <code>output = input ⊗ kernel</code></p>
+  </header>
 
-<div class="ticks"></div>
+  <section class="controls">
+    <div class="field">
+      <label for="spikes">Spike times (seconds)</label>
+      <input id="spikes" type="text" bind:value={spikesText} spellcheck="false" />
+      <p class="hint">
+        {raster.placed} placed{#if raster.dropped}, {raster.dropped} outside window{/if}{#if raster.collisions}, {raster.collisions}
+          collision{raster.collisions > 1 ? 's' : ''} clamped (unit amplitude){/if}
+      </p>
+    </div>
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#documentation-icon"></use>
-    </svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-          <img class="logo" src={viteLogo} alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://svelte.dev/" target="_blank" rel="noreferrer">
-          <img class="button-icon" src={svelteLogo} alt="" />
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#social-icon"></use>
-    </svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li>
-        <a href="https://github.com/vitejs/vite" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#github-icon"></use>
-          </svg>
-          GitHub
-        </a>
-      </li>
-      <li>
-        <a href="https://chat.vite.dev/" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#discord-icon"></use>
-          </svg>
-          Discord
-        </a>
-      </li>
-      <li>
-        <a href="https://x.com/vite_js" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#x-icon"></use>
-          </svg>
-          X.com
-        </a>
-      </li>
-      <li>
-        <a href="https://bsky.app/profile/vite.dev" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#bluesky-icon"></use>
-          </svg>
-          Bluesky
-        </a>
-      </li>
-    </ul>
-  </div>
-</section>
+    <div class="field">
+      <label for="kernel">Kernel</label>
+      <select id="kernel" value={kernelId} onchange={(e) => selectKernel(e.currentTarget.value)}>
+        {#each KERNEL_LIBRARY as k}
+          <option value={k.id}>{k.label}</option>
+        {/each}
+      </select>
+      <div class="params">
+        {#each kernelEntry.params as p}
+          <label class="slider">
+            <span>{p.label}</span>
+            <input
+              type="range"
+              min={p.min}
+              max={p.max}
+              step={p.step}
+              bind:value={params[p.key]}
+            />
+            <output>{params[p.key]}</output>
+          </label>
+        {/each}
+      </div>
+    </div>
 
-<div class="ticks"></div>
-<section id="spacer"></section>
+    <details class="advanced">
+      <summary>Advanced — timebase (global)</summary>
+      <div class="adv-grid">
+        <label>
+          <span>Sample rate (Hz)</span>
+          <input type="number" min="1" max="2000" step="1" bind:value={sampleRate} />
+        </label>
+        <label>
+          <span>Window length (s)</span>
+          <input type="number" min="0.1" max="60" step="0.1" bind:value={duration} />
+        </label>
+      </div>
+      <p class="hint">
+        grid: {grid.n} samples · dt = {grid.dt.toFixed(4)} s · {grid.duration.toFixed(2)} s window
+      </p>
+    </details>
+  </section>
+
+  <section class="plots">
+    <Plot title="Input — spike train" xs={gridTimes} ys={rasterSamples} kind="stems" color="var(--text-h)" />
+    <Plot title="Kernel" xs={kernelTimes} ys={kernelValues} color="var(--accent)" zeroLine />
+    <Plot title="Output — input ⊗ kernel" xs={outTimes} ys={outValues} color="#2a9d8f" />
+  </section>
+</main>
+
+<style>
+  main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 24px 20px 64px;
+    text-align: left;
+  }
+  header {
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-size: 32px;
+    margin: 0 0 4px;
+  }
+  .sub {
+    color: var(--text);
+  }
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 24px;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  label {
+    font-size: 14px;
+    color: var(--text-h);
+    font-weight: 500;
+  }
+  input[type='text'],
+  input[type='number'],
+  select {
+    font: inherit;
+    font-size: 15px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text-h);
+  }
+  .hint {
+    font-size: 13px;
+    color: var(--text);
+  }
+  .params {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .slider {
+    display: grid;
+    grid-template-columns: 130px 1fr 56px;
+    align-items: center;
+    gap: 10px;
+    font-weight: 400;
+  }
+  .slider output {
+    font-family: var(--mono);
+    font-size: 13px;
+    text-align: right;
+  }
+  .advanced summary {
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-h);
+  }
+  .adv-grid {
+    display: flex;
+    gap: 16px;
+    margin: 12px 0 6px;
+  }
+  .adv-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-weight: 400;
+  }
+  .plots {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+</style>

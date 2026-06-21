@@ -1,0 +1,120 @@
+// Parameterized kernel library (ADR-0003): a fixed set of canonical shapes,
+// each with live parameters. No freehand / typed kernels.
+//
+// A built kernel is a dense array of samples on the grid's dt, plus an
+// `originOffset`: the index in `values` that aligns with the spike (kernel
+// time 0). Causal shapes have origin 0 (kernel starts at the spike); symmetric
+// shapes center the origin. Convolution uses originOffset to place the output
+// on the correct time axis (see convolve.js).
+//
+// Values carry literal amplitudes (peak ~1), NOT area-normalization, so the
+// teaching identity holds: one unit spike ⊗ a kernel reproduces the kernel's
+// samples at the spike location.
+
+/**
+ * @typedef {Object} Kernel
+ * @property {string} id
+ * @property {string} label
+ * @property {Float64Array} values
+ * @property {number} originOffset  index of kernel-time-0 within `values`
+ * @property {Float64Array} times   kernel time axis (seconds), length values.length
+ * @property {Object} params
+ */
+
+/** Library metadata + parameter schemas — drives the UI controls. */
+export const KERNEL_LIBRARY = [
+  {
+    id: 'gaussian',
+    label: 'Gaussian',
+    params: [{ key: 'sigma', label: 'width σ (s)', min: 0.01, max: 0.5, step: 0.01, default: 0.1 }],
+  },
+  {
+    id: 'exponential',
+    label: 'Exponential decay',
+    params: [{ key: 'tau', label: 'τ (s)', min: 0.02, max: 1, step: 0.01, default: 0.2 }],
+  },
+  {
+    id: 'boxcar',
+    label: 'Boxcar',
+    params: [{ key: 'length', label: 'length (s)', min: 0.02, max: 1, step: 0.01, default: 0.3 }],
+  },
+  {
+    id: 'calcium',
+    label: 'Calcium indicator',
+    params: [
+      { key: 'tauRise', label: 'τ rise (s)', min: 0.01, max: 0.3, step: 0.01, default: 0.05 },
+      { key: 'tauDecay', label: 'τ decay (s)', min: 0.05, max: 2, step: 0.05, default: 0.4 },
+    ],
+  },
+];
+
+/** Default params for a library entry, keyed by param key. */
+export function defaultParams(id) {
+  const entry = KERNEL_LIBRARY.find((k) => k.id === id);
+  if (!entry) throw new Error(`unknown kernel id: ${id}`);
+  return Object.fromEntries(entry.params.map((p) => [p.key, p.default]));
+}
+
+/**
+ * Build a kernel's samples on a given dt.
+ * @param {string} id
+ * @param {Object} params
+ * @param {number} dt sample interval (seconds)
+ * @returns {Kernel}
+ */
+export function buildKernel(id, params, dt) {
+  const builder = BUILDERS[id];
+  if (!builder) throw new Error(`unknown kernel id: ${id}`);
+  const { values, originOffset } = builder(params, dt);
+  const entry = KERNEL_LIBRARY.find((k) => k.id === id);
+  const times = new Float64Array(values.length);
+  for (let i = 0; i < values.length; i++) times[i] = (i - originOffset) * dt;
+  return { id, label: entry.label, values, originOffset, times, params };
+}
+
+const BUILDERS = {
+  // Symmetric bell, peak 1, centered on the spike. Support ±3σ.
+  gaussian({ sigma }, dt) {
+    const half = Math.max(1, Math.round((3 * sigma) / dt));
+    const n = 2 * half + 1;
+    const values = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const t = (i - half) * dt;
+      values[i] = Math.exp(-0.5 * (t / sigma) ** 2);
+    }
+    return { values, originOffset: half };
+  },
+
+  // Causal exponential decay, value 1 at the spike, support ~5τ.
+  exponential({ tau }, dt) {
+    const n = Math.max(2, Math.round((5 * tau) / dt) + 1);
+    const values = new Float64Array(n);
+    for (let i = 0; i < n; i++) values[i] = Math.exp(-(i * dt) / tau);
+    return { values, originOffset: 0 };
+  },
+
+  // Causal rectangle of height 1, from the spike forward. The cleanest
+  // hand-verify shape: one unit spike ⊗ boxcar reproduces the boxcar.
+  boxcar({ length }, dt) {
+    const n = Math.max(1, Math.round(length / dt));
+    return { values: new Float64Array(n).fill(1), originOffset: 0 };
+  },
+
+  // Causal calcium transient: difference of exponentials, normalized to peak 1.
+  // k(t) = exp(-t/tauDecay) - exp(-t/tauRise), t >= 0.
+  calcium({ tauRise, tauDecay }, dt) {
+    // Guard: rise must be faster than decay for a real transient shape.
+    const rise = Math.min(tauRise, tauDecay * 0.999);
+    const n = Math.max(2, Math.round((5 * tauDecay) / dt) + 1);
+    const values = new Float64Array(n);
+    let peak = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i * dt;
+      const v = Math.exp(-t / tauDecay) - Math.exp(-t / rise);
+      values[i] = v;
+      if (v > peak) peak = v;
+    }
+    if (peak > 0) for (let i = 0; i < n; i++) values[i] /= peak;
+    return { values, originOffset: 0 };
+  },
+};
