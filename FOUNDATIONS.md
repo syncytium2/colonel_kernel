@@ -249,7 +249,54 @@ These do not block scaffolding, but should be settled deliberately:
 
 ---
 
-## 11. How to use this file with Claude / Claude Code
+## 11. Controls, state scope, and progressive disclosure
+
+These are **durable organizing principles** for the UI and app state — the structure that
+should hold regardless of the specific controls each tab ends up with. They are distinct from
+the concrete decision in [ADR-0002](docs/adr/0002-global-timebase.md) (which settles the
+*timebase* specifically); this section is the wider frame that decision sits inside.
+
+### 11.1 Two-audience tiered UI / progressive disclosure
+
+The tool serves both a **learner** and a **researcher**. The control surface must not overwhelm
+the learner — the tool's value is *clarity*. Organize controls in tiers:
+
+- **Surface by default** — the few things a learner touches: place spikes, shape the kernel, see
+  the output.
+- **One layer down (Advanced / collapsible)** — knobs that matter but have sane defaults: sample
+  rate, window length, rasterization method, amplitude mode, edge handling.
+- **Contextual** — deconvolution and ROI controls appear **only** on the tabs that use them
+  (Tabs 2/3), never on Tab 1. The biggest lever against clutter is simply *not showing a control
+  on a tab that can't use it*.
+
+An explicit **simple/advanced mode** is a possible implementation of this tiering.
+
+### 11.2 Control-scope model (global vs. tab-local)
+
+Every control has a **deliberate scope**, decided up front so users never wonder "why is this knob
+here?" or "does it affect the other tab?":
+
+- **Global** — the timebase (sample rate / window length), see [ADR-0002](docs/adr/0002-global-timebase.md).
+  The **kernel is likely global too** (so it can be carried between tabs) — *TBD when built.*
+- **Tab-local** — deconvolution method, regularization, ROI selection: only meaningful in Tabs 2/3.
+- **Global-but-default-off** — noise injection.
+
+### 11.3 Cross-tab flow
+
+The intended UX is **one signal flowing through the tabs**: author spikes + kernel in Tab 1, carry
+the same signal into Tabs 2/3. This is precisely *why* the timebase is global
+([ADR-0002](docs/adr/0002-global-timebase.md)) — a per-tab timebase would silently resample or
+break a signal as it moves between tabs.
+
+### 11.4 Still open (do not treat as settled)
+
+- **Per-tab disclosure layout** — exactly which controls are surfaced vs. collapsed on each tab.
+  To be designed when each tab is built.
+- **Kernel scope** — whether the kernel is global or tab-local. TBD.
+
+---
+
+## 12. How to use this file with Claude / Claude Code
 
 - **Start every session by reading this file.** It is the shared ground truth that prevents drift.
 - This file holds *settled foundations and the reasoning behind them*. It is not a task list.
