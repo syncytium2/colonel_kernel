@@ -22,3 +22,4 @@ When an ADR changes a settled point in `FOUNDATIONS.md`, update `FOUNDATIONS.md`
 |-----|-------|--------|
 | [0001](0001-delta-rasterization.md) | Delta rasterization: snap + unit-amplitude defaults | Accepted |
 | [0002](0002-global-timebase.md) | Global timebase (authored-adjustable, load-locked) | Accepted |
+| [0003](0003-kernel-source.md) | Kernel source — parameterized library, no freehand drawing | Accepted |
