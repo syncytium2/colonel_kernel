@@ -6,14 +6,22 @@
   // A thin reactive uPlot wrapper. `kind` selects stems (input spike train)
   // vs. a continuous line (kernel, output). Data is passed as parallel
   // xs / ys arrays and pushed to the chart whenever it changes.
+  //
+  // Alignment props let two stacked plots share an x-axis exactly:
+  //   xRange    — pin the x scale to [min, max] (else autorange)
+  //   yAxisSize — fix the left y-gutter in px so plot areas left-align
+  //   showXAxis — hide the x-axis on the upper of a stacked pair
   let {
-    title = '',
     xs = [],
     ys = [],
     color = 'var(--accent)',
     kind = 'line',
     height = 150,
     zeroLine = false,
+    xRange = null,
+    yAxisSize = null,
+    showXAxis = true,
+    xLabel = '',
   } = $props();
 
   let wrap;
@@ -34,7 +42,7 @@
         : { stroke, width: 2 };
     const hooks = zeroLine
       ? {
-          // mark the t=0 (spike-aligned) line — matters for symmetric kernels.
+          // mark the lag-0 (spike-aligned) line — central to the kernel panel.
           drawClear: [
             (u) => {
               const cx = u.valToPos(0, 'x', true);
@@ -53,20 +61,24 @@
         }
       : {};
     return {
-      title,
       width,
       height,
       cursor: { y: false },
       legend: { show: false },
       scales: { x: { time: false } },
       hooks,
-      series: [{}, { label: title, points: { show: false }, ...series }],
+      axes: [
+        { show: showXAxis, label: xLabel || undefined },
+        yAxisSize != null ? { size: yAxisSize } : {},
+      ],
+      series: [{}, { points: { show: false }, ...series }],
     };
   }
 
   onMount(() => {
     lastWidth = wrap.clientWidth || 600;
     plot = new uPlot(makeOpts(lastWidth), [xs, ys], wrap);
+    pinScale();
     const ro = new ResizeObserver(() => {
       const w = wrap.clientWidth || 600;
       if (w !== lastWidth && plot) {
@@ -81,10 +93,17 @@
     };
   });
 
-  // Live update: re-feed data whenever xs/ys change.
+  function pinScale() {
+    if (plot && xRange) plot.setScale('x', { min: xRange[0], max: xRange[1] });
+  }
+
+  // Live update: re-feed data and re-pin the x range whenever inputs change.
   $effect(() => {
     const data = [xs, ys];
-    if (plot) plot.setData(data);
+    const _ = xRange; // track for reactivity
+    if (!plot) return;
+    plot.setData(data);
+    pinScale();
   });
 </script>
 

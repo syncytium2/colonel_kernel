@@ -38,10 +38,41 @@
   const kernelEntry = $derived(KERNEL_LIBRARY.find((k) => k.id === kernelId));
   const gridTimes = $derived(Array.from(grid.times));
   const rasterSamples = $derived(Array.from(raster.samples));
-  const kernelTimes = $derived(Array.from(kernel.times));
-  const kernelValues = $derived(Array.from(kernel.values));
   const outTimes = $derived(Array.from(output.times));
   const outValues = $derived(Array.from(output.values));
+
+  // --- presentation transforms (core untouched) ---
+
+  // Spike train and output share ONE recording-time x-axis so the eye drops
+  // straight down from a spike to where its response begins. Use the union of
+  // both ranges so the kernel tail past the window isn't clipped.
+  const leftXRange = $derived.by(() => {
+    const min = Math.min(gridTimes[0] ?? 0, outTimes[0] ?? 0);
+    const max = Math.max(gridTimes[gridTimes.length - 1] ?? 1, outTimes[outTimes.length - 1] ?? 1);
+    return [min, max];
+  });
+
+  // The kernel is an operator on LAG, not a signal on the recording timebase.
+  // Display it on its own symmetric ±win axis centered on lag 0, matching how
+  // Tab 2 shows recovered kernels (ADR-0004). Causal kernels fill the positive
+  // half and sit flat at zero on the negative side — that teaches causality, so
+  // pad with zeros rather than cropping to causal-only.
+  const kernelDisplay = $derived.by(() => {
+    const L = kernel.values.length;
+    const origin = kernel.originOffset;
+    const win = Math.max(origin, L - 1 - origin); // half-window in samples
+    const len = 2 * win + 1;
+    const t = new Array(len);
+    const v = new Array(len);
+    for (let oi = 0; oi < len; oi++) {
+      const lagSamp = oi - win;
+      const ki = origin + lagSamp;
+      t[oi] = lagSamp * grid.dt;
+      v[oi] = ki >= 0 && ki < L ? kernel.values[ki] : 0;
+    }
+    return { t, v, winSeconds: win * grid.dt };
+  });
+  const kernelXRange = $derived([-kernelDisplay.winSeconds, kernelDisplay.winSeconds]);
 </script>
 
 <main>
@@ -102,10 +133,47 @@
     </details>
   </section>
 
-  <section class="plots">
-    <Plot title="Input — spike train" xs={gridTimes} ys={rasterSamples} kind="stems" color="var(--text-h)" />
-    <Plot title="Kernel" xs={kernelTimes} ys={kernelValues} color="var(--accent)" zeroLine />
-    <Plot title="Output — input ⊗ kernel" xs={outTimes} ys={outValues} color="#2a9d8f" />
+  <section class="workspace">
+    <!-- Left column: spikes (top) + output (bottom), one locked recording-time axis. -->
+    <div class="panel spikes">
+      <div class="panel-label">Input — spike train</div>
+      <Plot
+        xs={gridTimes}
+        ys={rasterSamples}
+        kind="stems"
+        color="var(--text-h)"
+        xRange={leftXRange}
+        yAxisSize={48}
+        showXAxis={false}
+        height={150}
+      />
+    </div>
+    <div class="panel output">
+      <div class="panel-label">Output — input ⊗ kernel</div>
+      <Plot
+        xs={outTimes}
+        ys={outValues}
+        color="#2a9d8f"
+        xRange={leftXRange}
+        yAxisSize={48}
+        xLabel="time (s)"
+        height={170}
+      />
+    </div>
+
+    <!-- Upper-right: the kernel as an operator on lag — its own square ±win axis. -->
+    <div class="panel kernel">
+      <div class="panel-label">Kernel — lag (s)</div>
+      <Plot
+        xs={kernelDisplay.t}
+        ys={kernelDisplay.v}
+        color="var(--accent)"
+        xRange={kernelXRange}
+        xLabel="lag (s)"
+        zeroLine
+        height={260}
+      />
+    </div>
   </section>
 </main>
 
@@ -194,9 +262,49 @@
     gap: 4px;
     font-weight: 400;
   }
-  .plots {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
+  .workspace {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    grid-template-areas:
+      'spikes kernel'
+      'output kernel';
+    column-gap: 28px;
+    row-gap: 16px;
+    align-items: start;
+  }
+  .spikes {
+    grid-area: spikes;
+  }
+  .output {
+    grid-area: output;
+  }
+  .kernel {
+    grid-area: kernel;
+    align-self: start;
+    width: 300px;
+  }
+  .panel {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .panel-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-h);
+    margin-bottom: 6px;
+  }
+
+  @media (max-width: 720px) {
+    .workspace {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        'spikes'
+        'output'
+        'kernel';
+    }
+    .kernel {
+      width: 100%;
+    }
   }
 </style>
