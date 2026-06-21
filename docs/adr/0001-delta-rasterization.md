@@ -1,4 +1,4 @@
-# 1. Delta rasterization: snap to nearest sample
+# 1. Delta rasterization: snap + unit-amplitude defaults
 
 ## Status
 

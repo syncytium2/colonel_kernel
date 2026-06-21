@@ -20,4 +20,4 @@ When an ADR changes a settled point in `FOUNDATIONS.md`, update `FOUNDATIONS.md`
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| [0001](0001-delta-rasterization.md) | Delta rasterization: snap to nearest sample | Accepted |
+| [0001](0001-delta-rasterization.md) | Delta rasterization: snap + unit-amplitude defaults | Accepted |
