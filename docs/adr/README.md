@@ -27,3 +27,4 @@ When an ADR changes a settled point in `FOUNDATIONS.md`, update `FOUNDATIONS.md`
 | [0005](0005-tab2-sta-validation-partner.md) | STA as Tab 2 cross-method validation partner | Accepted |
 | [0006](0006-linear-convolution.md) | Linear convolution (zero-padded) as the default convention | Accepted |
 | [0007](0007-build-order.md) | Build order / tab sequencing — 1 → 2 → 3 | Accepted |
+| [0008](0008-csp-build-time-injection.md) | CSP injected at build time (dev server runs relaxed) | Accepted |

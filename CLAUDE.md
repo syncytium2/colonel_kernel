@@ -28,7 +28,7 @@ Researchers' unpublished data must never leave their machine.
 
 - **No third-party requests.** No CDNs, no Google Fonts, no analytics, no error-reporting SaaS. Bundle every library, font, and asset locally.
 - **No backend.** All computation (convolution, FFT, deconvolution) runs client-side.
-- **Strict CSP, in from day one:** `connect-src 'none'; default-src 'self'` — set as a `<meta http-equiv="Content-Security-Policy">` tag in `index.html` so it holds on any static host.
+- **Strict CSP, in from day one:** `connect-src 'none'; default-src 'self'` — a `<meta http-equiv="Content-Security-Policy">` tag injected into the **built** `index.html` at build time (Vite plugin in `vite.config.js`; see ADR-0008) so it holds on any static host. The source `index.html` carries no CSP so the dev server (HMR) works; the shipped artifact is fully locked down. Run the verification ritual against the built/deployed artifact, not the dev server.
 - **No persistent storage of user data** beyond explicit, user-controlled file open / download.
 - **Verification ritual:** after deploy, DevTools → Network → reload → confirm only same-origin requests.
 

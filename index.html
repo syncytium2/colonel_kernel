@@ -2,9 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Privacy posture (FOUNDATIONS §6): no network egress, no third-party requests.
-         Set strict CSP from day one so it works on any static host. -->
-    <meta http-equiv="Content-Security-Policy" content="connect-src 'none'; default-src 'self'" />
+    <!-- Privacy posture (FOUNDATIONS §6, ADR-0008): the strict CSP
+         (connect-src 'none'; default-src 'self') is injected into the BUILT
+         index.html by the inject-csp-on-build plugin in vite.config.js — it is
+         deliberately absent here so the Vite dev server (HMR) works. The
+         shipped artifact is fully locked down; the dev server is not. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>colonel_kernel</title>

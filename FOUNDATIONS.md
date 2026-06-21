@@ -179,11 +179,16 @@ Commitments that make the claim *real* (browser-enforced, auditable):
 - **No backend.** All math (convolution, FFT, deconvolution) runs client-side.
 - **No third-party requests.** Bundle fonts, libraries, WASM locally. No CDNs, no Google Fonts,
   no analytics, no error-reporting SaaS.
-- **Strict CSP from day one:** `connect-src 'none'; default-src 'self'` (via `<meta http-equiv>`
-  so it works on any static host). Set it while the app is small; retrofitting is painful.
+- **Strict CSP from day one:** `connect-src 'none'; default-src 'self'`, via a `<meta http-equiv>`
+  tag so it works on any static host. **Injected into the built `index.html` at build time**
+  (Vite plugin, see [ADR-0008](docs/adr/0008-csp-build-time-injection.md)) — the source
+  `index.html` carries no CSP so the dev server (HMR) works, while the shipped artifact is fully
+  locked down. Set it while the app is small; retrofitting is painful.
 - **No persistent storage of user data** beyond explicit, user-controlled local file open / download.
 - **Verification ritual:** after deploy, open dev tools → Network tab → reload → confirm only
-  same-origin requests, nothing else.
+  same-origin requests, nothing else. Run this against the **built/deployed** artifact
+  (`npm run preview` or production), not the dev server, which is intentionally unrestricted
+  ([ADR-0008](docs/adr/0008-csp-build-time-injection.md)).
 
 ---
 
