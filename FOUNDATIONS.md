@@ -216,11 +216,17 @@ the symmetric three-tab framing + ground-truth kernel verification for calcium i
 
 These do not block scaffolding, but should be settled deliberately:
 
-1. **Delta rasterization:** snap spike times to nearest sample, or anti-alias across adjacent
-   samples? (Snapping = simpler/intuitive; anti-aliasing avoids quantization artifacts that
-   confuse deconvolution.) **Resolved — see [ADR-0001](docs/adr/0001-delta-rasterization.md):**
-   snap to nearest sample for v1, behind a swappable `rasterize(...)` interface so anti-aliasing
-   can be toggled in later.
+1. **Delta rasterization — SETTLED.**
+   - **Decision:** snap spike times to the nearest sample for v1, **toggleable** — anti-aliasing
+     (distributing weight across adjacent samples for sub-sample precision) is a planned future
+     toggle, not discarded.
+   - **Reasoning:** snapping keeps the spike-train concept clean and literal for teaching;
+     worst-case timing error is half a frame — below the calcium kernel timescale — when the
+     sample grid matches the recording's frame rate.
+   - **Implementation:** build rasterization behind a single swappable function
+     (e.g. `rasterize(spikeTimes, grid, method)`) so `"snap"` and `"antialias"` are two
+     implementations behind one interface.
+   - See [ADR-0001](docs/adr/0001-delta-rasterization.md).
 2. **Input deltas:** unit-amplitude or weighted?
 3. **Sample rate / window length:** fixed, or user-defined? (For CSV ingestion, these come from the
    data's time column.)
