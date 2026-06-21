@@ -25,3 +25,4 @@ When an ADR changes a settled point in `FOUNDATIONS.md`, update `FOUNDATIONS.md`
 | [0003](0003-kernel-source.md) | Kernel source — parameterized library, no freehand drawing | Accepted |
 | [0004](0004-tab2-deconvolution-method.md) | Tab 2 deconvolution method — regularized least squares ported from deconvreg | Accepted |
 | [0005](0005-tab2-sta-validation-partner.md) | STA as Tab 2 cross-method validation partner | Accepted |
+| [0006](0006-linear-convolution.md) | Linear convolution (zero-padded) as the default convention | Accepted |

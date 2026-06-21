@@ -277,9 +277,18 @@ These do not block scaffolding, but should be settled deliberately:
 4. **Kernel source for the teaching side:** library (Gaussian, exponential, boxcar, custom), drawn,
    or typed? (Note: the calcium use case wants a *parameterized model* kernel — rise/decay τ — when
    forward-modeling, but Tab 2's whole point is to *recover* the kernel, not assume it.)
-5. **Linear vs circular convolution** as the default convention.
+5. **Linear vs circular convolution — SETTLED.** **Linear** convolution (zero-padded) is the
+   convention everywhere; circular is kept only as a teaching illustration of "what FFT does
+   naively, and why we zero-pad to avoid it." See [ADR-0006](docs/adr/0006-linear-convolution.md).
 6. **CSV layout convention** for the sparse spike column vs dense trace columns (confirm against a
    real exported file once one exists).
+
+> **Status of this list:** with rasterization (1, via ADR-0001) and linear-vs-circular (5, via
+> ADR-0006) now settled — and the kernel-source and sample-rate questions resolved by ADR-0003 and
+> ADR-0002 respectively — the **original four open questions are closed**. The remaining live items
+> are the *later-surfaced* ones: the deconvolution numerical route ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)),
+> and the kernel global/tab-local detail plus the per-tab disclosure layout (§11.4). Item 6 (CSV
+> layout) stays open pending a real exported file.
 
 ---
 
