@@ -223,9 +223,19 @@ These do not block scaffolding, but should be settled deliberately:
    - **Reasoning:** snapping keeps the spike-train concept clean and literal for teaching;
      worst-case timing error is half a frame — below the calcium kernel timescale — when the
      sample grid matches the recording's frame rate.
+   - **Amplitude model:** **unit amplitude is the default** (each spike = weight 1). This is the
+     core assumption for Tab 2 kernel recovery — it forces the kernel to explain the trace and
+     keeps the "is there a clean kernel?" test meaningful.
+   - **Required toggle — binned count:** needed for real calcium data. At a 10 Hz sampling rate
+     (100 ms bins) a cell can fire multiple times per bin, so the honest representation is the
+     per-bin spike *count* (a bin value of 3 = three identical unit events). This does NOT break
+     Tab 2 identifiability the way free/arbitrary weighting would, because the count is objective,
+     not a soft fit parameter. (Arbitrary per-spike weighting is therefore excluded from Tab 2.)
    - **Implementation:** build rasterization behind a single swappable function
-     (e.g. `rasterize(spikeTimes, grid, method)`) so `"snap"` and `"antialias"` are two
-     implementations behind one interface.
+     (e.g. `rasterize(spikeTimes, grid, method)`). Placement and amplitude are two axes of that
+     one function: `"snap"`/`"antialias"` choose timing placement, while `"unit"` clamps/keeps
+     weight 1 (and should log any dropped collisions) and `"binned-count"` accumulates spikes
+     per bin.
    - See [ADR-0001](docs/adr/0001-delta-rasterization.md).
 2. **Input deltas:** unit-amplitude or weighted?
 3. **Sample rate / window length:** fixed, or user-defined? (For CSV ingestion, these come from the
