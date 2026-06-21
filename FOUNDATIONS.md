@@ -42,6 +42,10 @@ The tool is organized as **three tabs**, each solving this relationship for a di
 - The **kernel is the unknown** we recover.
 - This is a *better-posed* problem than spike inference: solving for a kernel given two known
   signals is more stable than recovering spikes from a trace.
+- **Method:** the kernel is recovered by regularized least squares with explicit, user-adjustable
+  regularization and a symmetric retained-lag kernel (see [ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)),
+  and is always read against an independent STA validation partner (see
+  [ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)).
 
 **The scientifically important job of Tab 2 is not just "recover the kernel" — it is to report
 whether a clean kernel exists at all.** Research indicates spikes and calcium signal can be
@@ -72,15 +76,15 @@ distinct roles across the tabs. This is durable structure worth stating explicit
    calcium-shaped parameterized kernel (`tau_rise` / `tau_decay`) is the natural pick here, since
    Tab 3 is the calcium-flavored teaching tab.
 3. **Tab 2 recovered kernel — a *solved-for output*, not an input.** It is judged against a
-   plausibility model (fast rise + exponential decay) as part of the goodness-of-fit triad (§3).
-   ADR-0003 does **not** govern this kernel — it is recovered, not chosen.
+   plausibility model (fast rise + exponential decay) as one of the four goodness-of-fit checks
+   (§3). ADR-0003 does **not** govern this kernel — it is recovered, not chosen.
 
 ---
 
 ## 3. The flagship's core deliverable: "is there a kernel, or isn't there?"
 
 Recovering a kernel **always returns something** — the question is whether it is meaningful.
-The tool must surface a **goodness-of-fit triad** so the user can judge:
+The tool must surface **four checks** so the user can judge:
 
 1. **Kernel plausibility** — does the recovered kernel look like a real indicator transient
    (fast rise, exponential decay), or like noise / ringing?
@@ -88,9 +92,20 @@ The tool must surface a **goodness-of-fit triad** so the user can judge:
    the actual trace, report the residual.
 3. **Stability** — does the kernel stay consistent (across regularization settings, across spikes),
    or does it swing wildly?
+4. **Cross-method agreement** — the deconvolved kernel ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md))
+   is read against an independent **spike-triggered average (STA)**. Agreement is a primary
+   "is there a real kernel?" signal. Because STA and deconvolution have *different* failure modes
+   (STA breaks at high spike frequency; deconvolution holds), their agreement must be read alongside
+   the **spike rate** (see [ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md) for the
+   three-regime interpretation).
 
-An **uncoupled** recording shows up as: implausible kernel shape + high residual + unstable estimate.
-That triad *is* the "there isn't one" verdict.
+**Spike rate is surfaced as displayed context** in the flagship readout: it tells the user whether
+STA/deconv disagreement is benign (high-frequency regime, where STA is expected to degrade) or
+alarming (possible uncoupling).
+
+An **uncoupled** recording shows up as: implausible kernel shape + high residual + unstable estimate
++ STA/deconv disagreement that the spike rate does *not* explain. Those four checks *are* the
+"there isn't one" verdict.
 
 ---
 
@@ -105,10 +120,15 @@ other than the expected one shows a clean spikes→trace relationship. Prevalenc
 no one reports this approach.
 
 **Design consequence:** kernel recovery runs against **every trace column** (not just column 1),
-with the goodness-of-fit triad reported **per column**, laid side by side, column 1 highlighted as
-the expected target. This turns "how common is more than one cell with a kernel?" from an unknown
+with the four goodness-of-fit checks reported **per column**, laid side by side, column 1 highlighted
+as the expected target. This turns "how common is more than one cell with a kernel?" from an unknown
 into something the tool *measures every time a recording is loaded*. Labs running it generate
 prevalence data collectively.
+
+The retained negative-lag kernel structure ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md))
+turns the multi-ROI question from "is there a kernel?" into "is there a kernel, *and what is the
+lead/lag relationship?*" — kernel position encodes coupling direction, a companion to the prevalence
+question above.
 
 ### Multiple-comparisons caution (design for it now, implement later)
 
