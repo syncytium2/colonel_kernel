@@ -61,6 +61,20 @@ and why better methods exist. It is honest illustration, not a recommended workf
 Forward convolution. Stamp a copy of the kernel at each delta time, scaled by amplitude, sum the
 overlaps. The clearest teaching view; also the natural place for a slide-and-multiply animation.
 
+### "The kernel" plays three distinct roles
+
+A recurring source of confusion is that "the kernel" is not one object — it appears in three
+distinct roles across the tabs. This is durable structure worth stating explicitly:
+
+1. **Tab 1 input kernel — *chosen*,** to demonstrate convolution. Drawn from the parameterized
+   library (see [ADR-0003](docs/adr/0003-kernel-source.md)).
+2. **Tab 3 input kernel — *chosen*,** for the naive spike-inference illustration. The
+   calcium-shaped parameterized kernel (`tau_rise` / `tau_decay`) is the natural pick here, since
+   Tab 3 is the calcium-flavored teaching tab.
+3. **Tab 2 recovered kernel — a *solved-for output*, not an input.** It is judged against a
+   plausibility model (fast rise + exponential decay) as part of the goodness-of-fit triad (§3).
+   ADR-0003 does **not** govern this kernel — it is recovered, not chosen.
+
 ---
 
 ## 3. The flagship's core deliverable: "is there a kernel, or isn't there?"
@@ -292,7 +306,11 @@ break a signal as it moves between tabs.
 
 - **Per-tab disclosure layout** — exactly which controls are surfaced vs. collapsed on each tab.
   To be designed when each tab is built.
-- **Kernel scope** — whether the kernel is global or tab-local. TBD.
+- **Kernel scope** — partly resolved. Because the kernel is a *chosen* object in Tabs 1 and 3 but
+  a *recovered* object in Tab 2 (see "The kernel plays three distinct roles", §2), a single global
+  kernel across all tabs does not cleanly hold. **Likely model:** the *chosen* kernel is shared
+  between Tabs 1 and 3; Tab 2's kernel is its own recovered result, optionally comparable against
+  the chosen kernel as ground truth. The precise sharing remains **TBD**.
 
 ---
 
