@@ -4,7 +4,7 @@
 // These assert the trivial cases a human can confirm on paper, so the
 // foundation is proven before any UI or animation depends on it.
 
-import { makeGrid } from './timebase.js';
+import { makeGrid, gridFromTimeColumn } from './timebase.js';
 import { rasterize } from './rasterize.js';
 import { buildKernel, defaultParams } from './kernels.js';
 import { convolveLinear, convolveOnGrid } from './convolve.js';
@@ -83,9 +83,36 @@ for (const v of ca.samples) if (v > caPeak) caPeak = v;
 ok('calcium normalized to peak 1', approx(caPeak, 1, 1e-12));
 ok('calcium origin causal', ca.zeroIndex === 0);
 
+// --- binned-count: reproduce MATLAB hist(spikes, timing) EXACTLY (ADR-0001/§13) ---
+// Integer-exact centers so the midpoint tie-break is float-safe.
+// centers [0,1,2,3] -> edges 0.5, 1.5, 2.5; max=3 (pre-filter `< 3`).
+//   bin0 [-inf,0.5) bin1 [0.5,1.5) bin2 [1.5,2.5) bin3 [2.5,3)
+// spikes: -0.2 below-first->bin0; 0.5 ON edge->upper bin1; 0.7->bin1; 1.5 ON
+//   edge->upper bin2; 2.9->bin3; 3.0 ==max->dropped; 3.5 above->dropped.
+const bcGrid = gridFromTimeColumn([0, 1, 2, 3]);
+const bc = rasterize([-0.2, 0.5, 0.7, 1.5, 2.9, 3.0, 3.5], bcGrid, { amplitudeMode: 'binned-count' });
+ok('binned-count exact count vector [1,2,1,1]', [1, 2, 1, 1].every((v, i) => bc.samples[i] === v), `[${bc.samples}]`);
+ok('binned-count placed=5 dropped=2', bc.placed === 5 && bc.dropped === 2, `placed=${bc.placed} dropped=${bc.dropped}`);
+ok('midpoint tie -> UPPER bin (0.5->bin1, 1.5->bin2)', bc.samples[1] === 2 && bc.samples[2] === 1);
+ok('below-first-center counted in bin 0', bc.samples[0] === 1);
+ok('spike == max(timing) is dropped (strict pre-filter)', bc.placed === 5);
+
+// Float-safe 0.1-spaced centers, spikes deliberately OFF the edges.
+// centers [0.1..0.4] -> edges ~0.15,0.25,0.35; spikes 0.12,0.18,0.22,0.31,0.39.
+const bc2 = rasterize([0.12, 0.18, 0.22, 0.31, 0.39], gridFromTimeColumn([0.1, 0.2, 0.3, 0.4]), {
+  amplitudeMode: 'binned-count',
+});
+ok('binned-count 0.1-spaced counts [1,2,1,1]', [1, 2, 1, 1].every((v, i) => bc2.samples[i] === v), `[${bc2.samples}]`);
+
+// Jittery (non-uniform) centers: bins follow the REAL centers, not a uniform dt.
+// centers [0,0.1,0.2,1.0] -> last edge midpoint(0.2,1.0)=0.6. spike 0.62 > 0.6
+// -> last bin (3); a uniform-dt grid (dt=0.333) would misplace it to bin 2.
+const bc3 = rasterize([0.04, 0.62], gridFromTimeColumn([0, 0.1, 0.2, 1.0]), { amplitudeMode: 'binned-count' });
+ok('binned bins follow real centers (0.62->bin3, not bin2)', bc3.samples[3] === 1 && bc3.samples[2] === 0, `[${bc3.samples}]`);
+ok('jittery below-first in bin 0', bc3.samples[0] === 1);
+
 // --- stubs throw behind the shared interface (ADR-0001) ---------------------
 ok('antialias stub throws', throws(() => rasterize([0.5], grid, { method: 'antialias' })));
-ok('binned-count stub throws', throws(() => rasterize([0.5], grid, { amplitudeMode: 'binned-count' })));
 
 // --- summary ----------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

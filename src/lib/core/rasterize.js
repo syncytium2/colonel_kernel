@@ -4,8 +4,14 @@
 //   - method        ∈ {"snap", "antialias"}      — timing placement
 //   - amplitudeMode  ∈ {"unit", "binned-count"}  — collision / bin value
 //
-// v1 implements "snap" + "unit". "antialias" and "binned-count" are stubbed
-// behind this same interface so they are drop-in later with no call-site churn.
+// "snap" + "unit" and "binned-count" are implemented; "antialias" is stubbed
+// behind this same interface so it is drop-in later with no call-site churn.
+//
+// "binned-count" is the validation-path mode (ADR-0001 / FOUNDATIONS §13): it
+// reproduces MATLAB `hist(spikes, timing)` EXACTLY, because the reference kernels
+// were computed from that exact binning. It is a complete placement+amplitude
+// path of its own (midpoint bins against the real `times` centers), so the
+// `method` axis does not apply to it — see rasterizeBinnedCount below.
 
 /**
  * @typedef {Object} RasterResult
@@ -28,6 +34,10 @@ export function rasterize(
   grid,
   { method = 'snap', amplitudeMode = 'unit' } = {},
 ) {
+  // binned-count is its own complete path (hist binning); it does not compose
+  // with the snap/antialias placement axis.
+  if (amplitudeMode === 'binned-count') return rasterizeBinnedCount(spikeTimes, grid);
+
   const place = PLACERS[method];
   if (!place) throw new Error(`unknown rasterize method: ${method}`);
   const accumulate = ACCUMULATORS[amplitudeMode];
@@ -90,12 +100,69 @@ const ACCUMULATORS = {
     counts[idx]++;
     samples[idx] = 1;
   },
-
-  // Binned-count: bin value is the spike count (3 spikes -> 3). Required for
-  // real calcium data (ADR-0001); stubbed behind this interface for v1.
-  'binned-count'() {
-    throw new Error(
-      "rasterize amplitudeMode 'binned-count' is not implemented yet (ADR-0001: planned)",
-    );
-  },
+  // Binned-count is not an accumulator here — it is a complete path
+  // (rasterizeBinnedCount) routed before this table, because it bins differently
+  // (midpoint edges against real centers), not just "accumulate instead of clamp".
 };
+
+// --- binned-count: exact MATLAB hist(spikes, timing) -------------------------
+
+/**
+ * Reproduce MATLAB `hist(spikes, timing)` exactly — the validation-path
+ * rasterization (ADR-0001 / FOUNDATIONS §13). This is NOT `histc`: `timing` is a
+ * vector of bin CENTERS, with edges at the midpoints between consecutive centers;
+ * the first bin extends to -inf and the last to +inf.
+ *
+ * Bins are defined by the grid's `times` vector (authoritative when present,
+ * ADR-0012) — the real, possibly-jittery frame centers — NOT a reconstructed
+ * uniform dt grid. (A uniform `makeGrid` simply has uniform `times`.)
+ *
+ * Semantics, read off TDdeconvStack.m / aCa98_batch_APs.m:
+ *  - Tie-break: a spike exactly on a midpoint goes to the UPPER center
+ *    (`histc` interval is [left, right) — right-open).
+ *  - Upper out-of-range: MATLAB pre-filters `spikes < max(timing)` BEFORE hist,
+ *    so spikes at/after the last center are dropped before binning and the open
+ *    last bin never absorbs them. A spike exactly at the last center is dropped.
+ *  - Below the first center: counted in the first bin (open to -inf). This is
+ *    `hist`-faithful; note the upstream driver separately filters
+ *    `AP_times > fluo_time(1)`, which this function does NOT replicate (out of
+ *    the tool's scope, reference §1) — flagged so it stays a conscious choice.
+ *
+ * @param {ArrayLike<number>} spikeTimes event times (seconds)
+ * @param {import('./timebase.js').Grid} grid  centers come from grid.times
+ * @returns {import('./rasterize.js').RasterResult} samples are integer counts
+ */
+function rasterizeBinnedCount(spikeTimes, grid) {
+  const centers = grid.times;
+  const n = centers.length;
+  const samples = new Float64Array(n);
+  let placed = 0;
+  let dropped = 0;
+  if (n === 0) return { samples, placed, dropped, collisions: 0 };
+
+  const maxTiming = centers[n - 1];
+  for (let s = 0; s < spikeTimes.length; s++) {
+    const t = spikeTimes[s];
+    if (!Number.isFinite(t)) continue;
+    // Pre-filter: mirror MATLAB `spikes < max(timing)` (strict). Dropped before
+    // binning so the open last bin can't absorb out-of-range events.
+    if (t >= maxTiming) {
+      dropped++;
+      continue;
+    }
+    // Bin index = number of internal midpoint edges <= t. The midpoint edge
+    // between centers j and j+1 is (centers[j]+centers[j+1])/2. Using `edge <= t`
+    // (not `<`) places an exact-midpoint spike in the UPPER bin (right-open).
+    let lo = 0;
+    let hi = n - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      const edge = (centers[mid] + centers[mid + 1]) / 2;
+      if (edge <= t) lo = mid + 1;
+      else hi = mid;
+    }
+    samples[lo] += 1;
+    placed++;
+  }
+  return { samples, placed, dropped, collisions: 0 };
+}
