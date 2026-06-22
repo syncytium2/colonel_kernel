@@ -31,3 +31,4 @@ When an ADR changes a settled point in `FOUNDATIONS.md`, update `FOUNDATIONS.md`
 | [0009](0009-centered-symmetric-lag-explicit-zero-index.md) | Centered symmetric lag with explicit zero-index | Accepted |
 | [0010](0010-idealized-recovered-kernel-open-family-toggle.md) | Idealized-recovered kernel is an open family toggle | Accepted |
 | [0011](0011-validation-gates-machinery-not-fit.md) | Validation gates machinery, not fit | Accepted |
+| [0012](0012-timing-vector-authoritative-dt-derived.md) | Timing vector is authoritative; dt is a derived fallback | Accepted |

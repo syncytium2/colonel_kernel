@@ -443,6 +443,14 @@ Signal = { samples: Float64Array, dt: number, zeroIndex: number }
 
 - **`zeroIndex`** (0-based) is the sample at **lag/time = 0**. It is carried
   **explicitly** and is **never re-inferred from the array center at a use site.**
+- **Optional authoritative `times` ([ADR-0012](docs/adr/0012-timing-vector-authoritative-dt-derived.md)).**
+  A signal MAY carry a `times` vector that is **authoritative when present**; `dt` is then a
+  **derived convenience** (`mean(diff(times))`) and is **never trusted over `times`**. Real
+  fluorescence timing is clock-quantized and jittery (dt ~±10 µs around nominal), so a single
+  nominal `dt` silently drifts spike alignment over long recordings — a machinery error (§3). Loaded
+  calcium signals carry `times`; constructed uniform signals (kernels, lag axes) may omit it (`dt` +
+  `zeroIndex` + length is exact). When only a nominal `dt` is supplied, the tool **accepts and
+  warns** that uniform-`dt` reconstruction can diverge from the spike clock.
 - **Rationale.** The MATLAB code achieves centering only by forcing an odd-length,
   symmetric slice and **recomputing** the center wherever it is needed
   (`center = round(k/2)`; slice `center-window_samples : center+window_samples`;
