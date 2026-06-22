@@ -79,6 +79,44 @@ distinct roles across the tabs. This is durable structure worth stating explicit
    plausibility model (fast rise + exponential decay) as one of the four goodness-of-fit checks
    (§3). ADR-0003 does **not** govern this kernel — it is recovered, not chosen.
 
+### Three kernel *concepts*: chosen → idealized-recovered → recovered
+
+The roles above answer *which tab uses the kernel*. A second, orthogonal axis answers *how the
+kernel came to exist* — authored vs. measured — and it runs along a continuum with a deliberately
+named midpoint. Keeping these three concepts distinct prevents the recurring conflation of a
+teaching kernel with a measurement result:
+
+1. **Chosen / teaching kernel** — *authored* by the user from a family + parameters (gaussian,
+   exponential, boxcar, calcium; [ADR-0003](docs/adr/0003-kernel-source.md)). Mostly **causal**,
+   origin at the spike. This is the Tab 1 / Tab 3 input kernel.
+2. **Idealized recovered kernel** *(the bridge)* — a **chosen kernel standing in for a recovered
+   one.** It is a clean, authored object (calcium or exponential) that is assigned the *role* of a
+   recovered kernel, so the forward path can be exercised and validated against a known-good
+   stand-in **before** facing a messy, real recovered kernel. It is the conceptual link between the
+   two ends of the continuum.
+3. **Recovered kernel** — *measured* from data by deconvolution (the commutativity trick,
+   reference doc §3.1). **Symmetric about a center origin** (`zeroIndex = window_samples`, length
+   `2*window_samples+1`), and it **retains negative-lag content** that encodes cross-cell coupling
+   direction (§4, §13, [ADR-0009](docs/adr/0009-centered-symmetric-lag-explicit-zero-index.md),
+   [ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)).
+
+**The idealized recovered kernel is a teaching / validation *device*, not a separate code object.**
+It is an ordinary chosen kernel (concept 1) that has simply been given the *role* of concept 3. The
+distinction is **role first, with shape following** — nothing in the code needs a new kernel type to
+support it; it is a chosen kernel used in a recovered kernel's place. (How a chosen kernel's
+mostly-causal shape is reconciled with the symmetric, negative-lag layout of the recovered-kernel
+role — padding, centering — is an implementation detail for whenever the validation path is built,
+not a settled point here.)
+
+> **Resolved — open family toggle ([ADR-0010](docs/adr/0010-idealized-recovered-kernel-open-family-toggle.md)).**
+> There is **no single canonical** idealized-recovered family. *Any* chosen-kernel family
+> (gaussian, exponential, boxcar, calcium, or one added later) can be assigned the stand-in role via
+> a **user-selectable, open toggle**. The difference between a minimal stand-in (exponential) and a
+> richer one (calcium) is itself the lesson — same data, varied model — and keeping the toggle open
+> deliberately preserves unphysiological stand-ins (notably **boxcar**) as *probes* that expose
+> forward-path / alignment artifacts a smooth kernel would mask. The forward path must therefore
+> accept **any** family in this role; none is special-cased.
+
 ---
 
 ## 3. The flagship's core deliverable: "is there a kernel, or isn't there?"
@@ -356,3 +394,79 @@ break a signal as it moves between tabs.
   update this file to match so the two never disagree.
 - **NEXT_SESSION** (or similar) holds the immediate working state and the next actions.
 - If a session's conversation drifts from what's written here, trust this file and re-anchor.
+
+---
+
+## 13. Signal representation (the in-memory contract)
+
+Every Tab 1 / Tab 2 signal array — spike density, kernel, STA waveform, trace —
+uses one in-memory contract, settled in
+[ADR-0009](docs/adr/0009-centered-symmetric-lag-explicit-zero-index.md) and sourced
+from the validated MATLAB pipeline (`MATLAB CODE/TDdeconvStack.m`,
+`aCa98_batch_APs.m`, `spikeTriggeredAverage.m`; algorithm of record in
+[docs/reference/matlab-deconv-pipeline.md](docs/reference/matlab-deconv-pipeline.md)):
+
+```
+Signal = { samples: Float64Array, dt: number, zeroIndex: number }
+```
+
+- **`zeroIndex`** (0-based) is the sample at **lag/time = 0**. It is carried
+  **explicitly** and is **never re-inferred from the array center at a use site.**
+- **Rationale.** The MATLAB code achieves centering only by forcing an odd-length,
+  symmetric slice and **recomputing** the center wherever it is needed
+  (`center = round(k/2)`; slice `center-window_samples : center+window_samples`;
+  `kernel_time = linspace(-window, window, kernel_samples)`). Re-deriving the center
+  in JS at every call site is the **convention-breaks-quietly failure mode** — a
+  half-sample lag error is invisible on a plot but corrupts the coupling-direction
+  read. So the origin lives in the **data structure**, not in arithmetic repeated
+  across the codebase. The `{samples, dt, zeroIndex}` structure is a *new* convention
+  (MATLAB has no explicit zero-index); the layout arithmetic and the reasoning are
+  what come from the MATLAB.
+
+### Kernel and STA share the t = 0 reference
+
+- **Kernel** — symmetric, length `2*window_samples+1`, `zeroIndex = window_samples`.
+  Negative-lag content (the first half) is **retained**, consistent with
+  negative-lag-encodes-coupling-direction (§4, [ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)).
+- **STA** — same origin convention: `zeroIndex = window_samples` (the spike sits at
+  offset `pre_samples`), symmetric window `pre = post = window`, length
+  `2*window_samples+1`, with per-event baseline zeroing over a `STAbasewin = 0.5 s`
+  pre-spike window subtracted from each event before averaging.
+- Kernel and STA have **different spans** (`win = 5 s` vs `STAwin = 2 s`) but the
+  **same origin convention** — both place t = 0 at `zeroIndex`. **This shared origin
+  is what makes their cross-method agreement comparable**
+  ([ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)), sample-for-sample about
+  zero.
+
+### Pipeline-fidelity facts (JS loader must reproduce these exactly)
+
+So JS sample counts and lag alignment match the reference `.mat` files:
+
+1. **Rasterization on the validation path is binned-count, not unit.**
+   `TDdeconvStack` computes `spike_density = hist(spikes, timing)` — spikes binned
+   onto the fluorescence timebase, **count-valued**. Tab 1's unit-amplitude default
+   ([ADR-0001](docs/adr/0001-delta-rasterization.md)) is a **teaching choice**; the
+   path that validates against the reference kernels **must use binned-count** to
+   match the data those kernels were computed from.
+2. **Even-length trim — follow the executed code, not the comment.**
+   `TDdeconvStack.m` runs `if mod(k,2); stack(:,:,k)=[]; timing(k)=[]; end`. In MATLAB
+   `mod(k,2)` is truthy when **k is odd**, so this drops the last sample **when k is
+   odd, leaving k even.** The source comment ("if k is even…") states the opposite of
+   what the code executes; **we follow the code** for exact count-matching. Centering
+   does **not** depend on this trim — the kernel's center sample exists because the
+   extraction slice is symmetric and odd-length (`2*window_samples+1`) regardless of
+   `k`'s parity. The trim only shifts the **phase alignment** of the binned spike
+   density against the frame grid.
+3. **STA and deconvolution use *different* effective spike sets** (verbatim from
+   `spikeTriggeredAverage.m`) — **do not share one spike set between methods:**
+   - **Overlap rejection:** `block = 0.5*window`; an event is kept only if **both**
+     neighbors are farther than `block` away. Deconvolution bins **all** spikes; STA
+     drops overlapping ones.
+   - **Endpoint skip:** STA iterates `for iEvent = 2:nEvents-1` — first and last
+     events are **skipped**.
+   - **Match tolerance:** spike→sample matching uses a **0.1 s** tolerance.
+
+> The **commutativity trick** is unaffected: `deconvreg(pixel, spike_density)` passes
+> the trace as the image and the spikes as the PSF, so the recovered "input" *is* the
+> kernel (reference doc §3.1). `zeroIndex` simply marks where t = 0 lands in that
+> returned kernel.

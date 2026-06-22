@@ -28,3 +28,5 @@ When an ADR changes a settled point in `FOUNDATIONS.md`, update `FOUNDATIONS.md`
 | [0006](0006-linear-convolution.md) | Linear convolution (zero-padded) as the default convention | Accepted |
 | [0007](0007-build-order.md) | Build order / tab sequencing — 1 → 2 → 3 | Accepted |
 | [0008](0008-csp-build-time-injection.md) | CSP injected at build time (dev server runs relaxed) | Accepted |
+| [0009](0009-centered-symmetric-lag-explicit-zero-index.md) | Centered symmetric lag with explicit zero-index | Accepted |
+| [0010](0010-idealized-recovered-kernel-open-family-toggle.md) | Idealized-recovered kernel is an open family toggle | Accepted |
