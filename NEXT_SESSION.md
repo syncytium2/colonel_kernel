@@ -71,8 +71,19 @@ them.**
 - **[ADR-0007](docs/adr/0007-build-order.md)** — build order / tab sequencing: **1 → 2 → 3**.
 - **[ADR-0008](docs/adr/0008-csp-build-time-injection.md)** — CSP injected at build time (dev server relaxed for HMR).
 - **[ADR-0009](docs/adr/0009-centered-symmetric-lag-explicit-zero-index.md)** — centered symmetric lag with explicit zero-index (the in-memory signal contract).
+- **[ADR-0010](docs/adr/0010-idealized-recovered-kernel-open-family-toggle.md)** — idealized-recovered kernel is an open family toggle (any chosen family can stand in for a recovered kernel).
+- **[ADR-0011](docs/adr/0011-validation-gates-machinery-not-fit.md)** — validation gates machinery (pass/fail), only reports fit (per-ROI R²/residual); low fit on an uncoupled ROI is a correct verdict, not a failure.
 
 Reference: **[docs/reference/matlab-deconv-pipeline.md](docs/reference/matlab-deconv-pipeline.md)** — the validated MATLAB source-of-truth for Tab 2 (verified verbatim).
+
+## Branch workflow (Tab 1 validation phase)
+
+- **Canon → `master`.** FOUNDATIONS edits, ADRs, the ADR README index, and NEXT_SESSION live on
+  `master` only — the source of truth must never be trapped behind, or diverge from, a feature branch.
+- **Validation CODE → `tab1-validation`.** The binned-count rasterizer (currently a throwing stub),
+  the `{values, originOffset}` → `{samples, dt, zeroIndex}` struct rename, and the fixture-backed
+  reconstruction harness land on `tab1-validation`, which is rebased onto `master` as canon advances
+  and merges back as one coherent change when the reconstruction check passes.
 
 ## Where the code lives
 
