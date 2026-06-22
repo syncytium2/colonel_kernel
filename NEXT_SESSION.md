@@ -33,6 +33,67 @@ them.**
 > ingests is pre-trim, so the loader must apply the `mod(k,2)` trim to its own working copy before
 > deconvolution — exactly as ADR-0009 already specifies.
 
+## ⏸ In progress — RESUME HERE (tab1-validation)
+
+> Session-pause capture. The branch `tab1-validation` carries the validation CODE; canon stays on
+> `master`. Branch state at pause: signal-contract struct rename (`samples`/`zeroIndex`/`dt`/`times`)
+> and the **binned-count rasterizer** (exact MATLAB `hist(spikes, timing)`) are committed and green
+> (`test:core` 30/30). The decision below is the live thread.
+
+### DECISION IN PROGRESS — binned-count below-first-spike regime (default settled, implementation NOT started)
+
+**What it is.** `rasterizeBinnedCount` reproduces MATLAB `hist(spikes, timing)`. A spike *before the
+first frame time* currently lands in **bin 0** (the open −∞ tail) — hist-faithful. This **differs**
+from the snap path, which drops below-first spikes. That asymmetry is what this decision resolves.
+
+**Key realization (preserve this).** In the MATLAB reference, below-first spikes are **impossible by
+construction, not by a filter.** The driver (`aCa98_batch_APs`) builds each region's window as
+`first_sample = find(fluo_time < first_spike, 1, "last") - buffer` (~10 samples / ~1 s pre-spike
+pad), so the regional `timing` always starts ~1 s **before** the first spike. The reference "drops"
+below-first spikes only in the sense that its buffered windowing guarantees none exist. The tool's
+`t0 = times[0]` is therefore the start of the **user-supplied window** (analogous to `btiming(1)`),
+**not** the recording origin.
+
+**v1 / v2 scope (preserve this).**
+- **v1:** the user feeds data already chopped to their window (or the whole trace). The tool builds
+  **no** buffered window — it bins against the loaded `times` as-is, `t0 = times[0]`. **Below-first
+  spikes ARE possible in v1** (a user window may clip a spike train; no buffer convention to lean on).
+- **v2 (future, do not build):** optionally let users set region(s) within a longer trace; the
+  validation path then constructs the driver-style buffered window (`first_spike − buffer`), which
+  makes below-first spikes vanish naturally — the proper fix.
+
+**The decision (default agreed; implementation paused).** binned-count gets a **caller-selected
+flag** for the below-first cell:
+- **teaching / default = KEEP** below-first spikes (hist-faithful, visible in bin 0) — dropping data
+  should be a deliberate choice, never silent, and teaching benefits from showing spikes that fell
+  outside the window.
+- **validation opt-in = DROP** below-first spikes — matches the reference pipeline's effective input
+  (which had none, due to its buffer).
+- **Why both:** binned-count serves two masters. Validation wants pipeline-faithfulness (drop);
+  teaching wants hist-faithfulness + visibility (keep). Same cell, opposite correct answers → a flag,
+  not a fixed rule.
+- **Framing to keep:** the drop-below-first flag is a **v1 stand-in for the v2 buffered-window
+  approach.** v1 can't build the pre-spike buffer (no region-setting yet), so the flag drops
+  below-first explicitly; in v2 the buffered window does the job and the flag becomes redundant on the
+  validation path.
+
+**NOT YET DECIDED / next steps (the resume point):**
+1. Implementation **not started.** When resumed: author a proper ADR once confirmed (title candidate:
+   *"binned-count below-first regime: teaching-keep default, validation-drop opt-in; v1 stand-in for
+   v2 buffered window"*), then implement the flag + below-first tests on `tab1-validation`.
+2. The flag's **exact name/signature is unspecified** — caller-selected, **defaulting to keep**.
+3. Only then proceed to the reconstruction harness and the dt-only warn-UI.
+
+### Broader tab1-validation queue (still pending on the branch)
+
+- **antialias accumulator** — still stubbed (ADR-0001 planned).
+- **Fixture-backed reconstruction harness** — **gated on an UNDECIDED choice**: the machinery-check
+  reference. Synthetic `spike ⊗ kernel` (known expected output) vs a hand-picked coupled ROI from a
+  `/APs` fixture. Per ADR-0011, machinery is gated / fit is only reported — so the gate needs a
+  known-output reference, which is the open pick.
+- **dt-only divergence warn-UI** — on the load path (ADR-0012): accept nominal-`dt`-only input but
+  warn that uniform-`dt` reconstruction can diverge from the spike clock over long recordings.
+
 ## Done this session
 
 - **Build order settled 1 → 2 → 3** ([ADR-0007](docs/adr/0007-build-order.md)); calcium kernel in
