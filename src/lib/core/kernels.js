@@ -1,13 +1,19 @@
 // Parameterized kernel library (ADR-0003): a fixed set of canonical shapes,
 // each with live parameters. No freehand / typed kernels.
 //
-// A built kernel is a dense array of samples on the grid's dt, plus an
-// `originOffset`: the index in `values` that aligns with the spike (kernel
-// time 0). Causal shapes have origin 0 (kernel starts at the spike); symmetric
-// shapes center the origin. Convolution uses originOffset to place the output
+// A built kernel is a dense array of `samples` on the grid's dt, plus a
+// `zeroIndex`: the index in `samples` that aligns with the spike (kernel
+// time 0). Causal shapes have zeroIndex 0 (kernel starts at the spike); symmetric
+// shapes center the origin. Convolution uses zeroIndex to place the output
 // on the correct time axis (see convolve.js).
 //
-// Values carry literal amplitudes (peak ~1), NOT area-normalization, so the
+// This is the signal contract of ADR-0009 / FOUNDATIONS §13:
+// { samples, dt, zeroIndex } with an optional authoritative `times`
+// (ADR-0012). A kernel is a constructed uniform signal, so `dt + zeroIndex +
+// length` is exact; `times` is carried as a derived convenience and is always
+// consistent with dt here (never in disagreement).
+//
+// Samples carry literal amplitudes (peak ~1), NOT area-normalization, so the
 // teaching identity holds: one unit spike ⊗ a kernel reproduces the kernel's
 // samples at the spike location.
 
@@ -15,9 +21,10 @@
  * @typedef {Object} Kernel
  * @property {string} id
  * @property {string} label
- * @property {Float64Array} values
- * @property {number} originOffset  index of kernel-time-0 within `values`
- * @property {Float64Array} times   kernel time axis (seconds), length values.length
+ * @property {Float64Array} samples
+ * @property {number} zeroIndex  index of kernel-time-0 within `samples`
+ * @property {number} dt         sample interval (seconds), derived convenience
+ * @property {Float64Array} times kernel time axis (seconds), length samples.length
  * @property {Object} params
  */
 
@@ -65,11 +72,11 @@ export function defaultParams(id) {
 export function buildKernel(id, params, dt) {
   const builder = BUILDERS[id];
   if (!builder) throw new Error(`unknown kernel id: ${id}`);
-  const { values, originOffset } = builder(params, dt);
+  const { samples, zeroIndex } = builder(params, dt);
   const entry = KERNEL_LIBRARY.find((k) => k.id === id);
-  const times = new Float64Array(values.length);
-  for (let i = 0; i < values.length; i++) times[i] = (i - originOffset) * dt;
-  return { id, label: entry.label, values, originOffset, times, params };
+  const times = new Float64Array(samples.length);
+  for (let i = 0; i < samples.length; i++) times[i] = (i - zeroIndex) * dt;
+  return { id, label: entry.label, samples, zeroIndex, dt, times, params };
 }
 
 const BUILDERS = {
@@ -77,27 +84,27 @@ const BUILDERS = {
   gaussian({ sigma }, dt) {
     const half = Math.max(1, Math.round((3 * sigma) / dt));
     const n = 2 * half + 1;
-    const values = new Float64Array(n);
+    const samples = new Float64Array(n);
     for (let i = 0; i < n; i++) {
       const t = (i - half) * dt;
-      values[i] = Math.exp(-0.5 * (t / sigma) ** 2);
+      samples[i] = Math.exp(-0.5 * (t / sigma) ** 2);
     }
-    return { values, originOffset: half };
+    return { samples, zeroIndex: half };
   },
 
   // Causal exponential decay, value 1 at the spike, support ~5τ.
   exponential({ tau }, dt) {
     const n = Math.max(2, Math.round((5 * tau) / dt) + 1);
-    const values = new Float64Array(n);
-    for (let i = 0; i < n; i++) values[i] = Math.exp(-(i * dt) / tau);
-    return { values, originOffset: 0 };
+    const samples = new Float64Array(n);
+    for (let i = 0; i < n; i++) samples[i] = Math.exp(-(i * dt) / tau);
+    return { samples, zeroIndex: 0 };
   },
 
   // Causal rectangle of height 1, from the spike forward. The cleanest
   // hand-verify shape: one unit spike ⊗ boxcar reproduces the boxcar.
   boxcar({ length }, dt) {
     const n = Math.max(1, Math.round(length / dt));
-    return { values: new Float64Array(n).fill(1), originOffset: 0 };
+    return { samples: new Float64Array(n).fill(1), zeroIndex: 0 };
   },
 
   // Causal calcium transient: difference of exponentials, normalized to peak 1.
@@ -106,15 +113,15 @@ const BUILDERS = {
     // Guard: rise must be faster than decay for a real transient shape.
     const rise = Math.min(tauRise, tauDecay * 0.999);
     const n = Math.max(2, Math.round((5 * tauDecay) / dt) + 1);
-    const values = new Float64Array(n);
+    const samples = new Float64Array(n);
     let peak = 0;
     for (let i = 0; i < n; i++) {
       const t = i * dt;
       const v = Math.exp(-t / tauDecay) - Math.exp(-t / rise);
-      values[i] = v;
+      samples[i] = v;
       if (v > peak) peak = v;
     }
-    if (peak > 0) for (let i = 0; i < n; i++) values[i] /= peak;
-    return { values, originOffset: 0 };
+    if (peak > 0) for (let i = 0; i < n; i++) samples[i] /= peak;
+    return { samples, zeroIndex: 0 };
   },
 };

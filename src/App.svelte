@@ -39,7 +39,7 @@
   const gridTimes = $derived(Array.from(grid.times));
   const rasterSamples = $derived(Array.from(raster.samples));
   const outTimes = $derived(Array.from(output.times));
-  const outValues = $derived(Array.from(output.values));
+  const outValues = $derived(Array.from(output.samples));
 
   // --- presentation transforms (core untouched) ---
 
@@ -58,8 +58,8 @@
   // half and sit flat at zero on the negative side — that teaches causality, so
   // pad with zeros rather than cropping to causal-only.
   const kernelDisplay = $derived.by(() => {
-    const L = kernel.values.length;
-    const origin = kernel.originOffset;
+    const L = kernel.samples.length;
+    const origin = kernel.zeroIndex;
     const win = Math.max(origin, L - 1 - origin); // half-window in samples
     const len = 2 * win + 1;
     const t = new Array(len);
@@ -68,7 +68,7 @@
       const lagSamp = oi - win;
       const ki = origin + lagSamp;
       t[oi] = lagSamp * grid.dt;
-      v[oi] = ki >= 0 && ki < L ? kernel.values[ki] : 0;
+      v[oi] = ki >= 0 && ki < L ? kernel.samples[ki] : 0;
     }
     return { t, v, winSeconds: win * grid.dt };
   });

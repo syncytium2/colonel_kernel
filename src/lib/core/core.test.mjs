@@ -59,29 +59,29 @@ ok('linear conv values', [0, 1, 2, 3, 0].every((v, i) => approx(cl[i], v)), `[${
 // --- the headline hand-verify: spike ⊗ boxcar reproduces the boxcar ---------
 const box = buildKernel('boxcar', { length: 0.3 }, grid.dt); // 30 samples of 1
 const out = convolveOnGrid(r1.samples, grid, box);
-ok('boxcar kernel length', box.values.length === 30, `len=${box.values.length}`);
+ok('boxcar kernel length', box.samples.length === 30, `len=${box.samples.length}`);
 let boxFlat = true;
-for (let i = 50; i < 80; i++) if (!approx(out.values[i], 1)) boxFlat = false;
+for (let i = 50; i < 80; i++) if (!approx(out.samples[i], 1)) boxFlat = false;
 ok('output = 1 across the boxcar span at the spike', boxFlat);
-ok('output zero before the spike', out.values[49] === 0);
-ok('output zero after the boxcar', out.values[80] === 0);
+ok('output zero before the spike', out.samples[49] === 0);
+ok('output zero after the boxcar', out.samples[80] === 0);
 ok('boxcar output starts at the spike time', approx(out.times[50], 0.5), `t=${out.times[50]}`);
 
 // --- centered Gaussian sits ON the spike (origin alignment) -----------------
 const g = buildKernel('gaussian', { sigma: 0.1 }, grid.dt);
 const gout = convolveOnGrid(r1.samples, grid, g);
 let peakIdx = 0;
-for (let i = 1; i < gout.values.length; i++) if (gout.values[i] > gout.values[peakIdx]) peakIdx = i;
-ok('gaussian peak ~1', approx(gout.values[peakIdx], 1, 1e-6));
+for (let i = 1; i < gout.samples.length; i++) if (gout.samples[i] > gout.samples[peakIdx]) peakIdx = i;
+ok('gaussian peak ~1', approx(gout.samples[peakIdx], 1, 1e-6));
 ok('gaussian peak centered on spike time', approx(gout.times[peakIdx], 0.5), `t=${gout.times[peakIdx]}`);
 
 // --- calcium kernel: causal rise from 0, normalized peak 1 ------------------
 const ca = buildKernel('calcium', defaultParams('calcium'), grid.dt);
-ok('calcium starts at 0 (causal rise)', approx(ca.values[0], 0));
+ok('calcium starts at 0 (causal rise)', approx(ca.samples[0], 0));
 let caPeak = 0;
-for (const v of ca.values) if (v > caPeak) caPeak = v;
+for (const v of ca.samples) if (v > caPeak) caPeak = v;
 ok('calcium normalized to peak 1', approx(caPeak, 1, 1e-12));
-ok('calcium origin causal', ca.originOffset === 0);
+ok('calcium origin causal', ca.zeroIndex === 0);
 
 // --- stubs throw behind the shared interface (ADR-0001) ---------------------
 ok('antialias stub throws', throws(() => rasterize([0.5], grid, { method: 'antialias' })));
