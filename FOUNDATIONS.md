@@ -145,6 +145,37 @@ An **uncoupled** recording shows up as: implausible kernel shape + high residual
 + STA/deconv disagreement that the spike rate does *not* explain. Those four checks *are* the
 "there isn't one" verdict.
 
+### Validation gates machinery, not fit
+
+**The spike train and the calcium signal are, in many ground-truth recordings, discrepant —
+spikes and calcium can be *uncoupled*. This is the project's core scientific premise, not an
+artifact to correct** (§1, §2). It has a direct, easily-violated consequence for how every
+validation in this tool — starting with the Tab 1 forward-reconstruction check — must be built.
+
+A forward reconstruction check (binned-count(spikes) ⊗ kernel ≈ ROI trace; the **residual** leg,
+check 2 above) **must not be gated on a high goodness-of-fit threshold.** For an uncoupled ROI a
+*low* reconstruction quality (low R² / high residual) is the **correct, scientifically meaningful
+result** — exactly the "there isn't one" verdict — not an implementation failure. Gating
+acceptance on fit would throw away the signal the tool exists to surface.
+
+Validation therefore splits into **two things that must never be conflated:**
+
+1. **Machinery correctness — *gated*, pass/fail.** The convolution arithmetic, origin/`zeroIndex`
+   alignment (§13, [ADR-0009](docs/adr/0009-centered-symmetric-lag-explicit-zero-index.md)),
+   binned-count matching `hist(spikes, timing)`, and output length / finiteness. This **must hold
+   regardless of coupling**, and is verified on **known-coupled or synthetic data where the
+   expected output is known** — never judged by how well a real, possibly-uncoupled ROI is
+   reproduced.
+2. **Fit quality — *measured and reported*, never a global gate.** The R² / residual of
+   reconstruction against the real ROI trace is a **per-ROI reported quantity**, not an acceptance
+   criterion. The **spread** of fit across ROIs — high on coupled cells, low on uncoupled ones — is
+   *itself the scientific signal* (the per-column readout of §4). A uniformly low fit is data about
+   the recording, not a failing test.
+
+In short: **machinery is gated; fit is reported.** A correct forward path that faithfully
+reconstructs a *coupled* ROI and faithfully *fails* to reconstruct an *uncoupled* one is working
+exactly as intended.
+
 ---
 
 ## 4. The multi-ROI phenomenon (a genuine open research question)
