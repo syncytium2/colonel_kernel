@@ -8,6 +8,15 @@ import { makeGrid, gridFromTimeColumn } from './timebase.js';
 import { rasterize } from './rasterize.js';
 import { buildKernel, defaultParams } from './kernels.js';
 import { convolveLinear, convolveOnGrid } from './convolve.js';
+import {
+  nextPow2,
+  circularConvolve,
+  deconvolveCircular,
+  extractSymmetric,
+  recoverKernel,
+} from './deconvolve.js';
+import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
+import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './noise.js';
 
 let passed = 0;
 let failed = 0;
@@ -154,6 +163,73 @@ ok(
 
 // --- stubs throw behind the shared interface (ADR-0001) ---------------------
 ok('antialias stub throws', throws(() => rasterize([0.5], grid, { method: 'antialias' })));
+
+// --- noise model (ADR-0015) -------------------------------------------------
+ok('nextPow2', nextPow2(8000) === 8192 && nextPow2(8192) === 8192 && nextPow2(5) === 8);
+ok('sigmaForLevel 1x == cohort-typical', approx(sigmaForLevel(1), SIGMA_COHORT_TYPICAL));
+ok('sigmaForLevel 0 == 0, clamps >10', sigmaForLevel(0) === 0 && approx(sigmaForLevel(99), 10 * SIGMA_COHORT_TYPICAL));
+const clean = new Float64Array([1, 1, 1, 1]);
+ok('addAWGN sigma=0 is a faithful copy', addAWGN(clean, 0).every((v) => v === 1));
+// seeded AWGN: empirical std of a large draw lands near sigma
+const big = new Float64Array(20000);
+const noisy = addAWGN(big, 0.01, mulberry32(7));
+let mean = 0;
+for (const v of noisy) mean += v;
+mean /= noisy.length;
+let varr = 0;
+for (const v of noisy) varr += (v - mean) ** 2;
+const std = Math.sqrt(varr / noisy.length);
+ok('addAWGN std ≈ sigma (seeded)', Math.abs(std - 0.01) < 0.0005, `std=${std}`);
+
+// --- deconvolution round-trip (ADR-0004) ------------------------------------
+// circularConvolve then deconvolveCircular(λ=0) recovers the planted signal.
+const Ntest = 64;
+const sDens = new Float64Array(Ntest); // a few unit spikes
+sDens[3] = 1; sDens[10] = 1; sDens[10] += 1; sDens[40] = 1; // bin 10 has count 2
+const plant = new Float64Array(Ntest);
+// short causal bump at lag 0 (indices 0..3)
+plant[0] = 0.1; plant[1] = 0.24; plant[2] = 0.12; plant[3] = 0.04;
+const conv = circularConvolve(sDens, plant);
+const latent = deconvolveCircular(conv, sDens, 0); // λ=0 exact inverse
+ok('deconv λ=0 inverts circular conv', plant.every((v, i) => approx(latent[i], v, 1e-6)), `latent0=${latent[0]}`);
+
+// extractSymmetric: zero-lag at window, negatives wrap from the high end.
+const sym = extractSymmetric(latent, 5, 0.1);
+ok('extractSymmetric length & zeroIndex', sym.samples.length === 11 && sym.zeroIndex === 5);
+ok('extractSymmetric zero-lag = latent[0]', approx(sym.samples[5], latent[0], 1e-9));
+ok('extractSymmetric +1 lag = latent[1]', approx(sym.samples[6], latent[1], 1e-9));
+ok('extractSymmetric −1 lag wraps to latent[N-1]', approx(sym.samples[4], latent[Ntest - 1], 1e-9));
+ok('extractSymmetric times centered', approx(sym.times[5], 0) && approx(sym.times[6], 0.1) && approx(sym.times[4], -0.1));
+
+// --- kernel diagnostics (ADR-0014) ------------------------------------------
+// Known causal kernel: peak at lag +0.2 s, clean exponential decay τ.
+const dt2 = 0.1;
+const kd = { zeroIndex: 3, dt: dt2, samples: new Float64Array(13) };
+// negative-lag (indices 0..2) left at 0; peak at index 5 (lag +0.2)
+kd.samples[3] = 0.0; kd.samples[4] = 0.5; kd.samples[5] = 1.0;
+for (let i = 6; i < 13; i++) kd.samples[i] = Math.exp(-((i - 5) * dt2) / 0.4); // τ=0.4 from peak
+const dg = kernelDiagnostics(kd);
+ok('diagnostics peak lag +0.2 s', approx(dg.peakLagS, 0.2, 1e-9), `peakLag=${dg.peakLagS}`);
+ok('diagnostics peak amp 1.0', approx(dg.peakAmp, 1.0));
+ok('diagnostics τ ≈ 0.4 s', Math.abs(dg.tauDecayS - 0.4) < 0.02, `τ=${dg.tauDecayS}`);
+ok('diagnostics acausal ≈ 0 (causal kernel)', dg.acausalRatio < 1e-9, `ratio=${dg.acausalRatio}`);
+const cmp = compareKernels(dg, dg);
+ok('compareKernels self → zero deltas, ampRatio 1', approx(cmp.dPeakLagS, 0) && approx(cmp.ampRatio, 1));
+
+// --- end-to-end: recover a planted calcium kernel at σ=0 (oracle in miniature)
+const gridN = makeGrid({ sampleRate: 10, duration: nextPow2(1024) / 10, t0: 0 });
+const Nk = gridN.n;
+const sd = rasterize([20, 35, 35, 60, 80], gridN, { amplitudeMode: 'binned-count' }).samples;
+const caK = buildKernel('calcium', { tauRise: 0.22, tauDecay: 2.7 }, 0.1);
+const plantedFull = new Float64Array(Nk);
+for (let i = 0; i < caK.samples.length && i < Nk; i++) plantedFull[i] = caK.samples[i] * 0.24;
+const trace0 = circularConvolve(sd, plantedFull);
+const rec = recoverKernel(trace0, sd, { windowSamples: 50, dt: 0.1, lambda: 2e-3 });
+const recDg = kernelDiagnostics(rec);
+const plDg = kernelDiagnostics(extractSymmetric(plantedFull, 50, 0.1));
+ok('oracle(mini): peak lag recovered within ½ sample', Math.abs(recDg.peakLagS - plDg.peakLagS) <= 0.05 + 1e-9, `rec=${recDg.peakLagS} pl=${plDg.peakLagS}`);
+ok('oracle(mini): peak amp within 5%', Math.abs(recDg.peakAmp / plDg.peakAmp - 1) <= 0.05, `ratio=${recDg.peakAmp / plDg.peakAmp}`);
+ok('oracle(mini): acausal ratio < 0.02', recDg.acausalRatio < 0.02, `ratio=${recDg.acausalRatio}`);
 
 // --- summary ----------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

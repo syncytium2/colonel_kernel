@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:core": "node src/lib/core/core.test.mjs",
+    "machinery-check": "node src/lib/core/machinery-check.mjs",
     "screenshot": "node scripts/screenshot.mjs"
   },
   "devDependencies": {
