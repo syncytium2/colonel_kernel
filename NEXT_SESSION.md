@@ -7,6 +7,50 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ▶ RESUME — 2026-06-23 (Tab 2 single-ROI slice committed; re-fan is next)
+
+**The current frontier.** The reconciled ROI-1 read below (✓ RECONCILED banner) is canon; this is
+the build state on top of it.
+
+**DONE — single-ROI Tab 2 readout, built + eyeball-verified on file 80 ROI 1, committed on
+`tab2-ui` (`9f39837`; NOT pushed, NOT merged to master):**
+- Four §3 checks as four separate raw-number readouts (no rollup; ADR-0011 fit-reported):
+  plausibility (`kernelDiagnostics`), reconstruction residual, λ-stability, STA agreement.
+- Recovered kernel + STA overlaid on ONE shared lag/amplitude zero-lag origin (geometry matches the
+  MATLAB figure).
+- **Full-width reconstruction overlay** (predicted = density ⊛ recovered kernel vs actual dF/F₀):
+  it **visibly breaks at the ~790 s calcium-without-spikes event** — the §3 decoupling *drawn* — while
+  tracking elsewhere. Machinery sanity: full-latent reconstruction R² = 1.000 (forward path inverts
+  exactly); the retained-±5 s-kernel R² = −1.05 is the reported §3 fit, not a bug.
+- log-λ slider over the canon sweep 0.002–3 (was a 0–0.02 linear slider that couldn't reach it).
+  Drop region collapses to a compact strip once loaded (whole-tab drop-sensitivity retained).
+  87/87 `test:core`, build clean.
+- Evidence (gitignored): `darkroom/fig_roi1_readout.{mjs,py,json,png}` — the readout + the JS-vs-lab
+  canon panel (corr −0.7428 / +0.8415).
+
+**RESUME HERE (next slice): RE-FAN the readout across all 9 ROI columns** — repetition of the
+verified single-ROI card across columns (column 1 highlighted, §4 strip), not new analysis.
+
+**THREE FINDINGS TO CANONIZE — do these FIRST next session, BEFORE the re-fan:**
+- **(a) Baseline-relative peak-amp convention.** Reported peak amplitude = peak minus the mean over
+  the [−0.5, 0) s pre-zero-lag window (matches STA's STAbasewin). **DISPLAY-ONLY**; the raw kernel
+  trace is untouched (ADR-0017). Implemented as `preZeroBaselineMean` (core, additive helper).
+  **Candidate ADR.** ROI 1: amp vs baseline **+0.0096** vs lab **+0.0108** (~11%).
+- **(b) FOUNDATIONS §3 ROI-1 positive control gains an AMPLITUDE leg.** Recovery amplitude
+  (baseline-relative) lands within **~11%** of the lab kernel amplitude — a third leg alongside the
+  existing **peak-lag (+0.6 s)** and **λ-stability** legs.
+- **(c) Attach to the PARKED Savitzky–Golay item:** decay **τ is unfittable under the baseline tilt**
+  (shown as "n/a (tilt)") is the concrete motivating symptom for the parked baseline-independent /
+  first-derivative display idea (never in the recovery path).
+
+**STILL OPEN (unchanged):**
+- Kernel/STA overlay **shared-y vs twin-y** — check the MATLAB figure for which convention; left
+  shared-y for now (the reconstruction panel carries the check-2 evidence regardless).
+- Long-parked (not commitments): promote `fig_oracle.png` → `docs/img/` (consent + README entry);
+  the Savitzky–Golay / first-derivative baseline-independent display idea (see (c)).
+
+---
+
 ## ✓ RECONCILED — 2026-06-23 (Tab 2 ROI 1 recovery read; figure-gated)
 
 This replaces the earlier "⚠ CRITICAL — recovery bug / sign-inverted, diagnose first" banner
@@ -118,15 +162,14 @@ them.**
 - **ADR-0005 / STA** — `spikeTriggeredAverage.m` ported to `src/lib/core/sta.js` (the §3 check-4
   cross-method leg); the non-visual Tab 2 core is now complete (all four checks backed).
 
-### ⏸ RESUME HERE — Tab 2 UI; characterize the baseline tilt (see ✓ RECONCILED banner at the top)
+### ⏸ Tab 2 UI history (single-ROI readout now BUILT — see ▶ RESUME at top)
 
 > **There is no recovery bug.** The reconciliation (see banner) is done and is now canon: the kernel
 > is recovered and agrees with the lab at the +0.6 s peak (+0.84 window); the −0.74 whole-window corr
-> is baseline-dominated, not a sign inversion. The UI stage-1/2 are built and eyeball-verified on
-> `tab2-ui` (uncommitted). The one real open problem is the recovered-kernel **baseline tilt** — a
-> characterization/display question, not a machinery fix. How (and whether) to surface it in the
-> stage-3 four-check readout is a presentation call for Tony; it is not a hard block. Read the banner
-> and the figures in `darkroom/decisions/` first.
+> is baseline-dominated, not a sign inversion. The baseline tilt is now *surfaced* in the readout —
+> via the baseline-relative peak-amp number and the reconstruction overlay — rather than left as an
+> open presentation question (see ▶ RESUME at the top; finding (a)/(c)). The actionable next step is
+> the column re-fan, not this block.
 
 **DONE & merged — the non-visual spine is now COMPLETE (former items 1 & 2 + STA):**
 - **Noise model — v1 settled** ([ADR-0015](docs/adr/0015-harness-noise-model.md)): AWGN, user slider
