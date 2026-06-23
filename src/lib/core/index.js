@@ -8,3 +8,5 @@ export { convolveLinear, convolveOnGrid } from './convolve.js';
 export { SIGMA_COHORT_TYPICAL, NOISE_LEVEL_MAX, sigmaForLevel, addAWGN, mulberry32, gaussian } from './noise.js';
 export { nextPow2, circularConvolve, deconvolveCircular, extractSymmetric, recoverKernel } from './deconvolve.js';
 export { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
+// CSV ingestion (ADR-0016): one region's exported CSV → the signal contract.
+export { loadCsv } from './load-csv.js';

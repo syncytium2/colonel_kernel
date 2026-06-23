@@ -17,6 +17,7 @@ import {
 } from './deconvolve.js';
 import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
 import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './noise.js';
+import { loadCsv } from './load-csv.js';
 
 let passed = 0;
 let failed = 0;
@@ -230,6 +231,37 @@ const plDg = kernelDiagnostics(extractSymmetric(plantedFull, 50, 0.1));
 ok('oracle(mini): peak lag recovered within ½ sample', Math.abs(recDg.peakLagS - plDg.peakLagS) <= 0.05 + 1e-9, `rec=${recDg.peakLagS} pl=${plDg.peakLagS}`);
 ok('oracle(mini): peak amp within 5%', Math.abs(recDg.peakAmp / plDg.peakAmp - 1) <= 0.05, `ratio=${recDg.peakAmp / plDg.peakAmp}`);
 ok('oracle(mini): acausal ratio < 0.02', recDg.acausalRatio < 0.02, `ratio=${recDg.acausalRatio}`);
+
+// --- CSV loader (ADR-0016) --------------------------------------------------
+// Canonical small region: dense time + roi1/roi2, ragged spikes (blank below the
+// last spike), one NaN trace sample. Headers carry stray whitespace to prove the
+// role detection trims.
+const csvText = [
+  'time, spikes , roi1,roi2',
+  '0.0,0.05,0.1,0.5',
+  '0.1,0.15,0.2,0.6',
+  '0.2,,0.3,NaN',
+  '0.3,,0.4,0.8',
+].join('\n');
+const L = loadCsv(csvText, { source: 'unit.csv' });
+ok('loadCsv grid is loaded-mode, n & dt from time column', L.grid.mode === 'loaded' && L.grid.n === 4 && approx(L.grid.dt, 0.1));
+ok('loadCsv detects 2 roi columns (trimmed ids, file order)', L.rois.length === 2 && L.rois[0].id === 'roi1' && L.rois[1].id === 'roi2');
+ok('loadCsv roi1 dense samples', [0.1, 0.2, 0.3, 0.4].every((v, i) => approx(L.rois[0].samples[i], v)), `[${L.rois[0].samples}]`);
+ok('loadCsv preserves NaN trace sample', Number.isNaN(L.rois[1].samples[2]));
+ok('loadCsv ragged spikes: only the 2 finite values, ascending', L.spikeTimes.length === 2 && approx(L.spikeTimes[0], 0.05) && approx(L.spikeTimes[1], 0.15));
+ok('loadCsv meta counts', L.meta.nFrames === 4 && L.meta.nROIs === 2 && L.meta.nSpikes === 2);
+ok('loadCsv warns about the NaN roi column', L.warnings.some((w) => w.includes('non-finite')));
+// end-to-end: loaded spikes rasterize on the loaded grid (binned-count path)
+const ld = rasterize(L.spikeTimes, L.grid, { amplitudeMode: 'binned-count' });
+ok('loadCsv → binned-count places both spikes', ld.placed === 2, `placed=${ld.placed}`);
+// machinery gates (hard errors)
+ok('loadCsv throws on missing time column', throws(() => loadCsv('spikes,roi1\n0,0.1\n1,0.2')));
+ok('loadCsv throws with no roi columns', throws(() => loadCsv('time,spikes\n0,0.1\n0.1,0.2')));
+ok('loadCsv throws on non-increasing time', throws(() => loadCsv('time,roi1\n0,0.1\n0,0.2')));
+ok('loadCsv throws on < 2 data rows', throws(() => loadCsv('time,roi1\n0,0.1')));
+// out-of-window spike → warning, not an error
+const Lw = loadCsv('time,spikes,roi1\n0,0.05,0.1\n0.1,9.9,0.2\n0.2,,0.3');
+ok('loadCsv warns on out-of-window spike', Lw.warnings.some((w) => w.includes('outside the time window')));
 
 // --- summary ----------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);
