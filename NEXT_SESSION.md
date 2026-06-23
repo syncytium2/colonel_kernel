@@ -33,66 +33,61 @@ them.**
 > ingests is pre-trim, so the loader must apply the `mod(k,2)` trim to its own working copy before
 > deconvolution — exactly as ADR-0009 already specifies.
 
-## ⏸ In progress — RESUME HERE (tab1-validation)
+## Resume state
 
-> Session-pause capture. The branch `tab1-validation` carries the validation CODE; canon stays on
-> `master`. Branch state at pause: signal-contract struct rename (`samples`/`zeroIndex`/`dt`/`times`)
-> and the **binned-count rasterizer** (exact MATLAB `hist(spikes, timing)`) are committed and green
-> (`test:core` 30/30). The decision below is the live thread.
+**DECIDED & CANONIZED this session** (pointers, not restatement):
+- **ADR-0013** binned-count `preFirstBin` — implemented + tested on `tab1-validation`
+  (38/38 green), premise confirmed empirically in `FOUNDATIONS.md` §13.
+- **ADR-0014** machinery-check metric — causal-lobe / peak-lag / τ / amplitude diagnostics,
+  never raw whole-kernel correlation as headline; gate is human, math is guide.
+- **FOUNDATIONS §3** — empirical decoupling finding (ROI 1 breaks one-to-one in both
+  directions → no real-ROI kernel oracle → synthetic oracle).
+- **FOUNDATIONS §4** — negative-lag refinement (genuine lead/lag vs regularization
+  artifact; human judgment).
+- Independent re-derivation matched lab `deconvreg` on ROI 1 (peak +0.6 s, within 17%) →
+  confidence to port the MATLAB pipeline.
 
-### DECISION IN PROGRESS — binned-count below-first-spike regime (default settled, implementation NOT started)
+### ⏸ RESUME HERE — machinery-check harness, two open items
 
-**What it is.** `rasterizeBinnedCount` reproduces MATLAB `hist(spikes, timing)`. A spike *before the
-first frame time* currently lands in **bin 0** (the open −∞ tail) — hist-faithful. This **differs**
-from the snap path, which drops below-first spikes. That asymmetry is what this decision resolves.
+1. **NOISE MODEL — hypothesis, NOT locked.** ROI 1 high-pass residual (2 s rolling-median
+   removed, quiet regions, n=5799): additive white Gaussian, **σ ≈ 0.0035–0.004 dF/F₀**
+   (three agreeing estimates; autocorr ≈ 0; skew 0.03, excess kurt 0.19), SNR ≈ 60 vs
+   ~0.24 transient; weak second-order shot term (~12% at high signal). **GATE BEFORE
+   LOCKING:** this is ONE ROI and the white-Gaussian call depends on the high-pass cutoff.
+   Confirm σ and the white-Gaussian shape across **several ROIs and more than one recording**
+   before the harness noise model is locked. (Figure `darkroom/roi1_noise.png` regenerated on
+   the correct residual; verdict held.)
 
-**Key realization (preserve this).** In the MATLAB reference, below-first spikes are **impossible by
-construction, not by a filter.** The driver (`aCa98_batch_APs`) builds each region's window as
-`first_sample = find(fluo_time < first_spike, 1, "last") - buffer` (~10 samples / ~1 s pre-spike
-pad), so the regional `timing` always starts ~1 s **before** the first spike. The reference "drops"
-below-first spikes only in the sense that its buffered windowing guarantees none exist. The tool's
-`t0 = times[0]` is therefore the start of the **user-supplied window** (analogous to `btiming(1)`),
-**not** the recording origin.
+2. **HARNESS DESIGN — buildable once noise model confirmed.** Synthetic reference =
+   `spike ⊗ planted-kernel + AWGN` at known σ → recover → compare recovered to planted within
+   noise-set tolerance (the oracle). Comparison metric per **ADR-0014** (causal lobe /
+   peak-lag + τ + amplitude, human-judged — not whole-kernel corr). Planted-kernel shape should
+   match the observed physiology (sharp onset lag 0, peak +0.6 s, τ ≈ 2.7 s).
 
-**v1 / v2 scope (preserve this).**
-- **v1:** the user feeds data already chopped to their window (or the whole trace). The tool builds
-  **no** buffered window — it bins against the loaded `times` as-is, `t0 = times[0]`. **Below-first
-  spikes ARE possible in v1** (a user window may clip a spike train; no buffer convention to lean on).
-- **v2 (future, do not build):** optionally let users set region(s) within a longer trace; the
-  validation path then constructs the driver-style buffered window (`first_spike − buffer`), which
-  makes below-first spikes vanish naturally — the proper fix.
+### Still queued (tab1-validation, unchanged)
 
-**The decision (default agreed; implementation paused).** binned-count gets a **caller-selected
-flag** for the below-first cell:
-- **teaching / default = KEEP** below-first spikes (hist-faithful, visible in bin 0) — dropping data
-  should be a deliberate choice, never silent, and teaching benefits from showing spikes that fell
-  outside the window.
-- **validation opt-in = DROP** below-first spikes — matches the reference pipeline's effective input
-  (which had none, due to its buffer).
-- **Why both:** binned-count serves two masters. Validation wants pipeline-faithfulness (drop);
-  teaching wants hist-faithfulness + visibility (keep). Same cell, opposite correct answers → a flag,
-  not a fixed rule.
-- **Framing to keep:** the drop-below-first flag is a **v1 stand-in for the v2 buffered-window
-  approach.** v1 can't build the pre-spike buffer (no region-setting yet), so the flag drops
-  below-first explicitly; in v2 the buffered window does the job and the flag becomes redundant on the
-  validation path.
+- **dt-only divergence warn-UI** (ADR-0012), **antialias accumulator** (ADR-0001),
+  **Tab 1 slide-and-multiply animation**.
 
-**NOT YET DECIDED / next steps (the resume point):**
-1. Implementation **not started.** When resumed: author a proper ADR once confirmed (title candidate:
-   *"binned-count below-first regime: teaching-keep default, validation-drop opt-in; v1 stand-in for
-   v2 buffered window"*), then implement the flag + below-first tests on `tab1-validation`.
-2. The flag's **exact name/signature is unspecified** — caller-selected, **defaulting to keep**.
-3. Only then proceed to the reconstruction harness and the dt-only warn-UI.
+### V2 (noted, not now)
 
-### Broader tab1-validation queue (still pending on the branch)
+Timing/regions tool — carve calcium + APs into treatment regions to test whether the kernel
+changes across epochs. The "region definition changed" concern (clerical corrections to
+temporal treatment-window boundaries in the data) is a **DATA-pipeline matter, NOT an
+app-validation prerequisite** — the app validates fine on `.mat` files as-is. CSV conversion +
+corrected timings run on a separate track.
 
-- **antialias accumulator** — still stubbed (ADR-0001 planned).
-- **Fixture-backed reconstruction harness** — **gated on an UNDECIDED choice**: the machinery-check
-  reference. Synthetic `spike ⊗ kernel` (known expected output) vs a hand-picked coupled ROI from a
-  `/APs` fixture. Per ADR-0011, machinery is gated / fit is only reported — so the gate needs a
-  known-output reference, which is the open pick.
-- **dt-only divergence warn-UI** — on the load path (ADR-0012): accept nominal-`dt`-only input but
-  warn that uniform-`dt` reconstruction can diverge from the spike clock over long recordings.
+### Repo state (end of session)
+
+- **`master`**: unpushed commits ahead of `origin/master` — this NEXT_SESSION refresh sits on
+  top of `f19e17b` README+figure, `c7f6396` FOUNDATIONS, `0c645f8` ADR-0014, `43dec34` darkroom
+  guard, `255744c` data guard. (New tip hash in the session report — a commit can't record its
+  own hash.)
+- **`tab1-validation` = `10fc67d`** (preFirstBin impl, 38/38 green), **NOT** yet rebased onto
+  this master tip; needs `--force-with-lease` to push.
+- `data/*.mat` and `darkroom/` gitignored; `docs/img/roi1_trace.png` intentionally tracked.
+- README figure won't render until `master` is pushed (GitHub resolves `docs/img/` from the
+  pushed tree).
 
 ## Done this session
 
