@@ -5,6 +5,67 @@ Project started: 1:30pm, June 21 2026.
 > Immediate working state and next actions.
 > **First action of any session: read `FOUNDATIONS.md`** (canonical source of truth).
 
+---
+
+## ⚠ CRITICAL — READ FIRST (2026-06-23, surfaced during stage-2 Tab 2 UI eyeball)
+
+**The Tab 2 JS recovery (`src/lib/core/deconvolve.js`) has a bug. Diagnose it BEFORE any
+more Tab 2 UI work.** Found by comparing the UI's recovered kernel against the lab `.mat`
+ground truth — exactly the cross-method check the graphical-confirmation rule exists to force.
+
+**The symptom (file 80, region 1, ROI 1):**
+- JS recovery **disagrees with the lab `deconvreg` kernel**: Pearson **corr = −0.74** across *all*
+  λ {0.002…3.0} *and* an extended probe {10…10000}. Near sign-inverted: −0.74 ≈ −(this morning's
+  reported **+0.82**). The JS kernel **dips negative exactly where the lab kernel peaks positive**.
+- The **lab ROI-1 kernel is a real, clean transient**: peak **+0.0108 @ +0.6 s**, acausal pedestal
+  −0.006. **ROI 1 HAS a kernel.** The JS path is missing / inverting it.
+- **λ is the wrong knob and JS-λ ≠ lab-λ:** in the JS convention the penalty is `|S|² + λ·|Lap|²`;
+  with ~140 spikes `|S|²` ~ thousands dwarfs `λ·|Lap|²` ≤ 48, so the entire slider range is
+  *effectively unregularized*. The slider cannot reach the lab regime — do not chase λ.
+
+**Record corrections (earlier conclusions now known WRONG):**
+- **ROI 1 is NOT "decoupled / no clean kernel."** It is the cleanest, *coupled*, kernel-bearing cell
+  (lab confirms), which *also* shows local decoupling events (790 s calcium-without-APs; gain change
+  400–700 s). `FOUNDATIONS.md` §3 (line ~179) was always right; the darkroom "reads as no clean
+  kernel" was a **λ=0.002-specific JS artifact, not the cell**.
+- **The earlier "UI is faithful" call was self-consistency** (JS-UI == darkroom-JS), **NOT** agreement
+  with the lab. Faithfulness must be checked vs the lab `.mat`, never vs prior JS runs.
+- **Lab ground truth, all 9 ROIs:** clean +0.6 s causal peaks in **ROI 1 (strong)** and **ROI 8
+  (clean, small)** → the §4 non-targeted-kernel phenomenon **DOES** appear on file 80 (ROI 8
+  candidate). The JS "all bowls / no non-targeted kernel" finding is unreliable (JS path is suspect).
+- **STA is unaffected and trustworthy:** ROI 1 STA recovers the clean transient (0.0346 @ 0.8 s,
+  acausalRatio 0.001) even at low λ — [ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md) cross-
+  method partner earning its place on real data.
+
+**[ADR-0017](docs/adr/0017-circular-deconv-zero-padding-no-fix.md) is REOPENED** (do not delete it;
+add a status note). Its bowl conclusion isolated padding on a **periodic synthetic oracle** and
+**never compared JS pow2-padding vs lab native-length deconv on real data** — the real-data JS↔lab
+discrepancy was never tested there. The padding-delta result (B−A ≈ 0.0013) **stands as a delta**;
+its *characterization of the real-data bowl* is now in question.
+
+**NEXT ACTION (fresh session) — diagnose the recovery bug. Distinguish two suspects:**
+- **(A) sign / convention error — PRIME SUSPECT** (near-perfect mirror image). Cheap test: take the
+  existing JS ROI-1 kernel and re-check corr vs lab under {as-is, sign-flipped, lag-reversed about
+  `zeroIndex`, both}. Audit `deconvolve.js` against
+  [docs/reference/matlab-deconv-pipeline.md](docs/reference/matlab-deconv-pipeline.md) §3.1: which arg
+  is image vs PSF in the commutativity trick, is `conj()` on the correct term, does the returned
+  `zeroIndex` / lag direction match the lab `linspace(-5,5)`. **Run A first.**
+- **(B) pow2 zero-padding.** Native-length (no-pad) recovery variant, re-check corr vs lab. If it
+  flips to ~+0.8, padding is confirmed (and ADR-0017 needs revision).
+- Throwaway variants in gitignored `darkroom/`; **do not touch shipping core until the cause is known.**
+- Repro: `node darkroom/diag_lambda_sweep.mjs && darkroom/venv/bin/python darkroom/roi1_lambda_sweep.py`
+  (sweep table + corr-vs-lab + overlay `darkroom/roi1_lambda_sweep.png`).
+
+**Stage-2 UI is fine; the bug is in the recovery math, not the wiring.** Branch `tab2-ui`,
+**NOT committed** (left uncommitted pending this diagnosis). Layout works and is eyeball-verified:
+sticky targeted col 1, horizontal scroll, shared-y kernels/STA, live λ + noise sliders. **Stage 3 is
+BLOCKED behind the recovery fix** (four-check readout, score_K/score_S, contact-sheet sort, log-λ,
+recompute-on-release). Deferred (not blockers): default-λ reconsideration (ADR-0004 follow-up) is moot
+until the convention is fixed; STA shared-y dwarfing on multi-ROI (stage-3 presentation); show-noisy-
+trace option (stage-3).
+
+---
+
 ## Status
 
 **Tab 1 core + layout complete and verified; signal contract now settled.** Design phase settled
@@ -45,16 +106,19 @@ them.**
 - **FOUNDATIONS §4** — negative-lag refinement (genuine lead/lag vs regularization
   artifact; human judgment).
 - Independent re-derivation matched lab `deconvreg` on ROI 1 (peak +0.6 s, within 17%) →
-  confidence to port the MATLAB pipeline.
+  confidence to port the MATLAB pipeline. **⚠ SUPERSEDED (see CRITICAL banner): the SHIPPING
+  `deconvolve.js` does NOT match the lab — corr −0.74 (near sign-inverted) at every λ. That morning
+  re-derivation used a different convention than what shipped; the discrepancy is the next-session bug.**
 - **ADR-0005 / STA** — `spikeTriggeredAverage.m` ported to `src/lib/core/sta.js` (the §3 check-4
   cross-method leg); the non-visual Tab 2 core is now complete (all four checks backed).
 
-### ⏸ RESUME HERE — Tab 2 UI (the non-visual spine is DONE and merged)
+### ⏸ RESUME HERE — diagnose the recovery bug (see ⚠ CRITICAL banner at the top)
 
-> **THE next-action authority — the live frontier.** The non-visual real-data spine is built,
-> validated on real data, and **merged to `master` (STA merge `3c06baa`; head `b10fffc`)**. The
-> frontier is now the **Tab 2 UI**. Queued/parallel items are under "Still queued" below and are
-> *not* the next action.
+> **The next action is the recovery-bug diagnosis in the ⚠ CRITICAL banner, NOT the Tab 2 UI.**
+> The UI stage-1/2 are built and eyeball-verified on `tab2-ui` (uncommitted); the recovery *math*
+> underneath is wrong (JS↔lab corr −0.74). Tab 2 UI stage 3 is blocked behind the fix. The
+> non-visual spine below was "complete" only by self-consistency — the lab cross-check was not run
+> until this session, and it failed. Read the banner first.
 
 **DONE & merged — the non-visual spine is now COMPLETE (former items 1 & 2 + STA):**
 - **Noise model — v1 settled** ([ADR-0015](docs/adr/0015-harness-noise-model.md)): AWGN, user slider
@@ -91,7 +155,12 @@ ROI 1 trace + spikes — the §3 decoupling drawn: big calcium at ~790 s with no
 proportional calcium at 400–700 s), `fig_real_kernels.png` (all 9 ROIs read as *no clean kernel* —
 correct verdict).
 
-**✓ RESOLVED — circular-deconv zero-padding artifact ([ADR-0017](docs/adr/0017-circular-deconv-zero-padding-no-fix.md)).**
+**⚠ REOPENED (see CRITICAL banner) — circular-deconv zero-padding artifact ([ADR-0017](docs/adr/0017-circular-deconv-zero-padding-no-fix.md)).**
+> The block below is the state ADR-0017 was written in. It is now **partially superseded**: the
+> padding-delta (B−A ≈ 0.0013) stands, but "the real-ROI-1 bowl is decoupling, not padding" is in
+> doubt — that conclusion never compared JS pow2-padding against the lab native-length deconv, and the
+> lab finds a clean ROI-1 kernel the JS path inverts (corr −0.74). Treat the rest of this block as
+> historical until the recovery bug is diagnosed.
 Four eyeball-confirmed experiments (figures in gitignored `darkroom/`:
 `fig_padding_artifact_80.png`, `fig_pad_isolation_oracle.png`, `fig_ef_real_roi1.png`) settle it:
 the zero-pad step's **isolated** contribution is negligible (oracle B−A = 0.0013, under the 0.02
