@@ -19,6 +19,11 @@ data/*.mat
 # darkroom/ — local-only figures developed from reference data (never committed).
 darkroom/
 
+# exports/ — CSV produced by scripts/mat2csv.py from reference .mat data.
+# Researchers' data must never be committed (FOUNDATIONS §6); the converter is
+# tracked, its output is not.
+exports/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
