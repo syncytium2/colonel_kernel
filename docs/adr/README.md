@@ -33,3 +33,4 @@ When an ADR changes a settled point in `FOUNDATIONS.md`, update `FOUNDATIONS.md`
 | [0011](0011-validation-gates-machinery-not-fit.md) | Validation gates machinery, not fit | Accepted |
 | [0012](0012-timing-vector-authoritative-dt-derived.md) | Timing vector is authoritative; dt is a derived fallback | Accepted |
 | [0013](0013-binned-count-pre-first-bin-regime.md) | Binned-count pre-first-bin regime — teaching-keep default, validation-drop opt-in (`preFirstBin: 'keep'\|'drop'`); v1 stand-in for v2 buffered window | Accepted |
+| [0014](0014-machinery-check-metric.md) | Machinery-check metric — causal-lobe / peak-lag+τ+amplitude diagnostics, raw whole-kernel correlation avoided as headline; gate is human, math is guide | Accepted (metric set provisional) |
