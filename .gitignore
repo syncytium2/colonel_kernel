@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Reference .mat data — researchers' data must never be committed (FOUNDATIONS §6).
+# Promote a file to a golden test asset deliberately, never by accident.
+data/*.mat
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
