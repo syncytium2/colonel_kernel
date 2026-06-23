@@ -34,6 +34,32 @@ Researchers' unpublished data must never leave their machine.
 
 Never add analytics, telemetry, CDN links, or third-party fonts at any point.
 
+## Repository data hygiene (non-negotiable)
+
+The privacy rule above governs the running app. This governs the repository itself:
+researchers' unpublished data must never be committed.
+
+- **Never commit raw data.** `.mat` fixtures and any raw recordings stay local.
+  `data/*.mat` is gitignored; keep it that way. Verify with `git check-ignore`
+  before adding anything under `data/`.
+- **Never commit scratch figures or analysis byproducts.** `darkroom/` (rendered
+  figures, scratch scripts, venvs) is gitignored. Keep it that way.
+- **Derived figures are the ONE allowed exception, and only deliberately.** A
+  rendered plot derived from unpublished data may be committed ONLY to `docs/img/`,
+  ONLY with the author's explicit consent, and ONLY when marked as intentional in
+  `docs/img/README.txt`. `docs/img/roi1_trace.png` is the existing precedent. A
+  derived figure is a plot, never raw or near-raw data (no full traces as CSV/JSON,
+  no per-sample dumps).
+- **Before any push, confirm no `data/` or `darkroom/` content is staged or tracked**
+  (`git ls-files data/ darkroom/` must be empty) and that the only tracked binaries
+  under `docs/img/` are consented figures.
+- **Repo visibility is not a license to relax this.** Even on a private remote, raw
+  data stays out — privacy posture shouldn't depend on a settings toggle.
+
+Keep the FOUNDATIONS §6 privacy rule and this repo-hygiene rule distinct: §6 / the
+app-privacy section is about runtime (CSP, no third-party requests); this is about
+version control. Don't conflate them.
+
 ## Doc structure
 
 - **`FOUNDATIONS.md`** — settled foundations and the reasoning behind them. Read first every session. Not a task list. This file wins until deliberately edited.
