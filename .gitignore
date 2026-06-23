@@ -16,6 +16,9 @@ dist-ssr
 # Promote a file to a golden test asset deliberately, never by accident.
 data/*.mat
 
+# darkroom/ — local-only figures developed from reference data (never committed).
+darkroom/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
