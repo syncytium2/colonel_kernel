@@ -244,12 +244,19 @@ Minimal ground-truth schema:
   targeted cell.** Remaining columns are other cells (controls/context, and candidates for the
   multi-ROI phenomenon above).
 
-**Structural wrinkle to handle in the parser:** spike times are a *sparse event list* and live on a
-different row count than the *dense* time + trace columns. Resolve the layout convention explicitly
-(e.g. ragged columns with blanks below the short spike column) — confirm against real exported files.
+**Structural wrinkle — SETTLED ([ADR-0016](docs/adr/0016-csv-input-layout.md)).** Spike times are a
+*sparse event list* on a different row count than the *dense* time + trace columns. The layout
+convention is now fixed: **one CSV per region**, columns `time`, `spikes`, `roi1..roiN`, with the
+short `spikes` column **left blank below the last spike** (ragged). `roi1` is the default targeted
+cell (§4); non-finite trace samples are the literal `NaN`; the pre-trim `timing` is emitted verbatim
+(the app applies the `mod(k,2)` trim, §13). Confirmed against real exported files.
 
-**MATLAB origin:** source data currently lives in MATLAB structures; there is no CSV ready yet.
-Plan to provide users a tiny MATLAB snippet (`writetable` / `csvwrite`) to produce the schema above.
+**MATLAB origin:** source data lives in MATLAB v7.3 (HDF5) structures (`k_sta_store`). A CSV path now
+exists: **`scripts/mat2csv.py`** — a tracked, *offline* converter that reads the processed
+`APs_v1_*.mat` outputs and writes the schema above (output gitignored, §6). This keeps `.mat`
+decoding out of the browser (CSV-first; no in-browser `.mat`, no egress) while giving users real CSV
+without hand-writing it. A `writetable` / `csvwrite` snippet remains a fine alternative for users
+working from MATLAB.
 
 **Export:** the deconvolution side must export results (recovered kernel(s), per-ROI fit scores,
 inferred spikes where relevant) back out as CSV. The teaching side does not need this.
@@ -374,15 +381,17 @@ These do not block scaffolding, but should be settled deliberately:
 5. **Linear vs circular convolution — SETTLED.** **Linear** convolution (zero-padded) is the
    convention everywhere; circular is kept only as a teaching illustration of "what FFT does
    naively, and why we zero-pad to avoid it." See [ADR-0006](docs/adr/0006-linear-convolution.md).
-6. **CSV layout convention** for the sparse spike column vs dense trace columns (confirm against a
-   real exported file once one exists).
+6. **CSV layout convention — SETTLED.** The sparse spike column vs dense trace columns is resolved:
+   one CSV per region (`time`, `spikes`, `roi1..roiN`, ragged spikes), confirmed against real
+   exported files produced by `scripts/mat2csv.py`. See [ADR-0016](docs/adr/0016-csv-input-layout.md).
 
 > **Status of this list:** with rasterization (1, via ADR-0001) and linear-vs-circular (5, via
 > ADR-0006) now settled — and the kernel-source and sample-rate questions resolved by ADR-0003 and
 > ADR-0002 respectively — the **original four open questions are closed**. The remaining live items
 > are the *later-surfaced* ones: the deconvolution numerical route ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)),
 > and the kernel global/tab-local detail plus the per-tab disclosure layout (§11.4). Item 6 (CSV
-> layout) stays open pending a real exported file.
+> layout) is now **also settled** ([ADR-0016](docs/adr/0016-csv-input-layout.md)) — a real exported
+> file exists via `scripts/mat2csv.py`.
 
 ---
 
