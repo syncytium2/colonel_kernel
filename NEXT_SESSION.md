@@ -46,6 +46,8 @@ them.**
   artifact; human judgment).
 - Independent re-derivation matched lab `deconvreg` on ROI 1 (peak +0.6 s, within 17%) →
   confidence to port the MATLAB pipeline.
+- **ADR-0005 / STA** — `spikeTriggeredAverage.m` ported to `src/lib/core/sta.js` (the §3 check-4
+  cross-method leg); the non-visual Tab 2 core is now complete (all four checks backed).
 
 ### ⏸ RESUME HERE — Tab 2 UI (the non-visual spine is DONE and merged)
 
@@ -53,7 +55,7 @@ them.**
 > validated on real data, and **merged to `master` (`03f401f`)**. The frontier is now the **Tab 2
 > UI**. Queued/parallel items are under "Still queued" below and are *not* the next action.
 
-**DONE & merged — the non-visual spine (former items 1 & 2, now closed):**
+**DONE & merged — the non-visual spine is now COMPLETE (former items 1 & 2 + STA):**
 - **Noise model — v1 settled** ([ADR-0015](docs/adr/0015-harness-noise-model.md)): AWGN, user slider
   0–10× cohort-typical σ (1× ≈ 0.0024 dF/F₀ from baseline regions; default 0/off, §11.2), from a
   39-recording recon. Richer model (region conditioning, σ-distribution, ~12% shot term,
@@ -64,8 +66,14 @@ them.**
   real-ROI failure is **decoupling, not noise** (§3 thesis). `npm run machinery-check`.
 - **Data path** ([ADR-0016](docs/adr/0016-csv-input-layout.md)): `scripts/mat2csv.py` (offline
   .mat→CSV) + `loadCsv` (CSV→signal contract). Verified end-to-end on real file 80; the decoupled
-  ROI 1 correctly reads as *no clean kernel*. **70/70 `test:core`**; spine modules in `src/lib/core/`
-  (noise, deconvolve, kernel-diagnostics, load-csv) exported from the barrel.
+  ROI 1 correctly reads as *no clean kernel*.
+- **STA — DONE** ([ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)): `src/lib/core/sta.js`, a
+  faithful port of `spikeTriggeredAverage.m` (overlap rejection `block = 0.5·window`, first/last-event
+  skip, 0.1 s match tolerance, per-event baseline zeroing, omitnan averaging; §13 contract,
+  `zeroIndex = windowSamples`). Cross-method test: a planted calcium kernel is recovered by STA with
+  peak lag/amp agreeing with its diagnostics — the §3 check-4 leg now has its math.
+- **All four §3 checks now have backing math**; spine modules in `src/lib/core/` (noise, deconvolve,
+  kernel-diagnostics, sta, load-csv) exported from the barrel. **87/87 `test:core`**, build clean.
 
 **LIVE — Tab 2 UI (the flagship front-end).** Wire the now-proven core into Svelte:
 - file drop → `loadCsv` → per-ROI columns laid side by side, **column 1 highlighted** as the targeted
@@ -75,8 +83,10 @@ them.**
 - **explicit regularization slider** ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)) + the
   **noise slider** ([ADR-0015](docs/adr/0015-harness-noise-model.md));
 - kernel / STA plots with the **marked zero-lag line** (ADR-0004/0009).
-- **STA is not yet built** ([ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)) — the
-  cross-method-agreement leg the harness does not yet exercise; implement alongside the UI.
+- **STA is built** ([ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md), `src/lib/core/sta.js`) —
+  the cross-method-agreement leg now has its math; the UI wires `spikeTriggeredAverage` per ROI and
+  reads it against `recoverKernel` (shared `zeroIndex = windowSamples` makes them comparable about
+  zero). No remaining unbuilt core leg — the UI is pure wiring + presentation over a proven core.
 
 ### Still queued (lower priority / parallel — not the next action)
 
@@ -99,14 +109,14 @@ corrected timings run on a separate track.
 
 ### Repo state (end of session)
 
-- **`master` = `03f401f`** (the `--no-ff` merge of `tab1-validation`), plus this NEXT_SESSION
-  refresh on top. Carries the full non-visual spine (struct rename, binned-count rasterizer,
-  machinery harness, CSV loader) + ADR-0015/0016 + `scripts/mat2csv.py`. 70/70 `test:core`, build
+- **`master` = `3c06baa`** (the `--no-ff` merge of `tab2-sta`), plus this NEXT_SESSION refresh on
+  top. Carries the full non-visual spine — struct rename, binned-count rasterizer, machinery harness,
+  CSV loader, **and STA** — + ADR-0015/0016 + `scripts/mat2csv.py`. **87/87 `test:core`**, build
   clean (~49.7 KB gzip; papaparse/fft.js tree-shake out of the app bundle). **Push after this
   commit.**
-- **`tab1-validation` MERGED into `master`** (at `03f401f`) and its work is fully on master. The
-  branch can be deleted or reused as the base for the next code branch — no longer the home of
-  unmerged work. No outstanding branch-hygiene items.
+- **`tab2-sta` MERGED into `master`** (at `3c06baa`); its work is fully on master and the branch can
+  be deleted or reused. `tab1-validation` was the prior merged branch (at `03f401f`). No outstanding
+  branch-hygiene items.
 - `data/*.mat`, `darkroom/`, and `exports/` gitignored; `docs/img/roi1_trace.png` intentionally
   tracked. `scripts/mat2csv.py` writes CSV to gitignored `exports/` (never commit data, §6).
 - **Snapshot caveat:** this block is a point-in-time record. Before acting on it, run
