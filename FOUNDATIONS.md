@@ -176,6 +176,16 @@ In short: **machinery is gated; fit is reported.** A correct forward path that f
 reconstructs a *coupled* ROI and faithfully *fails* to reconstruct an *uncoupled* one is working
 exactly as intended.
 
+**Empirical confirmation** (`APs_v1_20241004_80.mat`, ROI 1 — the cleanest ROI examined): even this
+ROI visibly breaks the one-to-one AP→calcium relationship in **both** directions. A large calcium
+transient (~780–800 s, ~0.24 dF/F₀) occurs with no matching spike burst (calcium without APs), and
+across ~400–700 s spiking continues while the calcium response shrinks (APs without proportional
+calcium — non-constant gain). Consequence: there is **no single fixed kernel *within* a real ROI**
+to recover against, which is why a real ROI cannot serve as the kernel-recovery oracle. The tool's
+job is to **measure** this decoupling, not assume it away. (See
+[ADR-0011](docs/adr/0011-validation-gates-machinery-not-fit.md); the synthetic-oracle choice for the
+machinery check follows from this — `NEXT_SESSION.md`.)
+
 ---
 
 ## 4. The multi-ROI phenomenon (a genuine open research question)
@@ -198,6 +208,15 @@ The retained negative-lag kernel structure ([ADR-0004](docs/adr/0004-tab2-deconv
 turns the multi-ROI question from "is there a kernel?" into "is there a kernel, *and what is the
 lead/lag relationship?*" — kernel position encodes coupling direction, a companion to the prevalence
 question above.
+
+**Refinement: negative-lag energy is not monolithic.** It can be genuine cross-cell lead/lag
+structure (the meaningful case above), **or** a regularization artifact. In the ROI-1 comparison,
+the lab `deconvreg` kernel's acausal pedestal (≈ −0.006) is the artifact case — a
+regularization-convention effect (circular FFT + silent Laplacian), **not** coupling. Distinguishing
+real lead/lag from regularization artifact is a **human judgment**, which is exactly why
+regularization must stay visible (§7) and why the machinery-check comparison is human-judged rather
+than gated on a correlation that would blend the two
+([ADR-0014](docs/adr/0014-machinery-check-metric.md)).
 
 ### Multiple-comparisons caution (design for it now, implement later)
 
@@ -491,6 +510,10 @@ So JS sample counts and lag alignment match the reference `.mat` files:
    > `preFirstBin: 'keep'|'drop'` (default **keep**, hist-faithful; **drop** is the
    > validation opt-in). See [ADR-0013](docs/adr/0013-binned-count-pre-first-bin-regime.md).
    > The drop path is a v1 stand-in for the v2 buffered window.
+   > **Confirmed empirically:** in `APs_v1_20241004_80.mat` ROI 1, the region window
+   > begins ~1 s before the first spike (11 baseline samples = the `buffer=10` pre-spike
+   > pad), and **0 spikes fall below the first bin center** — the ADR-0013 "pre-first-bin
+   > spikes impossible by construction" premise holds against real data, not just by argument.
 2. **Even-length trim — follow the executed code, not the comment.**
    `TDdeconvStack.m` runs `if mod(k,2); stack(:,:,k)=[]; timing(k)=[]; end`. In MATLAB
    `mod(k,2)` is truthy when **k is odd**, so this drops the last sample **when k is
