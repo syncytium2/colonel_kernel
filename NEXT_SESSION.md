@@ -47,46 +47,47 @@ them.**
 - Independent re-derivation matched lab `deconvreg` on ROI 1 (peak +0.6 s, within 17%) →
   confidence to port the MATLAB pipeline.
 
-### ⏸ RESUME HERE — machinery-check harness (noise model settled; BUILD is the live item)
+### ⏸ RESUME HERE — Tab 2 UI (the non-visual spine is DONE and merged)
 
-> **This is THE next-action authority — the live frontier.** The queued/parallel work
-> listed under "Still queued" below is lower priority and is *not* the next action. If a
-> later edit reintroduces a competing "next actions" list, this section wins.
-> **Item 1 (noise model) is now settled for v1 ([ADR-0015](docs/adr/0015-harness-noise-model.md));
-> item 2 (build the harness) is the single open action.**
+> **THE next-action authority — the live frontier.** The non-visual real-data spine is built,
+> validated on real data, and **merged to `master` (`03f401f`)**. The frontier is now the **Tab 2
+> UI**. Queued/parallel items are under "Still queued" below and are *not* the next action.
 
-1. **NOISE MODEL — v1 SETTLED ([ADR-0015](docs/adr/0015-harness-noise-model.md)).** The
-   gate (confirm σ + white-Gaussian shape across several ROIs / >1 recording) is **met**: a
-   39-recording reconnaissance (2074 ROI×region series; read-only scripts + report in gitignored
-   `darkroom/`) confirmed white-Gaussian on quiescent `baseline` regions and reproduced the ROI-1
-   anchor exactly. **v1 decision:** additive white Gaussian, level set by a **user slider 0–10×
-   cohort-typical σ** (1× ≈ 0.0024 dF/F₀ from baseline regions; default 0/off per §11.2). This is the
-   §7/§11.2 noise-injection control, calibrated; the same units feed the machinery-check harness
-   (which can sweep the range). The richer model — region-type conditioning, σ-as-distribution, the
-   ~12% shot term, the contamination test — is **deferred to v2, revisited after all tabs are built**
-   (recon findings preserved as ADR-0015 Context, since `darkroom/` is not tracked).
+**DONE & merged — the non-visual spine (former items 1 & 2, now closed):**
+- **Noise model — v1 settled** ([ADR-0015](docs/adr/0015-harness-noise-model.md)): AWGN, user slider
+  0–10× cohort-typical σ (1× ≈ 0.0024 dF/F₀ from baseline regions; default 0/off, §11.2), from a
+  39-recording recon. Richer model (region conditioning, σ-distribution, ~12% shot term,
+  contamination test) → v2.
+- **Machinery-check harness — DONE** (was item 2): synthetic oracle passes; regularized recovery
+  ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)) + noise ([ADR-0015](docs/adr/0015-harness-noise-model.md))
+  + diagnostics ([ADR-0014](docs/adr/0014-machinery-check-metric.md)). Recovery holds to 10× noise →
+  real-ROI failure is **decoupling, not noise** (§3 thesis). `npm run machinery-check`.
+- **Data path** ([ADR-0016](docs/adr/0016-csv-input-layout.md)): `scripts/mat2csv.py` (offline
+  .mat→CSV) + `loadCsv` (CSV→signal contract). Verified end-to-end on real file 80; the decoupled
+  ROI 1 correctly reads as *no clean kernel*. **70/70 `test:core`**; spine modules in `src/lib/core/`
+  (noise, deconvolve, kernel-diagnostics, load-csv) exported from the barrel.
 
-2. **HARNESS DESIGN — buildable once noise model confirmed.** Synthetic reference =
-   `spike ⊗ planted-kernel + AWGN` at known σ → recover → compare recovered to planted within
-   noise-set tolerance (the oracle). Comparison metric per **ADR-0014** (causal lobe /
-   peak-lag + τ + amplitude, human-judged — not whole-kernel corr). Planted-kernel shape should
-   match the observed physiology (sharp onset lag 0, peak +0.6 s, τ ≈ 2.7 s).
+**LIVE — Tab 2 UI (the flagship front-end).** Wire the now-proven core into Svelte:
+- file drop → `loadCsv` → per-ROI columns laid side by side, **column 1 highlighted** as the targeted
+  cell (§4);
+- per-ROI `recoverKernel` + the **four-check goodness-of-fit** readout (§3): kernel plausibility,
+  reconstruction residual, stability, and STA cross-method agreement;
+- **explicit regularization slider** ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)) + the
+  **noise slider** ([ADR-0015](docs/adr/0015-harness-noise-model.md));
+- kernel / STA plots with the **marked zero-lag line** (ADR-0004/0009).
+- **STA is not yet built** ([ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)) — the
+  cross-method-agreement leg the harness does not yet exercise; implement alongside the UI.
 
 ### Still queued (lower priority / parallel — not the next action)
 
 The single list of queued and parallel work. None of this is the live frontier (see
-"⏸ RESUME HERE" above); these are picked up around or after the machinery-check harness.
+"⏸ RESUME HERE" above — the Tab 2 UI); these are picked up around or after it.
 
-- **tab1-validation items:** **dt-only divergence warn-UI** (ADR-0012),
-  **antialias accumulator** (ADR-0001), **Tab 1 slide-and-multiply animation** (the deferred
-  visual piece — the kernel panel up top is the reference shape that slides across the spike
-  train; the math is already proven, so it's pure presentation and a good low-stakes parallel
-  track).
-- **Tab 2 (flagship) — the major build after the harness.** Regularized deconvolution
-  ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)) + STA
-  ([ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)) + four-check goodness-of-fit +
-  per-ROI. Heaviest piece; port against the MATLAB reference. The machinery-check harness
-  above is the validation scaffolding this is built against.
+- **Deferred core/UI items:** **dt-only divergence warn-UI** ([ADR-0012](docs/adr/0012-timing-vector-authoritative-dt-derived.md)),
+  **antialias accumulator** ([ADR-0001](docs/adr/0001-delta-rasterization.md)), **Tab 1
+  slide-and-multiply animation** (the deferred visual piece — the kernel panel up top is the
+  reference shape that slides across the spike train; the math is already proven, so it's pure
+  presentation and a good low-stakes parallel track).
 
 ### V2 (noted, not now)
 
@@ -98,17 +99,16 @@ corrected timings run on a separate track.
 
 ### Repo state (end of session)
 
-- **`master` = `64d2a34`, PUSHED and in sync with `origin/master`** (this NEXT_SESSION refresh
-  sits on top, so the live tip is one commit ahead of the named hash). All commits are up
-  (README+figure, FOUNDATIONS, ADR-0014, darkroom guard, data guard, the next-action-authority
-  reconciliation). The README ROI-1 figure renders on GitHub (`docs/img/` resolves from the
-  pushed tree).
-- **Branch hygiene CLEARED — `tab1-validation` = `574ea31`** (preFirstBin impl, 38/38 green
-  post-rebase), **rebased onto `64d2a34` and pushed** (`--force-with-lease`); local and
-  `origin/tab1-validation` match. The preFirstBin code is no longer stranded local-only. No
-  outstanding branch-hygiene items. (Branch is current and pushed only — **not** merged to
-  master; that remains a separate decision.)
-- `data/*.mat` and `darkroom/` gitignored; `docs/img/roi1_trace.png` intentionally tracked.
+- **`master` = `03f401f`** (the `--no-ff` merge of `tab1-validation`), plus this NEXT_SESSION
+  refresh on top. Carries the full non-visual spine (struct rename, binned-count rasterizer,
+  machinery harness, CSV loader) + ADR-0015/0016 + `scripts/mat2csv.py`. 70/70 `test:core`, build
+  clean (~49.7 KB gzip; papaparse/fft.js tree-shake out of the app bundle). **Push after this
+  commit.**
+- **`tab1-validation` MERGED into `master`** (at `03f401f`) and its work is fully on master. The
+  branch can be deleted or reused as the base for the next code branch — no longer the home of
+  unmerged work. No outstanding branch-hygiene items.
+- `data/*.mat`, `darkroom/`, and `exports/` gitignored; `docs/img/roi1_trace.png` intentionally
+  tracked. `scripts/mat2csv.py` writes CSV to gitignored `exports/` (never commit data, §6).
 - **Snapshot caveat:** this block is a point-in-time record. Before acting on it, run
   `git fetch && git status` — the remote is the truth.
 
