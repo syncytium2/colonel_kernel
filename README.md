@@ -1,6 +1,12 @@
-# Svelte + Vite
+# Colonel Kernel
 
-This template should help get you started developing with Svelte in Vite.
+A client-side 1D convolution / deconvolution tool for calcium imaging — a teaching demonstrator and a ground-truth kernel-verification instrument.
+
+## Why this tool exists
+
+![ROI 1 of a real paired spike/calcium recording: 140 spike ticks over the calcium trace](docs/img/roi1_trace.png)
+
+This is ROI 1 of a real paired recording — the cleanest spike/calcium coupling in the dataset. The red ticks are 140 action potentials; the blue trace is the calcium signal. Even here, the relationship is not one-to-one: the large transient near 780 s has no matching burst of spikes, and through 400–700 s the spikes continue while the calcium response shrinks. Colonel Kernel exists to **measure** this relationship — to recover the kernel that links spikes to calcium, or to show when no single kernel does — not to assume the two are coupled. (See [FOUNDATIONS](FOUNDATIONS.md) §3–4.)
 
 ## Recommended IDE Setup
 
