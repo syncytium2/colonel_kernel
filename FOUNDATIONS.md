@@ -299,8 +299,9 @@ Deconvolution methods to expose (pedagogically + practically):
 - **Regularized inverse (Wiener / Tikhonov)** — regularization parameter as a slider.
 - **Iterative (Richardson–Lucy / Landweber)** — show convergence.
 
-Cross-cutting: optional **noise injection** (so deconvolution isn't deceptively easy), explicit
-**edge handling** (linear vs circular convolution — pick a default, make it visible), and
+Cross-cutting: optional **noise injection** (so deconvolution isn't deceptively easy; AWGN on a
+user slider 0–10× cohort-typical σ, calibrated in [ADR-0015](docs/adr/0015-harness-noise-model.md)),
+explicit **edge handling** (linear vs circular convolution — pick a default, make it visible), and
 **ground-truth overlay** (recovered vs true, with an error metric).
 
 ---
@@ -415,7 +416,8 @@ here?" or "does it affect the other tab?":
 - **Global** — the timebase (sample rate / window length), see [ADR-0002](docs/adr/0002-global-timebase.md).
   The **kernel is likely global too** (so it can be carried between tabs) — *TBD when built.*
 - **Tab-local** — deconvolution method, regularization, ROI selection: only meaningful in Tabs 2/3.
-- **Global-but-default-off** — noise injection.
+- **Global-but-default-off** — noise injection (AWGN, slider 0–10× cohort-typical σ, default 0/off;
+  [ADR-0015](docs/adr/0015-harness-noise-model.md)).
 
 ### 11.3 Cross-tab flow
 

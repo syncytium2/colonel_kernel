@@ -47,20 +47,24 @@ them.**
 - Independent re-derivation matched lab `deconvreg` on ROI 1 (peak +0.6 s, within 17%) →
   confidence to port the MATLAB pipeline.
 
-### ⏸ RESUME HERE — machinery-check harness, two open items
+### ⏸ RESUME HERE — machinery-check harness (noise model settled; BUILD is the live item)
 
 > **This is THE next-action authority — the live frontier.** The queued/parallel work
 > listed under "Still queued" below is lower priority and is *not* the next action. If a
 > later edit reintroduces a competing "next actions" list, this section wins.
+> **Item 1 (noise model) is now settled for v1 ([ADR-0015](docs/adr/0015-harness-noise-model.md));
+> item 2 (build the harness) is the single open action.**
 
-1. **NOISE MODEL — hypothesis, NOT locked.** ROI 1 high-pass residual (2 s rolling-median
-   removed, quiet regions, n=5799): additive white Gaussian, **σ ≈ 0.0035–0.004 dF/F₀**
-   (three agreeing estimates; autocorr ≈ 0; skew 0.03, excess kurt 0.19), SNR ≈ 60 vs
-   ~0.24 transient; weak second-order shot term (~12% at high signal). **GATE BEFORE
-   LOCKING:** this is ONE ROI and the white-Gaussian call depends on the high-pass cutoff.
-   Confirm σ and the white-Gaussian shape across **several ROIs and more than one recording**
-   before the harness noise model is locked. (Figure `darkroom/roi1_noise.png` regenerated on
-   the correct residual; verdict held.)
+1. **NOISE MODEL — v1 SETTLED ([ADR-0015](docs/adr/0015-harness-noise-model.md)).** The
+   gate (confirm σ + white-Gaussian shape across several ROIs / >1 recording) is **met**: a
+   39-recording reconnaissance (2074 ROI×region series; read-only scripts + report in gitignored
+   `darkroom/`) confirmed white-Gaussian on quiescent `baseline` regions and reproduced the ROI-1
+   anchor exactly. **v1 decision:** additive white Gaussian, level set by a **user slider 0–10×
+   cohort-typical σ** (1× ≈ 0.0024 dF/F₀ from baseline regions; default 0/off per §11.2). This is the
+   §7/§11.2 noise-injection control, calibrated; the same units feed the machinery-check harness
+   (which can sweep the range). The richer model — region-type conditioning, σ-as-distribution, the
+   ~12% shot term, the contamination test — is **deferred to v2, revisited after all tabs are built**
+   (recon findings preserved as ADR-0015 Context, since `darkroom/` is not tracked).
 
 2. **HARNESS DESIGN — buildable once noise model confirmed.** Synthetic reference =
    `spike ⊗ planted-kernel + AWGN` at known σ → recover → compare recovered to planted within
