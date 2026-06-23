@@ -28,20 +28,24 @@ export function convolveLinear(x, h) {
 
 /**
  * Convolve a rasterized input with a built kernel and return the result on a
- * spike-aligned time axis. The kernel's `originOffset` shifts the axis so that
+ * spike-aligned time axis. The kernel's `zeroIndex` shifts the axis so that
  * kernel-time-0 lands at the spike: causal kernels extend right from the spike,
  * symmetric kernels straddle it.
+ *
+ * The output is a signal in its own right ({ samples, times }) with an explicit,
+ * authoritative `times` axis (ADR-0012) — the shifted lag mapping is real, not
+ * derivable from a single dt + origin alone once the kernel origin is applied.
  *
  * @param {Float64Array} samples rasterized input on the grid
  * @param {import('./timebase.js').Grid} grid
  * @param {import('./kernels.js').Kernel} kernel
- * @returns {{ values: Float64Array, times: Float64Array }}
+ * @returns {{ samples: Float64Array, times: Float64Array }}
  */
 export function convolveOnGrid(samples, grid, kernel) {
-  const values = convolveLinear(samples, kernel.values);
-  const times = new Float64Array(values.length);
-  for (let i = 0; i < values.length; i++) {
-    times[i] = grid.t0 + (i - kernel.originOffset) * grid.dt;
+  const out = convolveLinear(samples, kernel.samples);
+  const times = new Float64Array(out.length);
+  for (let i = 0; i < out.length; i++) {
+    times[i] = grid.t0 + (i - kernel.zeroIndex) * grid.dt;
   }
-  return { values, times };
+  return { samples: out, times };
 }

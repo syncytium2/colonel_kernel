@@ -4,10 +4,20 @@
 // These assert the trivial cases a human can confirm on paper, so the
 // foundation is proven before any UI or animation depends on it.
 
-import { makeGrid } from './timebase.js';
+import { makeGrid, gridFromTimeColumn } from './timebase.js';
 import { rasterize } from './rasterize.js';
 import { buildKernel, defaultParams } from './kernels.js';
 import { convolveLinear, convolveOnGrid } from './convolve.js';
+import {
+  nextPow2,
+  circularConvolve,
+  deconvolveCircular,
+  extractSymmetric,
+  recoverKernel,
+} from './deconvolve.js';
+import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
+import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './noise.js';
+import { loadCsv } from './load-csv.js';
 
 let passed = 0;
 let failed = 0;
@@ -59,33 +69,199 @@ ok('linear conv values', [0, 1, 2, 3, 0].every((v, i) => approx(cl[i], v)), `[${
 // --- the headline hand-verify: spike ⊗ boxcar reproduces the boxcar ---------
 const box = buildKernel('boxcar', { length: 0.3 }, grid.dt); // 30 samples of 1
 const out = convolveOnGrid(r1.samples, grid, box);
-ok('boxcar kernel length', box.values.length === 30, `len=${box.values.length}`);
+ok('boxcar kernel length', box.samples.length === 30, `len=${box.samples.length}`);
 let boxFlat = true;
-for (let i = 50; i < 80; i++) if (!approx(out.values[i], 1)) boxFlat = false;
+for (let i = 50; i < 80; i++) if (!approx(out.samples[i], 1)) boxFlat = false;
 ok('output = 1 across the boxcar span at the spike', boxFlat);
-ok('output zero before the spike', out.values[49] === 0);
-ok('output zero after the boxcar', out.values[80] === 0);
+ok('output zero before the spike', out.samples[49] === 0);
+ok('output zero after the boxcar', out.samples[80] === 0);
 ok('boxcar output starts at the spike time', approx(out.times[50], 0.5), `t=${out.times[50]}`);
 
 // --- centered Gaussian sits ON the spike (origin alignment) -----------------
 const g = buildKernel('gaussian', { sigma: 0.1 }, grid.dt);
 const gout = convolveOnGrid(r1.samples, grid, g);
 let peakIdx = 0;
-for (let i = 1; i < gout.values.length; i++) if (gout.values[i] > gout.values[peakIdx]) peakIdx = i;
-ok('gaussian peak ~1', approx(gout.values[peakIdx], 1, 1e-6));
+for (let i = 1; i < gout.samples.length; i++) if (gout.samples[i] > gout.samples[peakIdx]) peakIdx = i;
+ok('gaussian peak ~1', approx(gout.samples[peakIdx], 1, 1e-6));
 ok('gaussian peak centered on spike time', approx(gout.times[peakIdx], 0.5), `t=${gout.times[peakIdx]}`);
 
 // --- calcium kernel: causal rise from 0, normalized peak 1 ------------------
 const ca = buildKernel('calcium', defaultParams('calcium'), grid.dt);
-ok('calcium starts at 0 (causal rise)', approx(ca.values[0], 0));
+ok('calcium starts at 0 (causal rise)', approx(ca.samples[0], 0));
 let caPeak = 0;
-for (const v of ca.values) if (v > caPeak) caPeak = v;
+for (const v of ca.samples) if (v > caPeak) caPeak = v;
 ok('calcium normalized to peak 1', approx(caPeak, 1, 1e-12));
-ok('calcium origin causal', ca.originOffset === 0);
+ok('calcium origin causal', ca.zeroIndex === 0);
+
+// --- binned-count: reproduce MATLAB hist(spikes, timing) EXACTLY (ADR-0001/§13) ---
+// Integer-exact centers so the midpoint tie-break is float-safe.
+// centers [0,1,2,3] -> edges 0.5, 1.5, 2.5; max=3 (pre-filter `< 3`).
+//   bin0 [-inf,0.5) bin1 [0.5,1.5) bin2 [1.5,2.5) bin3 [2.5,3)
+// spikes: -0.2 below-first->bin0; 0.5 ON edge->upper bin1; 0.7->bin1; 1.5 ON
+//   edge->upper bin2; 2.9->bin3; 3.0 ==max->dropped; 3.5 above->dropped.
+const bcGrid = gridFromTimeColumn([0, 1, 2, 3]);
+const bc = rasterize([-0.2, 0.5, 0.7, 1.5, 2.9, 3.0, 3.5], bcGrid, { amplitudeMode: 'binned-count' });
+ok('binned-count exact count vector [1,2,1,1]', [1, 2, 1, 1].every((v, i) => bc.samples[i] === v), `[${bc.samples}]`);
+ok('binned-count placed=5 dropped=2', bc.placed === 5 && bc.dropped === 2, `placed=${bc.placed} dropped=${bc.dropped}`);
+ok('midpoint tie -> UPPER bin (0.5->bin1, 1.5->bin2)', bc.samples[1] === 2 && bc.samples[2] === 1);
+ok('below-first-center counted in bin 0', bc.samples[0] === 1);
+ok('spike == max(timing) is dropped (strict pre-filter)', bc.placed === 5);
+
+// Float-safe 0.1-spaced centers, spikes deliberately OFF the edges.
+// centers [0.1..0.4] -> edges ~0.15,0.25,0.35; spikes 0.12,0.18,0.22,0.31,0.39.
+const bc2 = rasterize([0.12, 0.18, 0.22, 0.31, 0.39], gridFromTimeColumn([0.1, 0.2, 0.3, 0.4]), {
+  amplitudeMode: 'binned-count',
+});
+ok('binned-count 0.1-spaced counts [1,2,1,1]', [1, 2, 1, 1].every((v, i) => bc2.samples[i] === v), `[${bc2.samples}]`);
+
+// Jittery (non-uniform) centers: bins follow the REAL centers, not a uniform dt.
+// centers [0,0.1,0.2,1.0] -> last edge midpoint(0.2,1.0)=0.6. spike 0.62 > 0.6
+// -> last bin (3); a uniform-dt grid (dt=0.333) would misplace it to bin 2.
+const bc3 = rasterize([0.04, 0.62], gridFromTimeColumn([0, 0.1, 0.2, 1.0]), { amplitudeMode: 'binned-count' });
+ok('binned bins follow real centers (0.62->bin3, not bin2)', bc3.samples[3] === 1 && bc3.samples[2] === 0, `[${bc3.samples}]`);
+ok('jittery below-first in bin 0', bc3.samples[0] === 1);
+
+// --- preFirstBin: keep (default) vs drop (ADR-0013) --------------------------
+const eq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+// Explicit 'keep' must equal the default — locks default == keep.
+const bcKeepExplicit = rasterize([-0.2, 0.5, 0.7, 1.5, 2.9, 3.0, 3.5], bcGrid, {
+  amplitudeMode: 'binned-count',
+  preFirstBin: 'keep',
+});
+ok('explicit keep == default output', eq(bcKeepExplicit.samples, bc.samples) && bcKeepExplicit.dropped === bc.dropped);
+
+// Fixture with a pre-first-bin spike (-0.2) and NO upper-out-of-range spikes.
+// centers [0,1,2,3]: -0.2 pre-first; 0.7->bin1; 1.7->bin2; 2.9->bin3.
+const pfSpikes = [-0.2, 0.7, 1.7, 2.9];
+const pfKeep = rasterize(pfSpikes, bcGrid, { amplitudeMode: 'binned-count', preFirstBin: 'keep' });
+const pfDrop = rasterize(pfSpikes, bcGrid, { amplitudeMode: 'binned-count', preFirstBin: 'drop' });
+ok('keep: pre-first-bin spike lands in bin 0', pfKeep.samples[0] === 1);
+ok('keep: dropped === 0 (nothing removed)', pfKeep.dropped === 0, `dropped=${pfKeep.dropped}`);
+ok('drop: pre-first-bin spike absent everywhere', pfDrop.samples[0] === 0 && pfDrop.placed === 3);
+ok('drop: dropped === count of pre-first-bin spikes (1)', pfDrop.dropped === 1, `dropped=${pfDrop.dropped}`);
+ok(
+  'drop: in-range bins bit-identical to keep (only bin 0 differs)',
+  eq([...pfDrop.samples.slice(1)], [...pfKeep.samples.slice(1)]),
+  `keep=[${pfKeep.samples}] drop=[${pfDrop.samples}]`,
+);
+
+// Fixture with NO pre-first-bin spike (0.0 == first center is NOT pre-first):
+// the option is a no-op — identical output and dropped===0 under both.
+const noPf = [0, 0.7, 1.7, 2.9];
+const npKeep = rasterize(noPf, bcGrid, { amplitudeMode: 'binned-count', preFirstBin: 'keep' });
+const npDrop = rasterize(noPf, bcGrid, { amplitudeMode: 'binned-count', preFirstBin: 'drop' });
+ok(
+  'no pre-first-bin: keep == drop, both dropped 0',
+  eq([...npKeep.samples], [...npDrop.samples]) && npKeep.dropped === 0 && npDrop.dropped === 0,
+);
+
+// Invalid value throws.
+ok(
+  'unknown preFirstBin throws',
+  throws(() => rasterize([0.5], bcGrid, { amplitudeMode: 'binned-count', preFirstBin: 'bogus' })),
+);
 
 // --- stubs throw behind the shared interface (ADR-0001) ---------------------
 ok('antialias stub throws', throws(() => rasterize([0.5], grid, { method: 'antialias' })));
-ok('binned-count stub throws', throws(() => rasterize([0.5], grid, { amplitudeMode: 'binned-count' })));
+
+// --- noise model (ADR-0015) -------------------------------------------------
+ok('nextPow2', nextPow2(8000) === 8192 && nextPow2(8192) === 8192 && nextPow2(5) === 8);
+ok('sigmaForLevel 1x == cohort-typical', approx(sigmaForLevel(1), SIGMA_COHORT_TYPICAL));
+ok('sigmaForLevel 0 == 0, clamps >10', sigmaForLevel(0) === 0 && approx(sigmaForLevel(99), 10 * SIGMA_COHORT_TYPICAL));
+const clean = new Float64Array([1, 1, 1, 1]);
+ok('addAWGN sigma=0 is a faithful copy', addAWGN(clean, 0).every((v) => v === 1));
+// seeded AWGN: empirical std of a large draw lands near sigma
+const big = new Float64Array(20000);
+const noisy = addAWGN(big, 0.01, mulberry32(7));
+let mean = 0;
+for (const v of noisy) mean += v;
+mean /= noisy.length;
+let varr = 0;
+for (const v of noisy) varr += (v - mean) ** 2;
+const std = Math.sqrt(varr / noisy.length);
+ok('addAWGN std ≈ sigma (seeded)', Math.abs(std - 0.01) < 0.0005, `std=${std}`);
+
+// --- deconvolution round-trip (ADR-0004) ------------------------------------
+// circularConvolve then deconvolveCircular(λ=0) recovers the planted signal.
+const Ntest = 64;
+const sDens = new Float64Array(Ntest); // a few unit spikes
+sDens[3] = 1; sDens[10] = 1; sDens[10] += 1; sDens[40] = 1; // bin 10 has count 2
+const plant = new Float64Array(Ntest);
+// short causal bump at lag 0 (indices 0..3)
+plant[0] = 0.1; plant[1] = 0.24; plant[2] = 0.12; plant[3] = 0.04;
+const conv = circularConvolve(sDens, plant);
+const latent = deconvolveCircular(conv, sDens, 0); // λ=0 exact inverse
+ok('deconv λ=0 inverts circular conv', plant.every((v, i) => approx(latent[i], v, 1e-6)), `latent0=${latent[0]}`);
+
+// extractSymmetric: zero-lag at window, negatives wrap from the high end.
+const sym = extractSymmetric(latent, 5, 0.1);
+ok('extractSymmetric length & zeroIndex', sym.samples.length === 11 && sym.zeroIndex === 5);
+ok('extractSymmetric zero-lag = latent[0]', approx(sym.samples[5], latent[0], 1e-9));
+ok('extractSymmetric +1 lag = latent[1]', approx(sym.samples[6], latent[1], 1e-9));
+ok('extractSymmetric −1 lag wraps to latent[N-1]', approx(sym.samples[4], latent[Ntest - 1], 1e-9));
+ok('extractSymmetric times centered', approx(sym.times[5], 0) && approx(sym.times[6], 0.1) && approx(sym.times[4], -0.1));
+
+// --- kernel diagnostics (ADR-0014) ------------------------------------------
+// Known causal kernel: peak at lag +0.2 s, clean exponential decay τ.
+const dt2 = 0.1;
+const kd = { zeroIndex: 3, dt: dt2, samples: new Float64Array(13) };
+// negative-lag (indices 0..2) left at 0; peak at index 5 (lag +0.2)
+kd.samples[3] = 0.0; kd.samples[4] = 0.5; kd.samples[5] = 1.0;
+for (let i = 6; i < 13; i++) kd.samples[i] = Math.exp(-((i - 5) * dt2) / 0.4); // τ=0.4 from peak
+const dg = kernelDiagnostics(kd);
+ok('diagnostics peak lag +0.2 s', approx(dg.peakLagS, 0.2, 1e-9), `peakLag=${dg.peakLagS}`);
+ok('diagnostics peak amp 1.0', approx(dg.peakAmp, 1.0));
+ok('diagnostics τ ≈ 0.4 s', Math.abs(dg.tauDecayS - 0.4) < 0.02, `τ=${dg.tauDecayS}`);
+ok('diagnostics acausal ≈ 0 (causal kernel)', dg.acausalRatio < 1e-9, `ratio=${dg.acausalRatio}`);
+const cmp = compareKernels(dg, dg);
+ok('compareKernels self → zero deltas, ampRatio 1', approx(cmp.dPeakLagS, 0) && approx(cmp.ampRatio, 1));
+
+// --- end-to-end: recover a planted calcium kernel at σ=0 (oracle in miniature)
+const gridN = makeGrid({ sampleRate: 10, duration: nextPow2(1024) / 10, t0: 0 });
+const Nk = gridN.n;
+const sd = rasterize([20, 35, 35, 60, 80], gridN, { amplitudeMode: 'binned-count' }).samples;
+const caK = buildKernel('calcium', { tauRise: 0.22, tauDecay: 2.7 }, 0.1);
+const plantedFull = new Float64Array(Nk);
+for (let i = 0; i < caK.samples.length && i < Nk; i++) plantedFull[i] = caK.samples[i] * 0.24;
+const trace0 = circularConvolve(sd, plantedFull);
+const rec = recoverKernel(trace0, sd, { windowSamples: 50, dt: 0.1, lambda: 2e-3 });
+const recDg = kernelDiagnostics(rec);
+const plDg = kernelDiagnostics(extractSymmetric(plantedFull, 50, 0.1));
+ok('oracle(mini): peak lag recovered within ½ sample', Math.abs(recDg.peakLagS - plDg.peakLagS) <= 0.05 + 1e-9, `rec=${recDg.peakLagS} pl=${plDg.peakLagS}`);
+ok('oracle(mini): peak amp within 5%', Math.abs(recDg.peakAmp / plDg.peakAmp - 1) <= 0.05, `ratio=${recDg.peakAmp / plDg.peakAmp}`);
+ok('oracle(mini): acausal ratio < 0.02', recDg.acausalRatio < 0.02, `ratio=${recDg.acausalRatio}`);
+
+// --- CSV loader (ADR-0016) --------------------------------------------------
+// Canonical small region: dense time + roi1/roi2, ragged spikes (blank below the
+// last spike), one NaN trace sample. Headers carry stray whitespace to prove the
+// role detection trims.
+const csvText = [
+  'time, spikes , roi1,roi2',
+  '0.0,0.05,0.1,0.5',
+  '0.1,0.15,0.2,0.6',
+  '0.2,,0.3,NaN',
+  '0.3,,0.4,0.8',
+].join('\n');
+const L = loadCsv(csvText, { source: 'unit.csv' });
+ok('loadCsv grid is loaded-mode, n & dt from time column', L.grid.mode === 'loaded' && L.grid.n === 4 && approx(L.grid.dt, 0.1));
+ok('loadCsv detects 2 roi columns (trimmed ids, file order)', L.rois.length === 2 && L.rois[0].id === 'roi1' && L.rois[1].id === 'roi2');
+ok('loadCsv roi1 dense samples', [0.1, 0.2, 0.3, 0.4].every((v, i) => approx(L.rois[0].samples[i], v)), `[${L.rois[0].samples}]`);
+ok('loadCsv preserves NaN trace sample', Number.isNaN(L.rois[1].samples[2]));
+ok('loadCsv ragged spikes: only the 2 finite values, ascending', L.spikeTimes.length === 2 && approx(L.spikeTimes[0], 0.05) && approx(L.spikeTimes[1], 0.15));
+ok('loadCsv meta counts', L.meta.nFrames === 4 && L.meta.nROIs === 2 && L.meta.nSpikes === 2);
+ok('loadCsv warns about the NaN roi column', L.warnings.some((w) => w.includes('non-finite')));
+// end-to-end: loaded spikes rasterize on the loaded grid (binned-count path)
+const ld = rasterize(L.spikeTimes, L.grid, { amplitudeMode: 'binned-count' });
+ok('loadCsv → binned-count places both spikes', ld.placed === 2, `placed=${ld.placed}`);
+// machinery gates (hard errors)
+ok('loadCsv throws on missing time column', throws(() => loadCsv('spikes,roi1\n0,0.1\n1,0.2')));
+ok('loadCsv throws with no roi columns', throws(() => loadCsv('time,spikes\n0,0.1\n0.1,0.2')));
+ok('loadCsv throws on non-increasing time', throws(() => loadCsv('time,roi1\n0,0.1\n0,0.2')));
+ok('loadCsv throws on < 2 data rows', throws(() => loadCsv('time,roi1\n0,0.1')));
+// out-of-window spike → warning, not an error
+const Lw = loadCsv('time,spikes,roi1\n0,0.05,0.1\n0.1,9.9,0.2\n0.2,,0.3');
+ok('loadCsv warns on out-of-window spike', Lw.warnings.some((w) => w.includes('outside the time window')));
 
 // --- summary ----------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);
