@@ -176,15 +176,40 @@ In short: **machinery is gated; fit is reported.** A correct forward path that f
 reconstructs a *coupled* ROI and faithfully *fails* to reconstruct an *uncoupled* one is working
 exactly as intended.
 
-**Empirical confirmation** (`APs_v1_20241004_80.mat`, ROI 1 — the cleanest ROI examined): even this
-ROI visibly breaks the one-to-one AP→calcium relationship in **both** directions. A large calcium
-transient (~780–800 s, ~0.24 dF/F₀) occurs with no matching spike burst (calcium without APs), and
-across ~400–700 s spiking continues while the calcium response shrinks (APs without proportional
-calcium — non-constant gain). Consequence: there is **no single fixed kernel *within* a real ROI**
-to recover against, which is why a real ROI cannot serve as the kernel-recovery oracle. The tool's
-job is to **measure** this decoupling, not assume it away. (See
-[ADR-0011](docs/adr/0011-validation-gates-machinery-not-fit.md); the synthetic-oracle choice for the
-machinery check follows from this — `NEXT_SESSION.md`.)
+**Empirical confirmation — ROI 1 is a real-data positive control.**
+On `APs_v1_20241004_80.mat`, ROI 1 yields a recoverable kernel: the lab `deconvreg`
+produces a clean transient with its peak at +0.6 s, and our regularized recovery
+reproduces that +0.6 s peak λ-stably across the full sweep (λ = 0.002–3). The two
+methods **agree at the +0.6 s peak** — Pearson correlation **+0.84 over the ±1 s window
+around it** — while the **whole-window** correlation is **−0.74**, because the recovered
+kernel rides a **slow baseline that tilts opposite to the lab kernel's**. That −0.74 is a
+baseline-dominated statistic, **not peak disagreement**; the baseline tilt is a real,
+**still-unsolved** regularization-side artifact of the recovery (Laplacian low-frequency
+blindness — §4; tracked in `NEXT_SESSION.md`), not evidence against the kernel, and not a
+sign inversion. By the four checks above this reads as *there is a kernel* — ROI 1 is the
+real-data coupling control that complements the synthetic oracle, carried with the caveat
+that its **global** fit is imperfect for a reason still being characterized.
+
+The same ROI also exhibits **localized decoupling episodes**: a large calcium
+transient (~780–800 s, ~0.24 dF/F₀) with no matching spike burst (calcium without
+APs), and a stretch across ~400–700 s where spiking continues while the calcium
+response shrinks (APs without proportional calcium — non-constant gain). Both facts
+hold simultaneously: the episodes are real and are exactly what the tool exists to
+*measure*, and they do **not** negate the recoverable kernel. A coupled cell with
+localized breaks produces a real kernel plus a less-than-perfect global fit — which is
+precisely the machinery-gated / fit-reported split above, not a "no kernel" verdict.
+Reading the episodes (or the baseline-dominated −0.74) as erasing the kernel is the
+category error this section now guards against: low global fit is reported, never used
+to deny a kernel that recovery and STA jointly confirm at +0.6 s.
+
+The synthetic oracle remains the **machinery** oracle, for the distinct reason that
+ROI 1's *true* kernel is unknown — you cannot grade recovery error against a real cell
+whose ground-truth kernel you do not have. That is a statement about ground-truth
+availability, not about whether ROI 1 is coupled. (See
+[ADR-0011](docs/adr/0011-validation-gates-machinery-not-fit.md) and
+[ADR-0017](docs/adr/0017-circular-deconv-zero-padding-no-fix.md); the synthetic-oracle
+choice for the machinery check follows from ground-truth availability, not from any
+claim that real ROIs lack kernels — `NEXT_SESSION.md`.)
 
 ---
 

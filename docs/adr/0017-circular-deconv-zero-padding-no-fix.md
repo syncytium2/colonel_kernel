@@ -77,10 +77,15 @@ The detrend question splits three ways, **by what the correction is anchored on:
 **Two quantities must be kept distinct and never blurred:**
 
 - **Padding's isolated contribution: ≤ 0.0013** (oracle B − A).
-- **Real ROI 1's raw acausal ratio ≈ 0.30** is almost entirely *genuine decoupling*
-  — the correct FOUNDATIONS §3 verdict on this cell — plus **Laplacian-prior
-  low-frequency blindness** (§4, human-judged per ADR-0014). It is **not** padding,
-  and it is **not** removed by E/F.
+- **Real ROI 1's raw acausal ratio ≈ 0.30** sits *beneath a recovered kernel*, not
+  in place of one: ROI 1 carries an explicit λ-stable +0.6 s causal peak (the
+  FOUNDATIONS §3 real-data positive control, agreeing with the lab `deconvreg`
+  peak — +0.84 over the ±1 s window; the whole-window −0.74 is baseline-dominated,
+  not peak disagreement). The negative-lag bowl is dominated by **Laplacian-prior
+  low-frequency blindness** (§4, human-judged per ADR-0014), with a localized
+  calcium-without-spikes contaminant (~790 s) as a second term. It is **not**
+  padding (≤ 0.0013, above) and **not** removed by E/F. The bowl is a feature of the
+  negative-lag tail, not evidence against the recovered kernel.
 
 ## Consequences
 
@@ -110,8 +115,9 @@ Conditions under which the conclusion holds, stated plainly (not as hedges):
   absorption is itself a §3 decoupling signature. Quiet-anchored safety is bounded to
   sharp contaminants; this is the failure mode to watch if baseline handling ever
   ships.
-- The oracle measures "padding does not corrupt a **recoverable** kernel." On
-  decoupled data there is no kernel to corrupt, so the padding question is moot there.
-  Do not over-claim the oracle result onto the real-decoupled regime — the two
-  experiments answer different questions and are cited together for exactly that
-  reason.
+- The oracle measures "padding does not corrupt a **recoverable** kernel," and ROI 1
+  — the real-data positive control — confirms a recoverable kernel survives the real
+  pipeline. The padding result does **not** extend to a *fully uncoupled* ROI, where
+  there is no kernel to corrupt and the padding question is moot. Do not over-claim
+  the oracle result onto that fully-uncoupled regime — the two experiments answer
+  different questions and are cited together for exactly that reason.
