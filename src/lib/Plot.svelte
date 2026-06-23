@@ -19,9 +19,14 @@
     height = 150,
     zeroLine = false,
     xRange = null,
+    yRange = null,
     yAxisSize = null,
     showXAxis = true,
     xLabel = '',
+    // Optional overlaid second line series, sharing xs (the kernel/STA overlay:
+    // STA is pre-aligned onto the kernel lag grid, NaN outside its ±window).
+    ys2 = null,
+    color2 = 'var(--accent)',
   } = $props();
 
   let wrap;
@@ -40,6 +45,9 @@
       kind === 'stems'
         ? { stroke, fill: stroke, paths: uPlot.paths.bars({ size: [0.35, 4], align: 0 }) }
         : { stroke, width: 2 };
+    // second overlaid line series (kernel/STA share one x and one y scale).
+    const series2 =
+      ys2 != null ? { points: { show: false }, stroke: resolveColor(color2), width: 2 } : null;
     const hooks = zeroLine
       ? {
           // mark the lag-0 (spike-aligned) line — central to the kernel panel.
@@ -71,13 +79,22 @@
         { show: showXAxis, label: xLabel || undefined },
         yAxisSize != null ? { size: yAxisSize } : {},
       ],
-      series: [{}, { points: { show: false }, ...series }],
+      series: [
+        {},
+        { points: { show: false }, ...series },
+        ...(series2 ? [series2] : []),
+      ],
     };
+  }
+
+  /** Data array for uPlot — adds the second y series when present. */
+  function plotData() {
+    return ys2 != null ? [xs, ys, ys2] : [xs, ys];
   }
 
   onMount(() => {
     lastWidth = wrap.clientWidth || 600;
-    plot = new uPlot(makeOpts(lastWidth), [xs, ys], wrap);
+    plot = new uPlot(makeOpts(lastWidth), plotData(), wrap);
     pinScale();
     const ro = new ResizeObserver(() => {
       const w = wrap.clientWidth || 600;
@@ -94,13 +111,20 @@
   });
 
   function pinScale() {
-    if (plot && xRange) plot.setScale('x', { min: xRange[0], max: xRange[1] });
+    if (!plot) return;
+    // xRange pins a shared recording-time / lag axis; yRange pins a shared
+    // amplitude axis so kernels (and STAs) are comparable across columns by
+    // construction. Either may be null (uPlot autoscales that axis).
+    if (xRange) plot.setScale('x', { min: xRange[0], max: xRange[1] });
+    if (yRange) plot.setScale('y', { min: yRange[0], max: yRange[1] });
   }
 
-  // Live update: re-feed data and re-pin the x range whenever inputs change.
+  // Live update: re-feed data and re-pin the ranges whenever inputs change.
   $effect(() => {
-    const data = [xs, ys];
+    const data = plotData();
     const _ = xRange; // track for reactivity
+    const __ = yRange;
+    const ___ = ys2;
     if (!plot) return;
     plot.setData(data);
     pinScale();

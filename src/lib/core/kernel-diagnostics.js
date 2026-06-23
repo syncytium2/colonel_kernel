@@ -60,6 +60,26 @@ export function kernelDiagnostics({ samples, zeroIndex, dt }) {
   };
 }
 
+/**
+ * Mean of the kernel over the pre-zero-lag window [−baselineS, 0) — the same
+ * baseline convention STA uses (STAbasewin). DISPLAY/DIAGNOSTIC ONLY: it lets the
+ * readout report a peak amplitude relative to the local pre-spike baseline instead
+ * of absolute off a tilted baseline. It does NOT alter the kernel (ADR-0017: no
+ * detrend in the recovery path or the plotted trace).
+ * @param {{ samples: ArrayLike<number>, zeroIndex: number, dt: number }} kernel
+ * @param {number} baselineS pre-zero window length (s), e.g. 0.5
+ * @returns {number} mean over [−baselineS, 0); NaN if the window is empty
+ */
+export function preZeroBaselineMean({ samples, zeroIndex, dt }, baselineS) {
+  const w = Math.round(baselineS / dt);
+  let sum = 0, count = 0;
+  for (let i = Math.max(0, zeroIndex - w); i < zeroIndex; i++) {
+    sum += samples[i];
+    count++;
+  }
+  return count > 0 ? sum / count : NaN;
+}
+
 /** Log-linear decay fit on the post-peak tail; returns τ (s) or NaN. */
 function fitDecayTau(samples, peakIndex, peakAmp, dt) {
   const floor = peakAmp * 0.05;
