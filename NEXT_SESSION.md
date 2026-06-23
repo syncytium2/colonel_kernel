@@ -94,13 +94,16 @@ corrected timings run on a separate track.
 
 ### Repo state (end of session)
 
-- **`master` = `fdd7d0d`, PUSHED and in sync with `origin/master`.** All commits are up
-  (README+figure, FOUNDATIONS, ADR-0014, darkroom guard, data guard, and this NEXT_SESSION
-  refresh). The README ROI-1 figure now renders on GitHub (`docs/img/` resolves from the
+- **`master` = `64d2a34`, PUSHED and in sync with `origin/master`** (this NEXT_SESSION refresh
+  sits on top, so the live tip is one commit ahead of the named hash). All commits are up
+  (README+figure, FOUNDATIONS, ADR-0014, darkroom guard, data guard, the next-action-authority
+  reconciliation). The README ROI-1 figure renders on GitHub (`docs/img/` resolves from the
   pushed tree).
-- **Outstanding hygiene — `tab1-validation` = `10fc67d`** (preFirstBin impl, 38/38 green):
-  **NOT** yet rebased onto the `fdd7d0d` master tip; still needs `--force-with-lease` to push.
-  This is the only remaining branch-hygiene item.
+- **Branch hygiene CLEARED — `tab1-validation` = `574ea31`** (preFirstBin impl, 38/38 green
+  post-rebase), **rebased onto `64d2a34` and pushed** (`--force-with-lease`); local and
+  `origin/tab1-validation` match. The preFirstBin code is no longer stranded local-only. No
+  outstanding branch-hygiene items. (Branch is current and pushed only — **not** merged to
+  master; that remains a separate decision.)
 - `data/*.mat` and `darkroom/` gitignored; `docs/img/roi1_trace.png` intentionally tracked.
 - **Snapshot caveat:** this block is a point-in-time record. Before acting on it, run
   `git fetch && git status` — the remote is the truth.
