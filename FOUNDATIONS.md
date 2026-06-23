@@ -487,10 +487,10 @@ So JS sample counts and lag alignment match the reference `.mat` files:
    ([ADR-0001](docs/adr/0001-delta-rasterization.md)) is a **teaching choice**; the
    path that validates against the reference kernels **must use binned-count** to
    match the data those kernels were computed from.
-   > **In progress (see `NEXT_SESSION.md`, not yet an ADR):** how binned-count treats a
-   > spike *before the first frame* (the below-first regime) — **teaching-keep** default vs
-   > **validation-drop** opt-in, a v1 stand-in for the v2 buffered-window approach — is being
-   > settled. Default agreed (keep); implementation paused.
+   > Binned-count pre-first-bin spikes are governed by caller-selected
+   > `preFirstBin: 'keep'|'drop'` (default **keep**, hist-faithful; **drop** is the
+   > validation opt-in). See [ADR-0013](docs/adr/0013-binned-count-pre-first-bin-regime.md).
+   > The drop path is a v1 stand-in for the v2 buffered window.
 2. **Even-length trim — follow the executed code, not the comment.**
    `TDdeconvStack.m` runs `if mod(k,2); stack(:,:,k)=[]; timing(k)=[]; end`. In MATLAB
    `mod(k,2)` is truthy when **k is odd**, so this drops the last sample **when k is
