@@ -91,18 +91,22 @@ ROI 1 trace + spikes — the §3 decoupling drawn: big calcium at ~790 s with no
 proportional calcium at 400–700 s), `fig_real_kernels.png` (all 9 ROIs read as *no clean kernel* —
 correct verdict).
 
-**⚠ DISCOVERED — circular-deconv zero-padding artifact (open, surfaced by the eyeball test).**
-`deconvolveCircular` zero-pads the real trace to a power of two; the step from the trace's end-level
-down to 0 injects a low-frequency "bowl" into recovered kernels on real-length data (visible in
-`fig_real_kernels.png`; inflates the acausal ratio). STA is artifact-free and the more trustworthy
-real-data view. **Likely fix:** detrend / window before deconvolution, or a non-pow2 path — a
-recovery-method decision that wants an ADR before the Tab 2 UI presents recovered kernels on real
-data. The synthetic oracle is unaffected (the planted signal is genuinely circular).
+**✓ RESOLVED — circular-deconv zero-padding artifact ([ADR-0017](docs/adr/0017-circular-deconv-zero-padding-no-fix.md)).**
+Four eyeball-confirmed experiments (figures in gitignored `darkroom/`:
+`fig_padding_artifact_80.png`, `fig_pad_isolation_oracle.png`, `fig_ef_real_roi1.png`) settle it:
+the zero-pad step's **isolated** contribution is negligible (oracle B−A = 0.0013, under the 0.02
+gate, even with a 1.035 dF/F₀ end-step). The real-ROI-1 acausal bowl (≈0.30) is **genuine decoupling
+(the correct §3 verdict) + Laplacian low-frequency blindness (§4)** — *not* padding, and not removed
+by detrending. **No padding fix; no detrend/window in the recovery path.** Endpoint-anchored detrend
+and windowing are harmful (C−A = 0.0155; D crushes peak 0.24→0.10); quiet-anchored baseline removal
+(E/F) is harmless but display-only and requires BOTH mask gates (spike-freeness AND low variance —
+spike-freeness alone selects the 790 s contaminant). The Laplacian low-freq blindness is a separate
+open strand (future ADR), not this one. **Tab 2 UI presents raw recovered kernels — unblocked.**
 
-**Two decisions parked for the break (next session):**
+**One decision still parked for the break (next session):**
 1. Promote `fig_oracle.png` (synthetic, data-safe) to `docs/img/` as a permanent physiology
-   benchmark? (needs consent + `docs/img/README.txt` entry, per repo-hygiene rule.)
-2. Chase the deconv padding artifact (new ADR) **before** or **alongside** the Tab 2 UI?
+   benchmark? (needs consent + `docs/img/README.txt` entry, per repo-hygiene rule.) — Note the
+   ADR-0017 figure set stays in gitignored `darkroom/`, deliberately *not* promoted.
 
 **LIVE — Tab 2 UI (the flagship front-end).** Wire the now-proven core into Svelte:
 - file drop → `loadCsv` → per-ROI columns laid side by side, **column 1 highlighted** as the targeted
@@ -195,6 +199,7 @@ corrected timings run on a separate track.
 - **[ADR-0010](docs/adr/0010-idealized-recovered-kernel-open-family-toggle.md)** — idealized-recovered kernel is an open family toggle (any chosen family can stand in for a recovered kernel).
 - **[ADR-0011](docs/adr/0011-validation-gates-machinery-not-fit.md)** — validation gates machinery (pass/fail), only reports fit (per-ROI R²/residual); low fit on an uncoupled ROI is a correct verdict, not a failure.
 - **[ADR-0012](docs/adr/0012-timing-vector-authoritative-dt-derived.md)** — timing vector is authoritative when present; `dt` is a derived fallback (`mean(diff(times))`). Nominal-`dt`-only is accepted with a divergence warning. Refines the §13 contract.
+- **[ADR-0017](docs/adr/0017-circular-deconv-zero-padding-no-fix.md)** — circular-deconv zero-padding needs no fix (isolated contribution ≤0.0013, under gate); detrend disposition is by anchor — endpoint-anchored / windowing harmful, quiet-anchored safe (display-only, both mask gates required). Real-data bowl is decoupling + Laplacian low-freq blindness, not padding. Refines ADR-0004.
 
 Reference: **[docs/reference/matlab-deconv-pipeline.md](docs/reference/matlab-deconv-pipeline.md)** — the validated MATLAB source-of-truth for Tab 2 (verified verbatim).
 
@@ -222,7 +227,8 @@ Reference: **[docs/reference/matlab-deconv-pipeline.md](docs/reference/matlab-de
 
 ## Still open (not blockers)
 
-- **Deconvolution numerical route** — the circular-deconv zero-padding artifact (RESUME-HERE ⚠) is
-  the concrete open question here; decide via an ADR (per ADR-0004) before the UI presents recovered
-  kernels on real data.
+- **Laplacian-prior low-frequency blindness** — the dominant term in the real-data acausal bowl
+  ([ADR-0017](docs/adr/0017-circular-deconv-zero-padding-no-fix.md) isolated padding as negligible and
+  scoped this out). A regularization-convention question (per ADR-0004); a future ADR if/when it's
+  pursued. **Not a UI blocker** — the bowl is a correct §3 decoupling read, human-judged (ADR-0014).
 - **Kernel global vs. tab-local detail** + the **per-tab disclosure layout** (§11.4).
