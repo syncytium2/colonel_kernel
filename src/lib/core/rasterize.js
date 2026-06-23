@@ -26,17 +26,18 @@
  * Rasterize a spike-time list onto a grid.
  * @param {ArrayLike<number>} spikeTimes  event times (seconds), sparse list
  * @param {import('./timebase.js').Grid} grid
- * @param {{ method?: 'snap'|'antialias', amplitudeMode?: 'unit'|'binned-count' }} [opts]
+ * @param {{ method?: 'snap'|'antialias', amplitudeMode?: 'unit'|'binned-count', preFirstBin?: 'keep'|'drop' }} [opts]
  * @returns {RasterResult}
  */
 export function rasterize(
   spikeTimes,
   grid,
-  { method = 'snap', amplitudeMode = 'unit' } = {},
+  { method = 'snap', amplitudeMode = 'unit', preFirstBin = 'keep' } = {},
 ) {
   // binned-count is its own complete path (hist binning); it does not compose
-  // with the snap/antialias placement axis.
-  if (amplitudeMode === 'binned-count') return rasterizeBinnedCount(spikeTimes, grid);
+  // with the snap/antialias placement axis. `preFirstBin` (ADR-0013) only
+  // applies here.
+  if (amplitudeMode === 'binned-count') return rasterizeBinnedCount(spikeTimes, grid, preFirstBin);
 
   const place = PLACERS[method];
   if (!place) throw new Error(`unknown rasterize method: ${method}`);
@@ -123,16 +124,24 @@ const ACCUMULATORS = {
  *  - Upper out-of-range: MATLAB pre-filters `spikes < max(timing)` BEFORE hist,
  *    so spikes at/after the last center are dropped before binning and the open
  *    last bin never absorbs them. A spike exactly at the last center is dropped.
- *  - Below the first center: counted in the first bin (open to -inf). This is
- *    `hist`-faithful; note the upstream driver separately filters
- *    `AP_times > fluo_time(1)`, which this function does NOT replicate (out of
- *    the tool's scope, reference §1) — flagged so it stays a conscious choice.
+ *  - Below the first center (the pre-first-bin region, `t < timing(1)`): governed
+ *    by `preFirstBin` (ADR-0013). 'keep' (default) accumulates into the first bin
+ *    (open to -inf), `hist`-faithful — the teaching path, never drops loaded data
+ *    silently. 'drop' excludes such spikes and counts them in `dropped` — the
+ *    validation opt-in, a v1 stand-in for the v2 buffered window (where the
+ *    upstream driver's `first_spike − buffer` pad makes these impossible by
+ *    construction; cf. its `AP_times > fluo_time(1)` filter, out of v1 scope).
  *
  * @param {ArrayLike<number>} spikeTimes event times (seconds)
  * @param {import('./timebase.js').Grid} grid  centers come from grid.times
+ * @param {'keep'|'drop'} [preFirstBin]  pre-first-bin policy (ADR-0013)
  * @returns {import('./rasterize.js').RasterResult} samples are integer counts
  */
-function rasterizeBinnedCount(spikeTimes, grid) {
+function rasterizeBinnedCount(spikeTimes, grid, preFirstBin = 'keep') {
+  if (preFirstBin !== 'keep' && preFirstBin !== 'drop') {
+    throw new Error(`unknown preFirstBin: ${preFirstBin} (expected 'keep' or 'drop')`);
+  }
+  const dropPreFirst = preFirstBin === 'drop';
   const centers = grid.times;
   const n = centers.length;
   const samples = new Float64Array(n);
@@ -140,6 +149,7 @@ function rasterizeBinnedCount(spikeTimes, grid) {
   let dropped = 0;
   if (n === 0) return { samples, placed, dropped, collisions: 0 };
 
+  const firstCenter = centers[0];
   const maxTiming = centers[n - 1];
   for (let s = 0; s < spikeTimes.length; s++) {
     const t = spikeTimes[s];
@@ -147,6 +157,13 @@ function rasterizeBinnedCount(spikeTimes, grid) {
     // Pre-filter: mirror MATLAB `spikes < max(timing)` (strict). Dropped before
     // binning so the open last bin can't absorb out-of-range events.
     if (t >= maxTiming) {
+      dropped++;
+      continue;
+    }
+    // Pre-first-bin policy (ADR-0013): on the 'drop' path, spikes below the
+    // first bin center are excluded and tallied rather than accumulated into
+    // bin 0. ONLY this cell changes; in-range binning below is untouched.
+    if (dropPreFirst && t < firstCenter) {
       dropped++;
       continue;
     }

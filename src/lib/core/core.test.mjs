@@ -111,6 +111,47 @@ const bc3 = rasterize([0.04, 0.62], gridFromTimeColumn([0, 0.1, 0.2, 1.0]), { am
 ok('binned bins follow real centers (0.62->bin3, not bin2)', bc3.samples[3] === 1 && bc3.samples[2] === 0, `[${bc3.samples}]`);
 ok('jittery below-first in bin 0', bc3.samples[0] === 1);
 
+// --- preFirstBin: keep (default) vs drop (ADR-0013) --------------------------
+const eq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+// Explicit 'keep' must equal the default — locks default == keep.
+const bcKeepExplicit = rasterize([-0.2, 0.5, 0.7, 1.5, 2.9, 3.0, 3.5], bcGrid, {
+  amplitudeMode: 'binned-count',
+  preFirstBin: 'keep',
+});
+ok('explicit keep == default output', eq(bcKeepExplicit.samples, bc.samples) && bcKeepExplicit.dropped === bc.dropped);
+
+// Fixture with a pre-first-bin spike (-0.2) and NO upper-out-of-range spikes.
+// centers [0,1,2,3]: -0.2 pre-first; 0.7->bin1; 1.7->bin2; 2.9->bin3.
+const pfSpikes = [-0.2, 0.7, 1.7, 2.9];
+const pfKeep = rasterize(pfSpikes, bcGrid, { amplitudeMode: 'binned-count', preFirstBin: 'keep' });
+const pfDrop = rasterize(pfSpikes, bcGrid, { amplitudeMode: 'binned-count', preFirstBin: 'drop' });
+ok('keep: pre-first-bin spike lands in bin 0', pfKeep.samples[0] === 1);
+ok('keep: dropped === 0 (nothing removed)', pfKeep.dropped === 0, `dropped=${pfKeep.dropped}`);
+ok('drop: pre-first-bin spike absent everywhere', pfDrop.samples[0] === 0 && pfDrop.placed === 3);
+ok('drop: dropped === count of pre-first-bin spikes (1)', pfDrop.dropped === 1, `dropped=${pfDrop.dropped}`);
+ok(
+  'drop: in-range bins bit-identical to keep (only bin 0 differs)',
+  eq([...pfDrop.samples.slice(1)], [...pfKeep.samples.slice(1)]),
+  `keep=[${pfKeep.samples}] drop=[${pfDrop.samples}]`,
+);
+
+// Fixture with NO pre-first-bin spike (0.0 == first center is NOT pre-first):
+// the option is a no-op — identical output and dropped===0 under both.
+const noPf = [0, 0.7, 1.7, 2.9];
+const npKeep = rasterize(noPf, bcGrid, { amplitudeMode: 'binned-count', preFirstBin: 'keep' });
+const npDrop = rasterize(noPf, bcGrid, { amplitudeMode: 'binned-count', preFirstBin: 'drop' });
+ok(
+  'no pre-first-bin: keep == drop, both dropped 0',
+  eq([...npKeep.samples], [...npDrop.samples]) && npKeep.dropped === 0 && npDrop.dropped === 0,
+);
+
+// Invalid value throws.
+ok(
+  'unknown preFirstBin throws',
+  throws(() => rasterize([0.5], bcGrid, { amplitudeMode: 'binned-count', preFirstBin: 'bogus' })),
+);
+
 // --- stubs throw behind the shared interface (ADR-0001) ---------------------
 ok('antialias stub throws', throws(() => rasterize([0.5], grid, { method: 'antialias' })));
 
