@@ -52,8 +52,9 @@ them.**
 ### ⏸ RESUME HERE — Tab 2 UI (the non-visual spine is DONE and merged)
 
 > **THE next-action authority — the live frontier.** The non-visual real-data spine is built,
-> validated on real data, and **merged to `master` (`03f401f`)**. The frontier is now the **Tab 2
-> UI**. Queued/parallel items are under "Still queued" below and are *not* the next action.
+> validated on real data, and **merged to `master` (STA merge `3c06baa`; head `b10fffc`)**. The
+> frontier is now the **Tab 2 UI**. Queued/parallel items are under "Still queued" below and are
+> *not* the next action.
 
 **DONE & merged — the non-visual spine is now COMPLETE (former items 1 & 2 + STA):**
 - **Noise model — v1 settled** ([ADR-0015](docs/adr/0015-harness-noise-model.md)): AWGN, user slider
@@ -74,6 +75,34 @@ them.**
   peak lag/amp agreeing with its diagnostics — the §3 check-4 leg now has its math.
 - **All four §3 checks now have backing math**; spine modules in `src/lib/core/` (noise, deconvolve,
   kernel-diagnostics, sta, load-csv) exported from the barrel. **87/87 `test:core`**, build clean.
+
+**STANDING RULE (this session): graphical confirmation of success, always.** The user (a
+physiologist) confirms outputs are real physiology — clean calcium transient, fast rise + exp decay —
+*by eye*; passing a numeric tolerance is not sufficient on its own. For any signal/physiology step,
+render eyeball-verifiable figures alongside the numeric tests. Output to gitignored `darkroom/`
+(real-data figures derive from unpublished recordings; a data-safe synthetic figure may go to
+`docs/img/` only with explicit consent + a `docs/img/README.txt` entry). Pipeline:
+`darkroom/figdata.mjs` (computes curves with the **actual JS core**) → `darkroom/figs.py` (matplotlib).
+
+**Figures generated (in `darkroom/`, gitignored):** `fig_oracle.png` (planted vs recovered kernel
+vs STA — recovered ≈ truth, peak +0.60 s, τ 2.73 s, acausal 4e-10 → physiology confirmed),
+`fig_noise.png` (recovery holds 0–10× σ → decoupling, not noise), `fig_real_context.png` (file 80
+ROI 1 trace + spikes — the §3 decoupling drawn: big calcium at ~790 s with no spikes; APs without
+proportional calcium at 400–700 s), `fig_real_kernels.png` (all 9 ROIs read as *no clean kernel* —
+correct verdict).
+
+**⚠ DISCOVERED — circular-deconv zero-padding artifact (open, surfaced by the eyeball test).**
+`deconvolveCircular` zero-pads the real trace to a power of two; the step from the trace's end-level
+down to 0 injects a low-frequency "bowl" into recovered kernels on real-length data (visible in
+`fig_real_kernels.png`; inflates the acausal ratio). STA is artifact-free and the more trustworthy
+real-data view. **Likely fix:** detrend / window before deconvolution, or a non-pow2 path — a
+recovery-method decision that wants an ADR before the Tab 2 UI presents recovered kernels on real
+data. The synthetic oracle is unaffected (the planted signal is genuinely circular).
+
+**Two decisions parked for the break (next session):**
+1. Promote `fig_oracle.png` (synthetic, data-safe) to `docs/img/` as a permanent physiology
+   benchmark? (needs consent + `docs/img/README.txt` entry, per repo-hygiene rule.)
+2. Chase the deconv padding artifact (new ADR) **before** or **alongside** the Tab 2 UI?
 
 **LIVE — Tab 2 UI (the flagship front-end).** Wire the now-proven core into Svelte:
 - file drop → `loadCsv` → per-ROI columns laid side by side, **column 1 highlighted** as the targeted
@@ -109,14 +138,17 @@ corrected timings run on a separate track.
 
 ### Repo state (end of session)
 
-- **`master` = `3c06baa`** (the `--no-ff` merge of `tab2-sta`), plus this NEXT_SESSION refresh on
-  top. Carries the full non-visual spine — struct rename, binned-count rasterizer, machinery harness,
+- **`master` = `3c06baa`** (the `--no-ff` merge of `tab2-sta`) + NEXT_SESSION refreshes on top.
+  Carries the full non-visual spine — struct rename, binned-count rasterizer, machinery harness,
   CSV loader, **and STA** — + ADR-0015/0016 + `scripts/mat2csv.py`. **87/87 `test:core`**, build
-  clean (~49.7 KB gzip; papaparse/fft.js tree-shake out of the app bundle). **Push after this
-  commit.**
-- **`tab2-sta` MERGED into `master`** (at `3c06baa`); its work is fully on master and the branch can
-  be deleted or reused. `tab1-validation` was the prior merged branch (at `03f401f`). No outstanding
-  branch-hygiene items.
+  clean (~49.7 KB gzip; papaparse/fft.js tree-shake out of the app bundle). Pushed, in sync with
+  `origin/master`.
+- **Branches cleaned: `master` only**, local and remote. Both feature branches (`tab2-sta`,
+  `tab1-validation`) were fully merged and have been deleted locally; the stale `origin/tab1-validation`
+  was deleted from the remote. No outstanding branch-hygiene items.
+- **Scratch (gitignored, safe to leave for the break):** `darkroom/` figure pipeline + PNGs,
+  `darkroom/venv` (matplotlib), `exports/APs_v1_20241004_80__region1.csv`, `data/*.mat`. Nothing
+  data-derived is tracked.
 - `data/*.mat`, `darkroom/`, and `exports/` gitignored; `docs/img/roi1_trace.png` intentionally
   tracked. `scripts/mat2csv.py` writes CSV to gitignored `exports/` (never commit data, §6).
 - **Snapshot caveat:** this block is a point-in-time record. Before acting on it, run
@@ -166,29 +198,31 @@ corrected timings run on a separate track.
 
 Reference: **[docs/reference/matlab-deconv-pipeline.md](docs/reference/matlab-deconv-pipeline.md)** — the validated MATLAB source-of-truth for Tab 2 (verified verbatim).
 
-## Branch workflow (Tab 1 validation phase)
+## Branch workflow
 
 - **Canon → `master`.** FOUNDATIONS edits, ADRs, the ADR README index, and NEXT_SESSION live on
   `master` only — the source of truth must never be trapped behind, or diverge from, a feature branch.
-- **Validation CODE → `tab1-validation`.** The binned-count rasterizer (currently a throwing stub),
-  the `{values, originOffset}` → `{samples, dt, zeroIndex}` struct rename, and the fixture-backed
-  reconstruction harness land on `tab1-validation`, which is rebased onto `master` as canon advances
-  and merges back as one coherent change when the reconstruction check passes.
+- **Code → a short-lived feature branch**, rebased onto `master` as canon advances and merged back
+  via `--no-ff` as one coherent change when its tests pass. The validation/STA phase used
+  `tab1-validation` then `tab2-sta`; both are now merged and deleted. The next code branch (Tab 2 UI)
+  starts fresh from `master`.
 
 ## Where the code lives
 
-- `src/lib/core/` — the reusable, framework-free spine (timebase, rasterize, kernels, convolve)
-  + `core.test.mjs`. Shared by every tab.
+- `src/lib/core/` — the reusable, framework-free spine + `core.test.mjs` (87 checks). Modules:
+  `timebase`, `rasterize`, `kernels`, `convolve` (Tab 1); `noise`, `deconvolve`,
+  `kernel-diagnostics`, `sta`, `load-csv` (Tab 2). All exported from `index.js`. Shared by every tab.
 - `src/App.svelte` — Tab 1 UI; `src/lib/Plot.svelte` — uPlot wrapper (shared-axis + ±lag support).
 - `vite.config.js` — `inject-csp-on-build` plugin. `scripts/screenshot.mjs` — visual check.
+- `scripts/mat2csv.py` — offline `.mat`→CSV converter (run via `darkroom/venv/bin/python`).
+- `darkroom/` (gitignored) — figure pipeline (`figdata.mjs` → `figs.py`) + the matplotlib venv.
 
-> **Next action lives in "⏸ RESUME HERE" above** (the machinery-check harness), with
-> queued/parallel work — including the Tab 1 animation and Tab 2 — consolidated under
-> "Still queued". The old ordered "Next actions" list that sat here was stale (it predated the
-> harness work and competed with RESUME-HERE); its real items were folded into "Still queued."
+> **Next action lives in "⏸ RESUME HERE" above** (the Tab 2 UI). Queued/parallel work — the Tab 1
+> animation and the deferred core/UI items — is consolidated under "Still queued".
 
 ## Still open (not blockers)
 
-- **Deconvolution numerical route** — decide after a Tab 2 prototype (per ADR-0004).
+- **Deconvolution numerical route** — the circular-deconv zero-padding artifact (RESUME-HERE ⚠) is
+  the concrete open question here; decide via an ADR (per ADR-0004) before the UI presents recovered
+  kernels on real data.
 - **Kernel global vs. tab-local detail** + the **per-tab disclosure layout** (§11.4).
-- **CSV layout convention** (§10 item 6) — needs a real exported file to confirm against.
