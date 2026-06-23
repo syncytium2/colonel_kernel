@@ -49,6 +49,10 @@ them.**
 
 ### ⏸ RESUME HERE — machinery-check harness, two open items
 
+> **This is THE next-action authority — the live frontier.** The queued/parallel work
+> listed under "Still queued" below is lower priority and is *not* the next action. If a
+> later edit reintroduces a competing "next actions" list, this section wins.
+
 1. **NOISE MODEL — hypothesis, NOT locked.** ROI 1 high-pass residual (2 s rolling-median
    removed, quiet regions, n=5799): additive white Gaussian, **σ ≈ 0.0035–0.004 dF/F₀**
    (three agreeing estimates; autocorr ≈ 0; skew 0.03, excess kurt 0.19), SNR ≈ 60 vs
@@ -64,10 +68,21 @@ them.**
    peak-lag + τ + amplitude, human-judged — not whole-kernel corr). Planted-kernel shape should
    match the observed physiology (sharp onset lag 0, peak +0.6 s, τ ≈ 2.7 s).
 
-### Still queued (tab1-validation, unchanged)
+### Still queued (lower priority / parallel — not the next action)
 
-- **dt-only divergence warn-UI** (ADR-0012), **antialias accumulator** (ADR-0001),
-  **Tab 1 slide-and-multiply animation**.
+The single list of queued and parallel work. None of this is the live frontier (see
+"⏸ RESUME HERE" above); these are picked up around or after the machinery-check harness.
+
+- **tab1-validation items:** **dt-only divergence warn-UI** (ADR-0012),
+  **antialias accumulator** (ADR-0001), **Tab 1 slide-and-multiply animation** (the deferred
+  visual piece — the kernel panel up top is the reference shape that slides across the spike
+  train; the math is already proven, so it's pure presentation and a good low-stakes parallel
+  track).
+- **Tab 2 (flagship) — the major build after the harness.** Regularized deconvolution
+  ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)) + STA
+  ([ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)) + four-check goodness-of-fit +
+  per-ROI. Heaviest piece; port against the MATLAB reference. The machinery-check harness
+  above is the validation scaffolding this is built against.
 
 ### V2 (noted, not now)
 
@@ -79,15 +94,16 @@ corrected timings run on a separate track.
 
 ### Repo state (end of session)
 
-- **`master`**: unpushed commits ahead of `origin/master` — this NEXT_SESSION refresh sits on
-  top of `f19e17b` README+figure, `c7f6396` FOUNDATIONS, `0c645f8` ADR-0014, `43dec34` darkroom
-  guard, `255744c` data guard. (New tip hash in the session report — a commit can't record its
-  own hash.)
-- **`tab1-validation` = `10fc67d`** (preFirstBin impl, 38/38 green), **NOT** yet rebased onto
-  this master tip; needs `--force-with-lease` to push.
-- `data/*.mat` and `darkroom/` gitignored; `docs/img/roi1_trace.png` intentionally tracked.
-- README figure won't render until `master` is pushed (GitHub resolves `docs/img/` from the
+- **`master` = `fdd7d0d`, PUSHED and in sync with `origin/master`.** All commits are up
+  (README+figure, FOUNDATIONS, ADR-0014, darkroom guard, data guard, and this NEXT_SESSION
+  refresh). The README ROI-1 figure now renders on GitHub (`docs/img/` resolves from the
   pushed tree).
+- **Outstanding hygiene — `tab1-validation` = `10fc67d`** (preFirstBin impl, 38/38 green):
+  **NOT** yet rebased onto the `fdd7d0d` master tip; still needs `--force-with-lease` to push.
+  This is the only remaining branch-hygiene item.
+- `data/*.mat` and `darkroom/` gitignored; `docs/img/roi1_trace.png` intentionally tracked.
+- **Snapshot caveat:** this block is a point-in-time record. Before acting on it, run
+  `git fetch && git status` — the remote is the truth.
 
 ## Done this session
 
@@ -149,14 +165,10 @@ Reference: **[docs/reference/matlab-deconv-pipeline.md](docs/reference/matlab-de
 - `src/App.svelte` — Tab 1 UI; `src/lib/Plot.svelte` — uPlot wrapper (shared-axis + ±lag support).
 - `vite.config.js` — `inject-csp-on-build` plugin. `scripts/screenshot.mjs` — visual check.
 
-## Next actions (in order)
-
-1. **Slide-and-multiply animation for Tab 1** (the deferred visual piece). The kernel panel up top
-   is the reference shape that slides across the spike train. This is the iteration sink — the math
-   is already proven, so it's pure presentation.
-2. **Tab 2 (flagship)** — regularized deconvolution ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md))
-   + STA ([ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)) + four-check goodness-of-fit +
-   per-ROI. Heaviest piece; port against the MATLAB reference.
+> **Next action lives in "⏸ RESUME HERE" above** (the machinery-check harness), with
+> queued/parallel work — including the Tab 1 animation and Tab 2 — consolidated under
+> "Still queued". The old ordered "Next actions" list that sat here was stale (it predated the
+> harness work and competed with RESUME-HERE); its real items were folded into "Still queued."
 
 ## Still open (not blockers)
 
