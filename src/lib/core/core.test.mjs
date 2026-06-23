@@ -18,6 +18,7 @@ import {
 import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
 import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './noise.js';
 import { loadCsv } from './load-csv.js';
+import { spikeTriggeredAverage } from './sta.js';
 
 let passed = 0;
 let failed = 0;
@@ -262,6 +263,91 @@ ok('loadCsv throws on < 2 data rows', throws(() => loadCsv('time,roi1\n0,0.1')))
 // out-of-window spike → warning, not an error
 const Lw = loadCsv('time,spikes,roi1\n0,0.05,0.1\n0.1,9.9,0.2\n0.2,,0.3');
 ok('loadCsv warns on out-of-window spike', Lw.warnings.some((w) => w.includes('outside the time window')));
+
+// --- STA (ADR-0005, spikeTriggeredAverage.m) --------------------------------
+// Helper: dense uniform timebase + a trace built by stamping one causal "kernel"
+// shape at each spike sample. STA must average those windows back to the shape.
+const staDt = 0.1;
+const staN = 600; // 60 s at 10 Hz
+const staTimes = new Float64Array(staN);
+for (let i = 0; i < staN; i++) staTimes[i] = i * staDt;
+// Causal shape: 0 at the spike, ramp to a peak at +0.2 s (m=2), exp(−t/0.4) decay.
+const KSH = new Float64Array(21);
+KSH[0] = 0.0; KSH[1] = 0.5;
+for (let m = 2; m < 21; m++) KSH[m] = Math.exp(-((m - 2) * staDt) / 0.4); // KSH[2]=1.0 peak
+function stampTrace(spikeSamples, dc = 0) {
+  const tr = new Float64Array(staN).fill(dc);
+  for (const s0 of spikeSamples) for (let m = 0; m < KSH.length && s0 + m < staN; m++) tr[s0 + m] += KSH[m];
+  return tr;
+}
+// These tests place spikes exactly on grid points and use tolerance 0.05 (< dt) so
+// each spike matches its own frame deterministically. With the default 0.1 s
+// tolerance a grid-aligned spike also falls within 0.1 s of the PREVIOUS frame, so
+// find(...,1) would match that lower neighbor — faithful to the lab code, but it
+// would shift the window a sample and is not what these averaging assertions probe.
+// Spikes 6 s apart at exact sample times → exact tindex; first/last skipped, 7 interior accepted.
+const staSpikes = [6, 12, 18, 24, 30, 36, 42, 48, 54];
+const trA = stampTrace(staSpikes.map((t) => Math.round(t / staDt)));
+const staA = spikeTriggeredAverage(staSpikes, trA, staTimes, { window: 2, baseline: 0.5, tolerance: 0.05 });
+ok('STA length 2·windowSamples+1', staA.samples.length === 41 && staA.windowSamples === 20, `len=${staA.samples.length}`);
+ok('STA zeroIndex = windowSamples (t=0 at center)', staA.zeroIndex === 20 && approx(staA.times[20], 0));
+ok('STA times symmetric ±window', approx(staA.times[40], 2) && approx(staA.times[0], -2) && approx(staA.times[22], 0.2));
+ok('STA endpoints skipped → 7 of 9 accepted, none blocked', staA.nAccepted === 7 && staA.nBlocked === 0, `acc=${staA.nAccepted} blk=${staA.nBlocked}`);
+ok('STA recovers the stamped peak at lag +0.2 s', approx(staA.samples[22], 1.0, 1e-9), `peak=${staA.samples[22]}`);
+ok('STA pre-spike samples ≈ 0 (causal shape)', approx(staA.samples[20], 0, 1e-9) && approx(staA.samples[19], 0, 1e-9));
+
+// Baseline zeroing: same shape on a constant DC pedestal → STA subtracts it away.
+const trDC = stampTrace(staSpikes.map((t) => Math.round(t / staDt)), 3.0);
+const staDC = spikeTriggeredAverage(staSpikes, trDC, staTimes, { window: 2, baseline: 0.5, tolerance: 0.05 });
+ok('STA per-event baseline removes the DC pedestal', approx(staDC.samples[22], 1.0, 1e-9) && approx(staDC.samples[19], 0, 1e-9), `peak=${staDC.samples[22]}`);
+
+// Overlap rejection: a neighbor within block = 0.5·window = 1 s blocks both.
+const ovSpikes = [6, 30, 30.4, 54];
+const ovTrace = stampTrace(ovSpikes.map((t) => Math.round(t / staDt)));
+const staOv = spikeTriggeredAverage(ovSpikes, ovTrace, staTimes, { window: 2, baseline: 0.5, tolerance: 0.05 });
+ok('STA blocks overlapping events (both 30 & 30.4) → empty', staOv.empty && staOv.nAccepted === 0 && staOv.nBlocked === 2, `acc=${staOv.nAccepted} blk=${staOv.nBlocked}`);
+ok('STA empty result still carries lag geometry', staOv.samples.length === 0 && staOv.zeroIndex === 20 && staOv.times.length === 41);
+
+// First/last structurally skipped: with 3 spikes only the middle is eligible.
+const triSpikes = [6, 30, 54];
+const staTri = spikeTriggeredAverage(triSpikes, stampTrace(triSpikes.map((t) => Math.round(t / staDt))), staTimes, { window: 2, baseline: 0.5, tolerance: 0.05 });
+ok('STA skips first & last event (1 of 3 used)', staTri.nAccepted === 1, `acc=${staTri.nAccepted}`);
+
+// omitnan: a NaN inside one event's averaging window drops only that lag's sample,
+// not the whole STA — the surviving identical windows still average to the shape.
+const trNaN = stampTrace(staSpikes.map((t) => Math.round(t / staDt)));
+trNaN[Math.round(12 / staDt) + 2] = NaN; // peak sample of the first accepted event (spike 12)
+const staNaN = spikeTriggeredAverage(staSpikes, trNaN, staTimes, { window: 2, baseline: 0.5, tolerance: 0.05 });
+ok('STA omitnan: peak still recovered from the other events', approx(staNaN.samples[22], 1.0, 1e-9) && Number.isFinite(staNaN.samples[22]));
+
+// machinery gate: malformed inputs are hard errors (fit is never gated here).
+ok('STA throws on signal/time length mismatch', throws(() => spikeTriggeredAverage([10], new Float64Array(5), new Float64Array(4), { window: 1, baseline: 0.2 })));
+ok('STA throws on window ≤ 0', throws(() => spikeTriggeredAverage([10], trA, staTimes, { window: 0, baseline: 0.2 })));
+
+// --- cross-method agreement (FOUNDATIONS §3 check 4) ------------------------
+// Plant the calcium kernel, stamp it at far-apart spikes, and confirm the STA
+// waveform's diagnostics agree with the planted kernel — the leg the deconv
+// machinery check does not exercise (the reason STA exists, ADR-0005).
+const caKsta = buildKernel('calcium', { tauRise: 0.22, tauDecay: 2.7 }, staDt);
+const PEAK_AMP = 0.24;
+const caBig = new Float64Array(2000); // 200 s at 10 Hz
+const caTimes = new Float64Array(2000);
+for (let i = 0; i < 2000; i++) caTimes[i] = i * staDt;
+const caSpikes = [20, 60, 100, 140, 180]; // 40 s apart → tails fully decayed between events
+for (const t of caSpikes) {
+  const s0 = Math.round(t / staDt);
+  for (let m = 0; m < caKsta.samples.length && s0 + m < 2000; m++) caBig[s0 + m] += caKsta.samples[m] * PEAK_AMP;
+}
+const caSTA = spikeTriggeredAverage(caSpikes, caBig, caTimes, { window: 2, baseline: 0.5, tolerance: 0.05 });
+const caSTAdg = kernelDiagnostics(caSTA);
+// planted peak lag = argmax of the causal calcium shape × dt
+let pkArg = 0;
+for (let m = 1; m < caKsta.samples.length; m++) if (caKsta.samples[m] > caKsta.samples[pkArg]) pkArg = m;
+const plantedPeakLag = pkArg * staDt;
+ok('STA cross-method: 3 interior events accepted', caSTA.nAccepted === 3, `acc=${caSTA.nAccepted}`);
+ok('STA cross-method: peak lag agrees with planted kernel (≤ ½ sample)', Math.abs(caSTAdg.peakLagS - plantedPeakLag) <= staDt / 2 + 1e-9, `sta=${caSTAdg.peakLagS} planted=${plantedPeakLag}`);
+ok('STA cross-method: peak amp within 5 % of planted', Math.abs(caSTAdg.peakAmp / (caKsta.samples[pkArg] * PEAK_AMP) - 1) <= 0.05, `ratio=${caSTAdg.peakAmp / (caKsta.samples[pkArg] * PEAK_AMP)}`);
+ok('STA cross-method: causal shape, acausal energy small', caSTAdg.acausalRatio < 0.05, `ratio=${caSTAdg.acausalRatio}`);
 
 // --- summary ----------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);
