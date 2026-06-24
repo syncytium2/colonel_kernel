@@ -276,6 +276,18 @@ short `spikes` column **left blank below the last spike** (ragged). `roi1` is th
 cell (§4); non-finite trace samples are the literal `NaN`; the pre-trim `timing` is emitted verbatim
 (the app applies the `mod(k,2)` trim, §13). Confirmed against real exported files.
 
+> **Layout replaced by [ADR-0019](docs/adr/0019-tab2-input-contract-workbook-per-recording.md)
+> (proposed).** The ragged single-CSV layout silently truncated when `nSpikes > nFrames` (file-250
+> senktide, −64.8%). The contract moves to **one xlsx workbook per recording** — a `trace` sheet
+> (`time, roi1..roiN`, the whole untrimmed recording in true absolute recording time), an
+> independent-length `spikes` sheet, and an optional `metadata` sheet of **region definitions**
+> (disjoint; overlap is a hard error). Regions are set in-app and bracketed to their spikes **at
+> analysis time** (trimming and the spike buffer move from export to app), enabling **cross-region
+> kernel comparison**; per-region spike sufficiency is **reported, not gated**. CSV (paired trace +
+> spikes files) is retained as a field-user fallback with padding banned. ADR-0016 stays Accepted —
+> its offline-converter / no-egress posture is inherited; only the layout and granularity
+> (per-region → per-recording) change.
+
 **MATLAB origin:** source data lives in MATLAB v7.3 (HDF5) structures (`k_sta_store`). A CSV path now
 exists: **`scripts/mat2csv.py`** — a tracked, *offline* converter that reads the processed
 `APs_v1_*.mat` outputs and writes the schema above (output gitignored, §6). This keeps `.mat`

@@ -1,5 +1,7 @@
 # ADR-0016: CSV input layout — per-region schema, produced by `scripts/mat2csv.py`
 
+> Layout replaced by [ADR-0019](0019-tab2-input-contract-workbook-per-recording.md); offline-converter / no-egress posture retained.
+
 ## Status
 
 Accepted
