@@ -21,7 +21,9 @@ import {
   forwardConvolveCausal,
   reconstructParametric,
   recoverKernelParametric,
+  PARAM_BOUNDS,
 } from './deconvolve-parametric.js';
+import { tauRailed, peakAtBoundary, normalizeUnitPeak } from './readout.js';
 import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
 import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './noise.js';
 import { loadCsv } from './load-csv.js';
@@ -341,6 +343,37 @@ ok('doubleExp rises off zero then is positive', decK[1] > 0 && decK[5] > 0);
   ok('Option B: recoverKernelParametric reports full-kernel R² (>0.99 on full-kernel truth)', recB.fit.r2 > 0.99, `r2=${recB.fit.r2}`);
   // The returned display contract is still the ±ws slice (unchanged ADR-0009 object).
   ok('Option B: returned contract is still the ±ws slice', recB.samples.length === 2 * wsB + 1 && recB.zeroIndex === wsB);
+}
+
+// --- readout display helpers: ADR-0025 facts + ADR-0024 normalization -------
+{
+  // tauRailed — interior θ is NOT railed; θ pinned to a bound IS (neutral fact).
+  ok('tauRailed: interior θ not railed', tauRailed({ tauRise: 0.227, tauDecay: 2.89 }).railed === false);
+  const rMin = tauRailed({ tauRise: PARAM_BOUNDS.tauRiseMin, tauDecay: 12 });
+  ok('tauRailed: τ_rise at min flagged', rMin.railed === true && rMin.which.includes('τ_rise at min'));
+  const rMax = tauRailed({ tauRise: PARAM_BOUNDS.tauRiseMax, tauDecay: 5 });
+  ok('tauRailed: τ_rise at max flagged', rMax.railed === true && rMax.which.includes('τ_rise at max'));
+  const dMax = tauRailed({ tauRise: 0.05, tauDecay: PARAM_BOUNDS.tauDecayMax });
+  ok('tauRailed: τ_decay at max flagged', dMax.railed === true && dMax.which.includes('τ_decay at max'));
+
+  // peakAtBoundary — interior transient is NOT at boundary; an edge-rising bowl IS.
+  // ws=10 → +lag half = 10 samples. Peak at lag 6 (interior) vs lag 10 (right edge).
+  const interior = { samples: new Float64Array(21), zeroIndex: 10 };
+  interior.samples[16] = 1; // lag +6 of +10
+  ok('peakAtBoundary: interior peak not flagged', peakAtBoundary(interior).atBoundary === false);
+  const bowl = { samples: new Float64Array(21), zeroIndex: 10 };
+  for (let i = 10; i <= 20; i++) bowl.samples[i] = (i - 10); // monotonic rise to the +edge
+  const pab = peakAtBoundary(bowl);
+  ok('peakAtBoundary: edge-rising bowl flagged at +lag boundary', pab.atBoundary === true && pab.lagSamples === 10);
+
+  // normalizeUnitPeak — scales to unit peak, preserves null/NaN, never mutates input.
+  const src = [0, 0.5, -1, 2, null, NaN];
+  const nrm = normalizeUnitPeak(src);
+  ok('normalizeUnitPeak: peak magnitude → 1', Math.max(...nrm.filter((v) => v != null).map(Math.abs)) === 1);
+  ok('normalizeUnitPeak: scales proportionally (2→1, -1→-0.5)', nrm[3] === 1 && nrm[2] === -0.5);
+  ok('normalizeUnitPeak: null/NaN preserved as null', nrm[4] === null && nrm[5] === null);
+  ok('normalizeUnitPeak: input not mutated', src[3] === 2);
+  ok('normalizeUnitPeak: all-zero input returned unscaled (no divide-by-zero)', normalizeUnitPeak([0, 0, 0]).every((v) => v === 0));
 }
 
 // --- CSV loader (ADR-0016) --------------------------------------------------

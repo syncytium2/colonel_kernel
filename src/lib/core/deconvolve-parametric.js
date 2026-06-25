@@ -118,9 +118,14 @@ export function forwardConvolveCausal(density, causalKernel, outLen) {
 
 // Parameter bounds (seconds for τ; amp is unconstrained-positive in practice). Generous
 // so the optimum stays interior for the calcium regime; they exist only to keep the
-// nonlinear solve from wandering into degenerate (non-physical) territory.
-const TAU_RISE_MIN = 0.01, TAU_RISE_MAX = 1.0;
-const GAP_MIN = 1e-3, TAU_DECAY_MAX = 12.0;
+// nonlinear solve from wandering into degenerate (non-physical) territory. Exported so the
+// readout's τ-RAILED indicator (ADR-0025) detects "a fitted τ pinned to its bound" against
+// the SAME numbers the solver clamps to — no magic constants duplicated in the UI.
+export const PARAM_BOUNDS = Object.freeze({
+  tauRiseMin: 0.01, tauRiseMax: 1.0, gapMin: 1e-3, tauDecayMax: 12.0,
+});
+const TAU_RISE_MIN = PARAM_BOUNDS.tauRiseMin, TAU_RISE_MAX = PARAM_BOUNDS.tauRiseMax;
+const GAP_MIN = PARAM_BOUNDS.gapMin, TAU_DECAY_MAX = PARAM_BOUNDS.tauDecayMax;
 
 const clamp = (x, lo, hi) => (x < lo ? lo : x > hi ? hi : x);
 

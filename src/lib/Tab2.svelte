@@ -1,18 +1,20 @@
 <script>
-  // Tab 2 — the flagship (FOUNDATIONS §2). INWARD SLICE: one ROI's full
-  // recover-and-four-check readout, end to end, focused on rois[0] (file 80 ROI 1,
-  // the canonized positive control). Multi-column re-fan is the NEXT slice.
+  // Tab 2 — the flagship (FOUNDATIONS §2). SINGLE-COLUMN SLICE VIEWER: the verified
+  // single-ROI readout, fanned behind a column selector so every ROI column in a
+  // recording can be read one slice at a time (§4). This is assembly over a proven
+  // core — no recovery math lives here.
   //
-  // Geometry (matches MATLAB): the recovered kernel (±WIN s) and the STA (±STAWIN s)
-  // are OVERLAID on ONE shared lag/amplitude plot about the common zero-lag origin —
-  // peak-lag agreement is read straight off it.
+  // Per slice it shows, for the SELECTED recovery method:
+  //   • the four §3 checks as raw-number readouts (ADR-0011: machinery gated, fit
+  //     reported — NO rollup verdict);
+  //   • the recovered kernel + STA overlaid on one shared zero-lag origin (ADR-0009),
+  //     with the ADR-0024 amplitude-axis toggle (shared-y default / normalized opt-in);
+  //   • the reconstruction (density ⊛ recovered kernel) vs the actual dF/F₀;
+  //   • the ADR-0025 indicator facts (τ-railed, peak-at-boundary) — facts, never verdicts.
   //
-  // The four §3 checks (ADR-0011: machinery gated, fit reported — NO rollup verdict;
-  // the spread across checks is the signal):
-  //   1 PLAUSIBILITY   kernelDiagnostics(kernel)            — direct call
-  //   2 RESIDUAL       circularConvolve(density, kernel)    — reconstruction R², reported
-  //   3 STABILITY      recoverKernel across log-λ 0.002..3  — peak-lag drift
-  //   4 STA AGREEMENT  STA peak lag vs kernel peak lag      — read on the shared plot
+  // Two recovery methods are reachable (ADR-0021): free-vector (method 1, regularized
+  // LSQ) and constrained-parametric (method 2, double-exponential). Their spread is the
+  // diagnostic; the human reads it (ADR-0014 / ADR-0018).
   import Plot from './Plot.svelte';
   import {
     loadCsv,
@@ -24,6 +26,11 @@
     kernelDiagnostics,
     preZeroBaselineMean,
     spikeTriggeredAverage,
+    recoverKernelParametric,
+    reconstructParametric,
+    tauRailed,
+    peakAtBoundary,
+    normalizeUnitPeak,
     addAWGN,
     sigmaForLevel,
     mulberry32,
@@ -33,10 +40,9 @@
   const WIN = 5; // kernel half-window (s); windowSamples = round(WIN/dt) (ADR-0004)
   const STAWIN = 2; // STA half-window (s)
   const STABASE = 0.5; // STA per-event pre-spike baseline window (s)
-  const NOISE_SEED = 20240; // reproducible noise realization for the targeted ROI
+  const NOISE_SEED = 20240; // reproducible noise realization for the selected ROI
 
-  // Regularization slider is LOG-λ over the canon-characterized sweep 0.002–3
-  // (ADR-0004); a linear range slider drives log10(λ).
+  // Regularization slider is LOG-λ over the canon-characterized sweep 0.002–3 (ADR-0004).
   const LAM_LO = 0.002;
   const LAM_HI = 3.0;
   const LOG_LO = Math.log10(LAM_LO);
@@ -52,18 +58,22 @@
   let noiseLevel = $state(0); // × cohort-typical σ, 0–10, default 0/off (ADR-0015)
   const lambda = $derived(10 ** lambdaLog);
 
+  // --- slice-viewer state ---
+  let selectedCol = $state(0); // which ROI column (0 = the expected target, §4)
+  let method = $state('free'); // 'free' (ADR-0004) | 'parametric' (ADR-0021 method 2)
+  let overlayMode = $state('shared'); // 'shared' (default) | 'normalized' (ADR-0024)
+  let showRailed = $state(false); // ADR-0025: reveal default-hidden railed-parametric output
+
   async function handleFiles(fileList) {
     const file = fileList && fileList[0];
     if (!file) return;
     fileName = file.name;
     try {
       if (/\.xlsx$/i.test(file.name)) {
-        // ADR-0019 xlsx path → the SAME single-ROI readout as the CSV path. The
-        // dynamic import keeps SheetJS in its own chunk (code-split, FOUNDATIONS §6)
-        // so the CSV/teaching paths pay nothing. Region selection here is a DUMB
-        // DEFAULT: the first analyzable region (or the default full-trace region when
-        // there is no metadata). DOWNSTREAM (not built here): a region picker to
-        // replace this default, cross-region comparison, multi-ROI re-fan.
+        // ADR-0019 xlsx path. SheetJS stays in its own code-split chunk (FOUNDATIONS §6).
+        // Region selection is a dumb default: the first analyzable region (ADR-0022 skips
+        // are not exercised on file-80 — it has one analyzable region). Cross-region
+        // comparison is out of scope for this slice.
         const { loadWorkbook, regionsOf, windowRegion, regionViewToLoadedRegion } = await import(
           './core/load-xlsx.js'
         );
@@ -82,16 +92,24 @@
           return;
         }
         region = regionViewToLoadedRegion(chosen, { source: `${file.name} — ${chosen.name}` });
+        resetSlice();
         error = null;
         return;
       }
       const text = await file.text();
       region = loadCsv(text, { source: file.name });
+      resetSlice();
       error = null;
     } catch (e) {
       error = String(e && e.message ? e.message : e);
       region = null;
     }
+  }
+
+  function resetSlice() {
+    selectedCol = 0;
+    method = 'free';
+    showRailed = false;
   }
 
   function onDrop(e) {
@@ -103,17 +121,16 @@
   // --- shared display axes (core untouched) ---
   const gridTimes = $derived(region ? Array.from(region.grid.times) : []);
   const xRange = $derived(region ? [region.meta.t0, region.meta.tEnd] : null);
-  // DISPLAY stems (not the analysis input — recovery rasterizes to binned-count below).
   const spikeTimes = $derived(region ? Array.from(region.spikeTimes) : []);
   const spikeYs = $derived(spikeTimes.map(() => 1));
   const kernelXRange = [-WIN, WIN]; // the overlay axis; STA (±STAWIN) sits inside it.
 
-  // --- the targeted ROI (rois[0]) and the shared analysis inputs ---
-  const targeted = $derived(region ? region.rois[0] : null);
+  // The selected ROI column.
+  const selected = $derived(region ? region.rois[selectedCol] : null);
 
   // binned-count spike density on the trace timebase, zero-padded to a power of two
-  // (§13, ADR-0013 preFirstBin 'keep'; ADR-0017: raw, no detrend/window). Depends
-  // only on the region, so it is computed once per load.
+  // (§13, ADR-0013 preFirstBin 'keep'; ADR-0017 raw). One shared spike train per
+  // recording (ADR-0019), so this depends only on the region, not the column.
   const density = $derived.by(() => {
     if (!region) return null;
     const n = region.grid.n;
@@ -127,23 +144,21 @@
     return { n, N, sdPad, placed: sd.placed, dropped: sd.dropped };
   });
 
-  // One noise realization for the targeted ROI (depends on region + noise level).
+  // One noise realization for the selected ROI (region + column + noise level).
   const noisyTrace = $derived.by(() => {
-    if (!region || !density) return null;
+    if (!region || !density || !selected) return null;
     const { n, N } = density;
     const sigma = sigmaForLevel(noiseLevel);
     const noise = sigma > 0 ? addAWGN(new Float64Array(n), sigma, mulberry32(NOISE_SEED)) : null;
-    // recovery trace: NaN→0 + noise, zero-padded to N.
-    const recReal = new Float64Array(N);
+    const recReal = new Float64Array(N); // NaN→0 + noise, zero-padded
     for (let k = 0; k < n; k++) {
-      const v = Number.isFinite(targeted.samples[k]) ? targeted.samples[k] : 0;
+      const v = Number.isFinite(selected.samples[k]) ? selected.samples[k] : 0;
       recReal[k] = v + (noise ? noise[k] : 0);
     }
-    // STA trace: raw samples (NaN preserved → omitnan) + noise.
-    let staTrace = targeted.samples;
+    let staTrace = selected.samples; // raw (NaN preserved → omitnan) + noise
     if (noise) {
       staTrace = new Float64Array(n);
-      for (let k = 0; k < n; k++) staTrace[k] = targeted.samples[k] + noise[k];
+      for (let k = 0; k < n; k++) staTrace[k] = selected.samples[k] + noise[k];
     }
     return { recReal, staTrace };
   });
@@ -153,13 +168,24 @@
     const kPad = new Float64Array(N);
     kPad[0] = kernel.samples[ws];
     for (let j = 1; j <= ws; j++) {
-      kPad[j] = kernel.samples[ws + j]; // +lag at low indices
-      kPad[N - j] = kernel.samples[ws - j]; // −lag wrapped to high end
+      kPad[j] = kernel.samples[ws + j];
+      kPad[N - j] = kernel.samples[ws - j];
     }
     return kPad;
   }
 
-  // --- the live readout for the targeted ROI (region + λ + noise) ---
+  /** STA samples re-aligned onto the kernel lag grid (shared dt/origin), null elsewhere. */
+  function staOntoKernel(sta, kernelLen, ws, staWs) {
+    const out = new Array(kernelLen).fill(null);
+    if (sta.empty) return out;
+    for (let k = 0; k < sta.samples.length; k++) {
+      const idx = ws - staWs + k;
+      if (idx >= 0 && idx < out.length) out[idx] = sta.samples[k];
+    }
+    return out;
+  }
+
+  // --- the live readout for the selected ROI: BOTH methods + STA + ADR-0025 facts ---
   const analysis = $derived.by(() => {
     if (!region || !density || !noisyTrace) return null;
     const dt = region.grid.dt;
@@ -168,36 +194,39 @@
     const staWs = Math.round(STAWIN / dt);
     const { recReal, staTrace } = noisyTrace;
 
-    // CHECK 1 — plausibility (direct). peakAmpAdj is display-only: the +0.6 s peak
-    // height relative to its pre-zero-lag baseline (STABASE window) so the tilt
-    // doesn't understate the transient. The kernel trace stays raw (ADR-0017).
-    const kernel = recoverKernel(recReal, sdPad, { windowSamples: ws, dt, lambda });
-    const diag = kernelDiagnostics(kernel);
-    const preBaseline = preZeroBaselineMean(kernel, STABASE);
-    const peakAmpAdj = diag.peakAmp - preBaseline;
-
-    // CHECK 2 — reconstruction residual (forward circularConvolve; reported, ADR-0011).
-    const kPad = embedKernel(kernel, N, ws);
-    const recon = circularConvolve(sdPad, kPad);
+    // ---- METHOD 1: free-vector (ADR-0004) ----
+    const fvKernel = recoverKernel(recReal, sdPad, { windowSamples: ws, dt, lambda });
+    const fvDiag = kernelDiagnostics(fvKernel);
+    const fvPreBaseline = preZeroBaselineMean(fvKernel, STABASE);
+    const fvKPad = embedKernel(fvKernel, N, ws);
+    const fvReconArr = circularConvolve(sdPad, fvKPad);
     let ssRes = 0, ssTot = 0, mean = 0;
     for (let k = 0; k < n; k++) mean += recReal[k];
     mean /= n;
     for (let k = 0; k < n; k++) {
-      const r = recReal[k] - recon[k];
+      const r = recReal[k] - fvReconArr[k];
       ssRes += r * r;
       const d = recReal[k] - mean;
       ssTot += d * d;
     }
-    const r2 = ssTot > 0 ? 1 - ssRes / ssTot : NaN;
-    const rmse = Math.sqrt(ssRes / n);
+    const fvR2 = ssTot > 0 ? 1 - ssRes / ssTot : NaN;
+    const fvRmse = Math.sqrt(ssRes / n);
     // machinery sanity: the full latent inverts the trace exactly (R²≈1).
     const latent = deconvolveCircular(recReal, sdPad, lambda);
     const reconFull = circularConvolve(sdPad, latent);
     let ssResFull = 0;
     for (let k = 0; k < n; k++) { const r = recReal[k] - reconFull[k]; ssResFull += r * r; }
-    const r2Full = ssTot > 0 ? 1 - ssResFull / ssTot : NaN;
+    const fvR2Full = ssTot > 0 ? 1 - ssResFull / ssTot : NaN;
+    const fvBoundary = peakAtBoundary(fvKernel); // ADR-0025 fact
 
-    // CHECK 4 — STA cross-method agreement.
+    // ---- METHOD 2: constrained-parametric (ADR-0021) ----
+    const pm = recoverKernelParametric(recReal, sdPad, { windowSamples: ws, dt, fitLength: n });
+    const pmDiag = kernelDiagnostics(pm);
+    // Option B reconstruction: FULL analytic kernel (untruncated tail) over the real region.
+    const pmReconArr = reconstructParametric(sdPad, pm.fit.theta, dt, n, ws);
+    const pmRailed = tauRailed(pm.fit.theta); // ADR-0025 fact
+
+    // ---- STA (method-independent) ----
     const sta = spikeTriggeredAverage(region.spikeTimes, staTrace, region.grid.times, {
       window: STAWIN,
       baseline: STABASE,
@@ -209,44 +238,47 @@
       staPeakLagS = sta.times[bi];
       staPeakAmp = sta.samples[bi];
     }
+    const staOnKernel = staOntoKernel(sta, fvKernel.samples.length, ws, staWs);
 
-    // Overlay series: STA aligned onto the kernel lag grid (shared dt/origin), null
-    // outside ±STAWIN so uPlot draws a gap there.
-    const kernelLag = Array.from(kernel.times);
-    const kernelV = Array.from(kernel.samples);
-    const staOnKernel = new Array(kernel.samples.length).fill(null);
-    if (!sta.empty) {
-      for (let k = 0; k < sta.samples.length; k++) {
-        const idx = ws - staWs + k; // map STA lag → kernel index
-        if (idx >= 0 && idx < staOnKernel.length) staOnKernel[idx] = sta.samples[k];
-      }
-    }
-
-    // reconstruction trace (predicted = density ⊛ recovered kernel) over real n.
-    const reconTrace = Array.from(recon.slice(0, n));
+    const kernelLag = Array.from(fvKernel.times); // both methods share this lag grid
 
     return {
-      kernelLag,
-      kernelV,
-      staOnKernel,
-      staEmpty: sta.empty,
-      reconTrace,
-      plausibility: { ...diag, peakAmpAdj, preBaseline },
-      residual: { r2, rmse, r2Full },
+      dt, ws, kernelLag, staOnKernel, staEmpty: sta.empty,
+      fv: {
+        kernelV: Array.from(fvKernel.samples),
+        reconTrace: Array.from(fvReconArr.slice(0, n)),
+        peakLagS: fvDiag.peakLagS,
+        peakAmp: fvDiag.peakAmp,
+        peakAmpAdj: fvDiag.peakAmp - fvPreBaseline,
+        tauDecayS: fvDiag.tauDecayS,
+        acausalRatio: fvDiag.acausalRatio,
+        r2: fvR2, rmse: fvRmse, r2Full: fvR2Full,
+        boundary: fvBoundary,
+      },
+      pm: {
+        kernelV: Array.from(pm.samples),
+        reconTrace: Array.from(pmReconArr),
+        peakLagS: pm.fit.peakLagS,
+        peakAmp: pmDiag.peakAmp,
+        tauRiseS: pm.fit.theta.tauRise,
+        tauDecayS: pm.fit.theta.tauDecay,
+        acausalRatio: pmDiag.acausalRatio,
+        r2: pm.fit.r2,
+        converged: pm.fit.converged,
+        railed: pmRailed,
+      },
       sta: {
         empty: sta.empty,
         nEvents: sta.nEvents,
         nAccepted: sta.nAccepted,
-        nBlocked: sta.nBlocked,
         staPeakLagS,
         staPeakAmp,
-        kernelPeakLagS: diag.peakLagS,
-        dLagS: sta.empty ? NaN : staPeakLagS - diag.peakLagS,
       },
     };
   });
 
-  // CHECK 3 — stability across the log-λ sweep (region + noise; NOT the slider λ).
+  // CHECK 3 — free-vector stability across the log-λ sweep (a property of the FV
+  // recovery; the parametric method has no λ knob, so this stays the FV diagnostic).
   const stability = $derived.by(() => {
     if (!region || !density || !noisyTrace) return null;
     const dt = region.grid.dt;
@@ -279,7 +311,13 @@
     return { rateHz: density.placed / duration, placed: density.placed, nSpikes: region.meta.nSpikes, duration };
   });
 
-  // Shared y for the overlay (kernel + STA together).
+  // --- the active method's view, applying the ADR-0025 railed default-hide ---
+  const active = $derived(analysis ? (method === 'free' ? analysis.fv : analysis.pm) : null);
+  // Parametric output is default-HIDDEN when its fit railed — but always reversible (ADR-0025).
+  const railedHidden = $derived(
+    method === 'parametric' && analysis && analysis.pm.railed.railed && !showRailed,
+  );
+
   function rangeOf(arrays) {
     let lo = Infinity, hi = -Infinity;
     for (const a of arrays) for (const v of a) {
@@ -290,19 +328,54 @@
     const pad = (hi - lo) * 0.06;
     return [lo - pad, hi + pad];
   }
-  const overlayYRange = $derived(
-    analysis ? rangeOf([analysis.kernelV, analysis.staOnKernel]) : null,
-  );
+
+  // Overlay series for the active method (kernel + STA). ADR-0024: normalized mode
+  // scales each to unit peak so SHAPE is legible; shared mode keeps true magnitude.
+  const overlay = $derived.by(() => {
+    if (!analysis || !active) return null;
+    const len = analysis.kernelLag.length;
+    let kernelV = railedHidden ? new Array(len).fill(null) : active.kernelV.slice();
+    let staV = analysis.staOnKernel;
+    if (overlayMode === 'normalized') {
+      kernelV = normalizeUnitPeak(kernelV);
+      staV = normalizeUnitPeak(staV);
+    }
+    return { kernelV, staV, yRange: rangeOf([kernelV, staV]) };
+  });
+
+  // Reconstruction predicted trace for the active method (null while railed+hidden).
+  const reconTrace = $derived(active && !railedHidden ? active.reconTrace : null);
   const traceYs = $derived(
-    targeted ? Array.from(targeted.samples, (v) => (Number.isFinite(v) ? v : null)) : [],
+    selected ? Array.from(selected.samples, (v) => (Number.isFinite(v) ? v : null)) : [],
   );
+
+  // ADR-0025 indicator facts for the current slice (neutral; never pass/fail).
+  const facts = $derived.by(() => {
+    if (!analysis) return [];
+    const out = [];
+    if (analysis.fv.boundary.atBoundary) {
+      out.push({
+        method: 'free-vector',
+        text: 'peak at boundary',
+        detail: 'max sample sits at the window edge — the peak-lag readout is not a transient peak',
+      });
+    }
+    if (analysis.pm.railed.railed) {
+      out.push({
+        method: 'parametric',
+        text: `τ at bound (${analysis.pm.railed.which.join(', ')})`,
+        detail: 'a fitted τ is pinned to its solver bound — the fit is at a wall, not an interior optimum',
+      });
+    }
+    return out;
+  });
 
   const f = (x, p = 4) => (Number.isFinite(x) ? x.toFixed(p) : '—');
   const e = (x) => (Number.isFinite(x) ? x.toExponential(2) : '—');
+  const colLabel = (i) => (i === 0 ? `${region.rois[0].id} (target)` : region.rois[i].id);
 </script>
 
-<!-- drop is sensitive across the whole tab; the visible affordance shrinks once
-     a file is loaded so the readout has room (load path unchanged). -->
+<!-- drop is sensitive across the whole tab; the affordance shrinks once a file loads. -->
 <section
   class="tab2"
   class:dragging
@@ -325,7 +398,7 @@
     </div>
   {:else}
     <div class="dropzone" class:dragging role="button" tabindex="0">
-      <p>Drop a region CSV here, or</p>
+      <p>Drop a recording (.xlsx) or region CSV here, or</p>
       <label class="filebtn">
         choose a file
         <input type="file" accept=".csv,.xlsx,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
@@ -338,10 +411,34 @@
   {#if region && analysis}
     <p class="summary">
       <strong>{region.rois.length} ROIs</strong>
-      · showing <strong>ROI 1</strong> (targeted) · {region.meta.nSpikes} spikes · {region.grid.n} frames · dt
-      {region.grid.dt.toFixed(3)} s
-      <span class="muted">— single-ROI slice; column re-fan is next</span>
+      · showing <strong>{colLabel(selectedCol)}</strong>
+      · {region.meta.nSpikes} spikes · {region.grid.n} frames · dt {region.grid.dt.toFixed(3)} s
+      {#if spikeContext}<span class="muted">— {f(spikeContext.rateHz, 3)} Hz</span>{/if}
     </p>
+
+    <!-- slice bar: which column, which method, how the overlay amplitude is scaled -->
+    <div class="slicebar">
+      <label class="ctl-inline">
+        <span>Column</span>
+        <select bind:value={selectedCol}>
+          {#each region.rois as roi, i}
+            <option value={i}>{colLabel(i)}</option>
+          {/each}
+        </select>
+      </label>
+
+      <div class="seg" role="group" aria-label="Recovery method">
+        <span class="seg-label">Method</span>
+        <button class:on={method === 'free'} onclick={() => (method = 'free')}>Free-vector</button>
+        <button class:on={method === 'parametric'} onclick={() => (method = 'parametric')}>Parametric</button>
+      </div>
+
+      <div class="seg" role="group" aria-label="Overlay amplitude scale">
+        <span class="seg-label">Overlay scale</span>
+        <button class:on={overlayMode === 'shared'} onclick={() => (overlayMode = 'shared')}>Shared-y</button>
+        <button class:on={overlayMode === 'normalized'} onclick={() => (overlayMode = 'normalized')}>Normalized</button>
+      </div>
+    </div>
 
     <div class="controls">
       <label class="ctl">
@@ -354,11 +451,24 @@
         <input type="range" min="0" max="10" step="0.5" bind:value={noiseLevel} />
         <output>{noiseLevel.toFixed(1)}×</output>
       </label>
+      {#if method === 'parametric'}<span class="ctl-note">λ drives the free-vector recovery; the parametric fit has no λ.</span>{/if}
     </div>
 
+    <!-- ADR-0025 indicator strip: neutral facts for this slice, never pass/fail -->
+    {#if facts.length}
+      <div class="indicators" aria-label="Computed facts for this slice (not verdicts)">
+        {#each facts as fact}
+          <span class="fact" title={fact.detail}>
+            <span class="dot" aria-hidden="true"></span>
+            <span class="fact-method">{fact.method}</span>
+            <span class="fact-text">{fact.text}</span>
+          </span>
+        {/each}
+      </div>
+    {/if}
+
     <div class="readout">
-      <!-- CHECK 2 evidence, full width: spikes + reconstruction (actual vs predicted)
-           on the shared recording-time axis — shows where the fit holds and breaks. -->
+      <!-- reconstruction (recording-time axis): spikes + actual vs predicted -->
       <div class="panel">
         <div class="plot-label">spikes (display)</div>
         <Plot
@@ -372,50 +482,80 @@
           height={56}
         />
         <div class="plot-label">
-          reconstruction — actual dF/F₀ vs predicted (density ⊛ recovered kernel), ROI 1
+          reconstruction — actual dF/F₀ vs predicted (density ⊛ {method === 'free' ? 'free-vector' : 'parametric'} kernel), {colLabel(selectedCol)}
         </div>
-        <Plot
-          xs={gridTimes}
-          ys={traceYs}
-          color="#2a9d8f"
-          ys2={analysis.reconTrace}
-          color2="#c0392b"
-          {xRange}
-          yAxisSize={44}
-          xLabel="recording time (s)"
-          height={150}
-        />
-        <div class="legend">
-          <span class="key"><i style="background:#2a9d8f"></i>actual dF/F₀</span>
-          <span class="key"><i style="background:#c0392b"></i>predicted</span>
-          <span class="agree">retained-kernel R² {f(analysis.residual.r2)} — fit breaks at calcium-without-spikes (§3)</span>
-        </div>
+        {#if railedHidden}
+          <div class="hidden-note">
+            Parametric fit railed (τ at bound) — reconstruction hidden by default.
+            <button class="linkbtn" onclick={() => (showRailed = true)}>Show anyways</button>
+          </div>
+        {:else}
+          <Plot
+            xs={gridTimes}
+            ys={traceYs}
+            color="#2a9d8f"
+            ys2={reconTrace}
+            color2="#c0392b"
+            {xRange}
+            yAxisSize={44}
+            xLabel="recording time (s)"
+            height={150}
+          />
+          <div class="legend">
+            <span class="key"><i style="background:#2a9d8f"></i>actual dF/F₀</span>
+            <span class="key"><i style="background:#c0392b"></i>predicted</span>
+            <span class="agree">reconstruction R² {f(active.r2)} — reported, not gated (§3)</span>
+          </div>
+        {/if}
       </div>
 
-      <!-- the overlay: kernel + STA on one shared zero-lag origin -->
+      <!-- the overlay: kernel + STA on one shared zero-lag origin (ADR-0009 / 0024) -->
       <div class="panel">
         <div class="plot-label">
-          recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag/amplitude origin
+          recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag origin
+          {#if overlayMode === 'normalized'}<span class="norm-badge">NORMALIZED — shape only, peaks scaled to 1; amplitude is in the readout below</span>{/if}
         </div>
-        <Plot
-          xs={analysis.kernelLag}
-          ys={analysis.kernelV}
-          color="#7b2ff7"
-          ys2={analysis.staOnKernel}
-          color2="#e76f51"
-          xRange={kernelXRange}
-          yRange={overlayYRange}
-          yAxisSize={44}
-          zeroLine
-          xLabel="lag (s)"
-          height={186}
-        />
+        {#if railedHidden}
+          <div class="hidden-note">
+            Parametric fit railed (τ at bound) — kernel hidden by default.
+            <button class="linkbtn" onclick={() => (showRailed = true)}>Show anyways</button>
+            <span class="sta-still">STA still shown.</span>
+          </div>
+          <Plot
+            xs={analysis.kernelLag}
+            ys={overlay.staV}
+            color="#e76f51"
+            xRange={kernelXRange}
+            yRange={overlay.yRange}
+            yAxisSize={44}
+            zeroLine
+            xLabel="lag (s)"
+            height={186}
+          />
+        {:else}
+          <Plot
+            xs={analysis.kernelLag}
+            ys={overlay.kernelV}
+            color="#7b2ff7"
+            ys2={overlay.staV}
+            color2="#e76f51"
+            xRange={kernelXRange}
+            yRange={overlay.yRange}
+            yAxisSize={44}
+            zeroLine
+            xLabel="lag (s)"
+            height={186}
+          />
+        {/if}
         <div class="legend">
-          <span class="key"><i style="background:#7b2ff7"></i>recovered kernel</span>
+          {#if !railedHidden}<span class="key"><i style="background:#7b2ff7"></i>recovered kernel</span>{/if}
           <span class="key"><i style="background:#e76f51"></i>STA</span>
-          {#if !analysis.staEmpty}
+          {#if showRailed && method === 'parametric' && analysis.pm.railed.railed}
+            <button class="linkbtn" onclick={() => (showRailed = false)}>Hide railed output</button>
+          {/if}
+          {#if !railedHidden && !analysis.staEmpty}
             <span class="agree">
-              kernel peak {f(analysis.plausibility.peakLagS, 2)} s · STA peak {f(analysis.sta.staPeakLagS, 2)} s
+              kernel peak {f(active.peakLagS, 2)} s · amp {f(active.peakAmp)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
             </span>
           {/if}
         </div>
@@ -425,49 +565,70 @@
     <!-- four §3 checks: four separate readouts, raw numbers, NO rollup verdict -->
     <div class="checks">
       <div class="check">
-        <h4>1 · Plausibility <span class="tag">kernelDiagnostics</span></h4>
-        <dl>
-          <div><dt>peak lag</dt><dd>{f(analysis.plausibility.peakLagS, 2)} s</dd></div>
-          <div><dt>peak amp (vs baseline)</dt><dd>{f(analysis.plausibility.peakAmpAdj)}</dd></div>
-          <div><dt>peak amp (abs)</dt><dd>{f(analysis.plausibility.peakAmp)}</dd></div>
-          <div>
-            <dt>decay τ</dt>
-            <dd>{Number.isFinite(analysis.plausibility.tauDecayS) ? `${f(analysis.plausibility.tauDecayS, 2)} s` : 'n/a (tilt)'}</dd>
-          </div>
-          <div><dt>acausal ratio</dt><dd>{f(analysis.plausibility.acausalRatio)}</dd></div>
-        </dl>
-      </div>
-
-      <div class="check">
-        <h4>2 · Reconstruction residual <span class="tag">reported, not gated</span></h4>
-        <dl>
-          <div><dt>full-latent R²</dt><dd>{f(analysis.residual.r2Full)}</dd></div>
-          <div><dt>retained-kernel R²</dt><dd>{f(analysis.residual.r2)}</dd></div>
-          <div><dt>RMSE</dt><dd>{e(analysis.residual.rmse)}</dd></div>
-          <div class="note">full-latent ≈1 = path sane; low retained = §3 decoupling</div>
-        </dl>
-      </div>
-
-      <div class="check">
-        <h4>3 · Stability <span class="tag">log-λ {LAM_LO}–{LAM_HI}</span></h4>
-        {#if stability}
+        <h4>1 · Plausibility <span class="tag">{method === 'free' ? 'free-vector' : 'parametric'}</span></h4>
+        {#if railedHidden}
+          <dl><div class="note">railed — hidden (<button class="linkbtn" onclick={() => (showRailed = true)}>show anyways</button>)</div></dl>
+        {:else if method === 'free'}
           <dl>
-            <div><dt>peak lag range</dt><dd>{f(stability.peakLagMinS, 2)}–{f(stability.peakLagMaxS, 2)} s</dd></div>
-            <div><dt>lag drift</dt><dd>{f(stability.peakLagRangeS, 3)} s</dd></div>
-            <div><dt>peak amp range</dt><dd>{e(stability.peakAmpMin)} … {e(stability.peakAmpMax)}</dd></div>
-            <div class="note">λ-stable peak lag = the positive control</div>
+            <div><dt>peak lag</dt><dd>{f(active.peakLagS, 2)} s</dd></div>
+            <div><dt>peak amp (vs baseline)</dt><dd>{f(active.peakAmpAdj)}</dd></div>
+            <div><dt>peak amp (abs)</dt><dd>{f(active.peakAmp)}</dd></div>
+            <div>
+              <dt>decay τ</dt>
+              <dd>{Number.isFinite(active.tauDecayS) ? `${f(active.tauDecayS, 2)} s` : 'n/a (tilt)'}</dd>
+            </div>
+            <div><dt>acausal ratio</dt><dd>{f(active.acausalRatio)}</dd></div>
+          </dl>
+        {:else}
+          <dl>
+            <div><dt>peak lag</dt><dd>{f(active.peakLagS, 2)} s</dd></div>
+            <div><dt>peak amp</dt><dd>{f(active.peakAmp)}</dd></div>
+            <div><dt>τ rise</dt><dd>{f(active.tauRiseS, 2)} s</dd></div>
+            <div><dt>τ decay</dt><dd>{f(active.tauDecayS, 2)} s</dd></div>
+            <div><dt>acausal ratio</dt><dd>{f(active.acausalRatio)}</dd></div>
           </dl>
         {/if}
       </div>
 
       <div class="check">
-        <h4>4 · STA agreement <span class="tag">spike-rate regime</span></h4>
+        <h4>2 · Reconstruction residual <span class="tag">reported, not gated</span></h4>
+        {#if railedHidden}
+          <dl><div class="note">railed — hidden (<button class="linkbtn" onclick={() => (showRailed = true)}>show anyways</button>)</div></dl>
+        {:else if method === 'free'}
+          <dl>
+            <div><dt>full-latent R²</dt><dd>{f(active.r2Full)}</dd></div>
+            <div><dt>retained-kernel R²</dt><dd>{f(active.r2)}</dd></div>
+            <div><dt>RMSE</dt><dd>{e(active.rmse)}</dd></div>
+            <div class="note">full-latent ≈1 = path sane; low retained = §3 decoupling</div>
+          </dl>
+        {:else}
+          <dl>
+            <div><dt>full-kernel R²</dt><dd>{f(active.r2)}</dd></div>
+            <div class="note">Option B forward path; low R² = §3 decoupling, reported not gated</div>
+          </dl>
+        {/if}
+      </div>
+
+      <div class="check">
+        <h4>3 · Stability <span class="tag">free-vector log-λ {LAM_LO}–{LAM_HI}</span></h4>
+        {#if stability}
+          <dl>
+            <div><dt>peak lag range</dt><dd>{f(stability.peakLagMinS, 2)}–{f(stability.peakLagMaxS, 2)} s</dd></div>
+            <div><dt>lag drift</dt><dd>{f(stability.peakLagRangeS, 3)} s</dd></div>
+            <div><dt>peak amp range</dt><dd>{e(stability.peakAmpMin)} … {e(stability.peakAmpMax)}</dd></div>
+            <div class="note">λ-stable peak lag = the positive control{#if method === 'parametric'} · (a free-vector diagnostic){/if}</div>
+          </dl>
+        {/if}
+      </div>
+
+      <div class="check">
+        <h4>4 · STA agreement <span class="tag">vs {method === 'free' ? 'free-vector' : 'parametric'}</span></h4>
         {#if analysis.sta.empty}
           <dl><div class="note">STA empty — no accepted events</div></dl>
         {:else}
           <dl>
-            <div><dt>kernel vs STA peak</dt><dd>{f(analysis.sta.kernelPeakLagS, 2)} / {f(analysis.sta.staPeakLagS, 2)} s</dd></div>
-            <div><dt>Δ lag</dt><dd>{f(analysis.sta.dLagS, 2)} s</dd></div>
+            <div><dt>kernel vs STA peak</dt><dd>{railedHidden ? '—' : f(active.peakLagS, 2)} / {f(analysis.sta.staPeakLagS, 2)} s</dd></div>
+            <div><dt>Δ lag</dt><dd>{railedHidden ? '—' : f(active.peakLagS - analysis.sta.staPeakLagS, 2)} s</dd></div>
             <div><dt>STA events</dt><dd>{analysis.sta.nAccepted}/{analysis.sta.nEvents}</dd></div>
             {#if spikeContext}<div><dt>spike rate</dt><dd>{f(spikeContext.rateHz, 3)} Hz</dd></div>{/if}
           </dl>
@@ -554,6 +715,71 @@
     opacity: 0.65;
   }
 
+  /* slice bar: column selector + method / overlay-scale segmented toggles */
+  .slicebar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+    padding: 10px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .ctl-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-h);
+  }
+  .ctl-inline select {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text-h);
+  }
+  .seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .seg-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-h);
+    margin-right: 2px;
+  }
+  .seg button {
+    font: inherit;
+    font-size: 13px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .seg button:first-of-type {
+    border-radius: 6px 0 0 6px;
+  }
+  .seg button:last-of-type {
+    border-radius: 0 6px 6px 0;
+    border-left: none;
+  }
+  .seg button.on {
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+    color: var(--text-h);
+    font-weight: 600;
+  }
+  .seg button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
   .controls {
     display: flex;
     flex-wrap: wrap;
@@ -577,8 +803,91 @@
     font-size: 13px;
     text-align: right;
   }
+  .ctl-note {
+    font-size: 12px;
+    color: var(--text);
+    opacity: 0.75;
+    font-style: italic;
+  }
 
-  /* full-width stacked panels: reconstruction (recording axis) + kernel/STA overlay */
+  /* indicator strip — neutral facts (ADR-0025), deliberately NOT pass/fail colored */
+  .indicators {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .fact {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 11px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    font-size: 12px;
+    color: var(--text-h);
+    cursor: default;
+  }
+  .fact .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text);
+    opacity: 0.55;
+    flex: none;
+  }
+  .fact-method {
+    font-family: var(--mono);
+    color: var(--text);
+    opacity: 0.8;
+  }
+  .fact-text {
+    font-weight: 500;
+  }
+
+  .norm-badge {
+    margin-left: 8px;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: var(--accent-bg);
+    border: 1px solid var(--accent-border);
+    color: var(--text-h);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.3px;
+  }
+
+  .hidden-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--code-bg);
+    border-radius: 8px;
+  }
+  .hidden-note .sta-still {
+    opacity: 0.7;
+    font-style: italic;
+  }
+  .linkbtn {
+    font: inherit;
+    font-size: 13px;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent);
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .linkbtn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
   .readout {
     display: flex;
     flex-direction: column;
