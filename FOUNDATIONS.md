@@ -288,6 +288,14 @@ cell (§4); non-finite trace samples are the literal `NaN`; the pre-trim `timing
 > its offline-converter / no-egress posture is inherited; only the layout and granularity
 > (per-region → per-recording) change.
 
+> **Region-end markers are emitted raw — they may overhang the recording
+> ([ADR-0020](docs/adr/0020-region-end-markers-raw-no-clamp.md)).** Finite region-end
+> markers are written source-faithfully (`exp_timing × 60`) and are **not** clamped to the trace's
+> `tEnd`; a marker may legitimately point past the recording's end (protocol planned longer than the
+> recording ran), so consumers **must not assume `end_s ≤ tEnd`**. Open-ended `inf` ends fall back to
+> `max(timing)` — a representability exception, not a clamp. The app windows analysis to spikes
+> regardless, so the overhang is cosmetic for analysis.
+
 **MATLAB origin:** source data lives in MATLAB v7.3 (HDF5) structures (`k_sta_store`). A CSV path now
 exists: **`scripts/mat2csv.py`** — a tracked, *offline* converter that reads the processed
 `APs_v1_*.mat` outputs and writes the schema above (output gitignored, §6). This keeps `.mat`
