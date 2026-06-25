@@ -25,15 +25,67 @@ sample fixtures, and per-team status logs.
   master (`c4b7909`)**; the **CONTRACT VERSION is frozen at 1.0** in the Dropbox mirror (stamped in
   `contract/export_contract.md`, `CHANGELOG.md`, and `status/app_team.md`). **The MATLAB exporter is
   unblocked** — build against v1.0.
-- **Awaited from MATLAB:** the v1.0 `.xlsx` exporter and the two `golden/` acceptance workbooks
-  (high-firing `20241121a_98`, empty-spikes `20240708_13`) to validate our reader against.
+- **Delivered by MATLAB (2026-06-25):** the v1.0 exporter `if2_export_workbook.m` (committed
+  `ef3ac30`) + the **full 72/72 `.xlsx` batch**, integrity-checked, in the shared bus `golden/`. Our
+  reader ingests them (see ▶ RESUME — 2026-06-25 below).
 
 ---
 
-## ▶ RESUME — 2026-06-23 (Tab 2 single-ROI slice committed; re-fan is next)
+## ▶ RESUME — 2026-06-25 (xlsx ingest spine built + wired; canonize bracket + no-AP policy next)
 
-**The current frontier.** The reconciled ROI-1 read below (✓ RECONCILED banner) is canon; this is
-the build state on top of it.
+**The current frontier.** The reconciled ROI-1 read (✓ RECONCILED banner) and the 2026-06-23 block
+below remain canon/history; this is the build state on top of them.
+
+### DONE THIS SESSION
+- **ADR-0019 xlsx ingest spine — built + pushed on `tab2-ui`.** `loadWorkbook` (3-sheet read,
+  case-insensitive match, machinery-gated), `windowRegion` (analysis-time spike-bracketing),
+  `regionsOf` (default full-trace region), code-split SheetJS (own chunk ~114 KB gzip, base bundle
+  unaffected). Commits `370425a` (spine) + `8f22324` (a11y fix). 118 `test:core` green; 3 real
+  goldens validated by `npm run xlsx-acceptance` (offline; goldens stay out of the repo, §6).
+- **ADR-0020 — committed on `master` (`19d6634`):** region-end markers emitted raw, finite overhang
+  past `tEnd` not clamped. Accepted (core contract).
+- **`.xlsx` drop seam WIRED to the single-ROI readout** — first-analyzable-region default;
+  `regionViewToLoadedRegion` adapter feeds the existing readout unchanged. **Verified against the
+  file-80 golden: xlsx path reproduces the CSV-path canon** — peak **+0.60 s**, baseline-relative amp
+  **+0.0096**, kernel Pearson **0.99995** vs the CSV path. **123 `test:core` green.** Figure read
+  **CONFIRMED by Tony (ADR-0018)** — the +0.6 s peak is present under the known baseline tilt, matches
+  the CSV-path positive control. **Committed on `tab2-ui` (`34110f1`).** Evidence (gitignored):
+  `darkroom/fig_xlsx_file80_roi1.png` + `darkroom/xlsx_equiv_file80.mjs`.
+- **MATLAB batch:** 72/72 workbooks exported + integrity-checked in the shared bus;
+  `if2_export_workbook.m` committed (`ef3ac30`).
+
+### DECIDED, NEEDS CANONIZING
+1. **Window bracket** (resolve into ADR-0019 or a new ADR). Analysis-time windowing uses a
+   **symmetric `round(1.0/dt)` bracket each side of the spike span.** The old MATLAB export-time trim
+   carried an asymmetric **+1 trailing sample**; that was incidental and is **NOT reproduced — the
+   app's symmetric bracket is authoritative (Tony's call, 2026-06-25).** Evidence: file-80 ROI-1, CSV-path `tEnd 1132.21`
+   (last+11) vs xlsx-path `tEnd 1132.11` (last+10) — a **1-sample tail**, kernel corr **0.99995**,
+   peak lag identical. **Benign and characterized**, not a bug.
+2. **No-AP policy** (candidate ADR). A file/region with **no APs is non-analyzable by definition** —
+   no input to deconvolve, so windowing it is pointless. Behavior: **flag on read.** Batch mode →
+   **skip entirely** (contributes nothing to the incidence report). User-selected single-file mode →
+   load enough to tell the user *"no APs in this recording — deconvolution not possible"*, not a
+   generic error. **Supersedes** the earlier (wrong) marker-bounded-windowing idea for silent cells.
+   Covers the **33 whole-file zero-spike** cases in the batch (silent targeted cell; matches the
+   spikes-repair tally — real, not an export bug) and **22 partially-analyzable** files (APs in some
+   regions, none in others — per-region `zeroSpkRegions` in `golden/_batch_summary_v1.csv`).
+
+### PARKED
+3. **Folder move (MATLAB-owned, PROTOCOL §2 — coordinated, prompt drafted not sent).** `golden/` now
+   holds the full 72-file export, overloading "golden" (curated fixtures vs production dataset).
+   Proposed: move the 72-file export to `data/` alongside the archive; keep the **4 acceptance
+   fixtures (80 / 98 / 13 / 250)** as a named, hashed subset the `xlsx-acceptance` script binds to by
+   name. App-side change is trivial (`GOLDEN_DIR` default + 4 fixture paths).
+- Carried open items: stale FOUNDATIONS §5 "absolute recording time" wording (flagged `bfc9774`,
+  standalone fix pending); kernel/STA overlay **shared-y vs twin-y**; the two long-parked items
+  (`fig_oracle.png` → `docs/img/`, the Savitzky–Golay baseline-independent display).
+
+---
+
+## ▶ RESUME — 2026-06-23 (HISTORY — Tab 2 single-ROI slice; superseded by 2026-06-25 above)
+
+**Build state at the time** (the reconciled ROI-1 read below is canon; this records how the
+single-ROI readout reached the state the 2026-06-25 block builds on).
 
 **DONE — single-ROI Tab 2 readout, built + eyeball-verified on file 80 ROI 1, committed on
 `tab2-ui` (`9f39837`; NOT pushed, NOT merged to master):**
