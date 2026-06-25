@@ -572,7 +572,6 @@
           <dl>
             <div><dt>peak lag</dt><dd>{f(active.peakLagS, 2)} s</dd></div>
             <div><dt>peak amp (vs baseline)</dt><dd>{f(active.peakAmpAdj)}</dd></div>
-            <div><dt>peak amp (abs)</dt><dd>{f(active.peakAmp)}</dd></div>
             <div>
               <dt>decay τ</dt>
               <dd>{Number.isFinite(active.tauDecayS) ? `${f(active.tauDecayS, 2)} s` : 'n/a (tilt)'}</dd>
