@@ -121,8 +121,6 @@
   // --- shared display axes (core untouched) ---
   const gridTimes = $derived(region ? Array.from(region.grid.times) : []);
   const xRange = $derived(region ? [region.meta.t0, region.meta.tEnd] : null);
-  const spikeTimes = $derived(region ? Array.from(region.spikeTimes) : []);
-  const spikeYs = $derived(spikeTimes.map(() => 1));
   const kernelXRange = [-WIN, WIN]; // the overlay axis; STA (±STAWIN) sits inside it.
 
   // The selected ROI column.
@@ -143,6 +141,12 @@
     sdPad.set(sd.samples);
     return { n, N, sdPad, placed: sd.placed, dropped: sd.dropped };
   });
+
+  // The spikes-row series IS the binned-count density — the exact rasterized input the
+  // recovery and reconstruction consume (§13), not the raw event list. Bar height = spike
+  // count per frame, so a 2-count frame stands taller than a 1-count one. Sliced to the
+  // real region length (the padded tail is all zeros). Display-only view of density.sdPad.
+  const spikeCounts = $derived(density ? Array.from(density.sdPad.subarray(0, density.n)) : []);
 
   // One noise realization for the selected ROI (region + column + noise level).
   const noisyTrace = $derived.by(() => {
@@ -470,10 +474,10 @@
     <div class="readout">
       <!-- reconstruction (recording-time axis): spikes + actual vs predicted -->
       <div class="panel">
-        <div class="plot-label">spikes (display)</div>
+        <div class="plot-label">spikes — binned count on the frame grid (recovery input; bar height = spike count, not amplitude)</div>
         <Plot
-          xs={spikeTimes}
-          ys={spikeYs}
+          xs={gridTimes}
+          ys={spikeCounts}
           kind="stems"
           color="var(--text-h)"
           {xRange}
