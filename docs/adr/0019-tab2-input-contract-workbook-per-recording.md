@@ -15,6 +15,13 @@ Sequencing is load-bearing: **this ADR → app xlsx-reader / `loadCsv` change �
 The re-export must target the frozen sheet spec below and must **not** run before the app can read
 xlsx. This ADR is canon only; it implements nothing.
 
+**Clock convention (resolved in this draft).** The time axis is **zero-based**: ephys and calcium
+imaging both start at **t = 0 at experiment onset**, sharing one origin. `trace.time`, the `spikes`
+sheet, and the `metadata` `start_s`/`end_s` all live on this single zero-based axis. This **corrects
+the initial absolute-clock wording** of the draft (which assumed a recording starting at, e.g.,
+~65 s); nothing was built against the absolute assumption, so it is amended in place rather than
+superseded. The repaired MATLAB archive's `timing` is already zero-based, so no re-source is needed.
+
 ## Context
 
 The prior layout (ADR-0016) packed the spike list into a CSV column **bounded by the frame count**
@@ -54,16 +61,17 @@ parser (e.g. SheetJS) is a **v1 dependency, self-hosted/bundled** per FOUNDATION
 Sheet names are matched **case-insensitively and trimmed**. **`trace` and `spikes` are required**
 (hard error if either is absent); **`metadata` is optional**.
 
-- **`trace` sheet** — `time, roi1 … roiN`, the **whole continuous recording** in **true, absolute
-  recording time (seconds)** — no zero-basing (a recording may start at, e.g., 65.011 s), one row
-  per frame. `time` is **strictly increasing**; **`dt` is derived** from it
+- **`trace` sheet** — `time, roi1 … roiN`, the **whole continuous recording** in **zero-based
+  recording time (seconds)** — t = 0 at experiment onset, the one shared origin for trace, spikes,
+  and region bounds (see Status / clock convention) — one row per frame. `time` is **strictly
+  increasing**; **`dt` is derived** from it
   ([ADR-0012](0012-timing-vector-authoritative-dt-derived.md)), never stored. NaN permitted in ROI
   columns (empty cell; see §5 fidelity invariant). The **first trace column positionally is the
   targeted cell**, regardless of its header name (FOUNDATIONS §4; remaining columns are all
   examined).
 - **`spikes` sheet** — a single column **with the header `spikes`** (the header is **required** on
   the xlsx path), the **whole spike train**, **any length, independent of the frame count**, on the
-  **same absolute timebase (seconds) as the trace `time`**. **One spike train per recording in v1.**
+  **same zero-based timebase (seconds) as the trace `time`**. **One spike train per recording in v1.**
 - **`metadata` sheet (optional)** — **region definitions** (schema in §3), plus reserved room for
   future fields. `dt` is **not** stored here (derived).
 
@@ -75,8 +83,8 @@ Sheet names are matched **case-insensitively and trimmed**. **`trace` and `spike
 | column     | required | type   | meaning |
 |------------|----------|--------|---------|
 | `region`   | yes      | text   | region/epoch label (e.g. `baseline`, `senktide`). Unique within the workbook. |
-| `start_s`  | yes      | number | region start, **absolute recording-time seconds** (same axis as trace `time`). |
-| `end_s`    | yes      | number | region end, recording-time seconds. Must satisfy `start_s < end_s`. |
+| `start_s`  | yes      | number | region start, **zero-based recording-time seconds** (same axis as trace `time`). |
+| `end_s`    | yes      | number | region end, zero-based recording-time seconds. Must satisfy `start_s < end_s`. |
 
 **Region invariants (machinery-gated on load):**
 - **Regions are disjoint and non-overlapping.** **Overlap is a HARD ERROR on load** — the writer
@@ -91,8 +99,13 @@ Sheet names are matched **case-insensitively and trimmed**. **`trace` and `spike
 - A row with a blank/non-finite `start_s`/`end_s`, or `start_s ≥ end_s`, is **skipped with a
   warning** (representation, not machinery).
 - A region window outside the trace's `time` range is **clamped to the trace and warned**.
-- **If the `metadata` sheet is absent or has no valid rows, the whole recording is treated as a
-  single implicit region** spanning the full trace.
+- **If the `metadata` sheet is absent or has no valid rows — i.e. no in-app region definition —
+  the app analyzes a single implicit default region over the full calcium signal, bracketed to the
+  spikes:** `[first_AP − 1.0 s … last_AP + 1.0 s]`, using the same app-side buffer of §4
+  (dt-derived, `round(1.0 / dt)` samples). The default region is bracketed to its spikes exactly as
+  a named region is (§4) — it is **not** the full untrimmed trace; this keeps long no-spike head/tail
+  stretches out of the deconvolution ([ADR-0017](0017-circular-deconv-zero-padding-no-fix.md)). The
+  degenerate 0/1-spike case is handled by §7.
 
 **Reserved (documented, ignored by the v1 reader if present):** `buffer_s` (per-region analysis
 buffer override, in **seconds**; see §4), `note`, `exclude`. **Recording-level** metadata
@@ -100,7 +113,8 @@ buffer override, in **seconds**; see §4), `note`, `exclude`. **Recording-level*
 OPEN.
 
 **Writer note (MATLAB):** the existing `region(i).t_start` / `.t_end` are in **minutes**
-(`aCa98_batch_APs.m`); the writer must convert to **seconds** on the trace's absolute axis. The
+(`aCa98_batch_APs.m`); the writer must convert to **seconds** on the trace's zero-based axis
+(experiment onset = 0). The
 writer emits the **complete recording and region markers only** — it applies **no trimming and no
 buffer** (see §4).
 
@@ -164,9 +178,10 @@ Consistent with [ADR-0011](0011-validation-gates-machinery-not-fit.md) /
 - **Single spike train per recording.** Simultaneous multi-AP recordings are **out of scope for
   v1**; the future shape is **long-format** (`train_id, spike_time`) or **one sheet per train** —
   never padded wide columns. **Reserved, not built.**
-- **Trim bounds are self-describing.** Because the `trace` sheet carries **true, absolute recording
-  time**, any window (region or spike-bracket) is fully described by its `time` values — **no
-  separate trim-bounds field is needed**, and the legacy implicit export-time trim is eliminated.
+- **Trim bounds are self-describing.** Because the `trace` sheet carries the recording's **zero-based
+  time axis** (one shared origin for trace, spikes, and region bounds), any window (region or
+  spike-bracket) is fully described by its `time` values — **no separate trim-bounds field is
+  needed**, and the legacy implicit export-time trim is eliminated.
 
 ## Open items (do NOT resolve here; none block the re-export)
 
