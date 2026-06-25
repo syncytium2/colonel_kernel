@@ -328,7 +328,8 @@ cell (§4); non-finite trace samples are the literal `NaN`; the pre-trim `timing
 > **Layout replaced by [ADR-0019](docs/adr/0019-tab2-input-contract-workbook-per-recording.md)
 > (proposed).** The ragged single-CSV layout silently truncated when `nSpikes > nFrames` (file-250
 > senktide, −64.8%). The contract moves to **one xlsx workbook per recording** — a `trace` sheet
-> (`time, roi1..roiN`, the whole untrimmed recording in true absolute recording time), an
+> (`time, roi1..roiN`, the whole untrimmed recording in zero-based recording time (one
+> shared t=0 origin at experiment onset)), an
 > independent-length `spikes` sheet, and an optional `metadata` sheet of **region definitions**
 > (disjoint; overlap is a hard error). Regions are set in-app and bracketed to their spikes **at
 > analysis time** (trimming and the spike buffer move from export to app), enabling **cross-region
