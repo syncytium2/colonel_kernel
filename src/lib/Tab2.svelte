@@ -555,7 +555,7 @@
           {/if}
           {#if !railedHidden && !analysis.staEmpty}
             <span class="agree">
-              kernel peak {f(active.peakLagS, 2)} s · amp {f(active.peakAmp)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
+              kernel peak {f(active.peakLagS, 2)} s · amp {f(method === 'free' ? active.peakAmpAdj : active.peakAmp)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
             </span>
           {/if}
         </div>
