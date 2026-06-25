@@ -19,6 +19,8 @@ import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
 import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './noise.js';
 import { loadCsv } from './load-csv.js';
 import { spikeTriggeredAverage } from './sta.js';
+import * as XLSX from 'xlsx';
+import { loadWorkbook, windowRegion, regionsOf } from './load-xlsx.js';
 
 let passed = 0;
 let failed = 0;
@@ -348,6 +350,111 @@ ok('STA cross-method: 3 interior events accepted', caSTA.nAccepted === 3, `acc=$
 ok('STA cross-method: peak lag agrees with planted kernel (≤ ½ sample)', Math.abs(caSTAdg.peakLagS - plantedPeakLag) <= staDt / 2 + 1e-9, `sta=${caSTAdg.peakLagS} planted=${plantedPeakLag}`);
 ok('STA cross-method: peak amp within 5 % of planted', Math.abs(caSTAdg.peakAmp / (caKsta.samples[pkArg] * PEAK_AMP) - 1) <= 0.05, `ratio=${caSTAdg.peakAmp / (caKsta.samples[pkArg] * PEAK_AMP)}`);
 ok('STA cross-method: causal shape, acausal energy small', caSTAdg.acausalRatio < 0.05, `ratio=${caSTAdg.acausalRatio}`);
+
+// --- xlsx ingest spine (ADR-0019) -------------------------------------------
+// Synthetic, data-safe workbooks built in-memory (the real goldens are
+// unpublished-data-derived and stay out of the repo, §6 — they are exercised by
+// the separate `npm run xlsx-acceptance` script).
+function makeXlsx({ trace, spikes, metadata, names = {} }) {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trace), names.trace ?? 'trace');
+  if (spikes !== undefined) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(spikes), names.spikes ?? 'spikes');
+  if (metadata !== undefined) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(metadata), names.metadata ?? 'metadata');
+  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+}
+// a 0..5.0 s @ dt=0.1 recording (51 frames), 2 roi cols (roi2 carries one NaN)
+const xtTrace = [['time', 'cellA', 'cellB']];
+for (let i = 0; i < 51; i++) xtTrace.push([i * 0.1, i, i === 3 ? '' : 100 + i]);
+const xtSpikes = [['spikes'], [2.0], [1.0], [3.0]]; // unsorted on purpose
+const xtMeta = [
+  ['region', 'start_s', 'end_s'],
+  ['A', 0, 2.5],
+  ['B', 2.6, 10], // end_s 10 > tEnd 5.0 (ADR-0020 overhang)
+];
+const wbBuf = makeXlsx({ trace: xtTrace, spikes: xtSpikes, metadata: xtMeta });
+const REC = loadWorkbook(wbBuf, { source: 'synthetic.xlsx' });
+
+ok('xlsx: dt derived from time column (ADR-0012)', approx(REC.meta.dt, 0.1), `dt=${REC.meta.dt}`);
+ok('xlsx: nFrames / nROIs / nSpikes', REC.meta.nFrames === 51 && REC.meta.nROIs === 2 && REC.meta.nSpikes === 3);
+ok('xlsx: t0 / tEnd', approx(REC.meta.t0, 0) && approx(REC.meta.tEnd, 5.0));
+ok('xlsx: first roi column positionally = targeted (header name kept)', REC.rois[0].id === 'cellA' && REC.rois[1].id === 'cellB');
+ok('xlsx: spikes nan-stripped + sorted ascending', REC.spikeTimes.length === 3 && approx(REC.spikeTimes[0], 1.0) && approx(REC.spikeTimes[2], 3.0));
+ok('xlsx: NaN roi cell preserved as non-finite', !Number.isFinite(REC.rois[1].samples[3]));
+ok('xlsx: NaN roi warning present', REC.warnings.some((w) => w.includes('non-finite')));
+ok('xlsx: 2 metadata regions, sorted', REC.regions.length === 2 && REC.regions[0].name === 'A' && REC.regions[1].name === 'B');
+ok('xlsx: end_s > tEnd read RAW, not clamped (ADR-0020)', REC.regions[1].endS === 10);
+
+// windowing — region A [0,2.5] selects spikes 1.0,2.0; default buffer 1.0 s → 10 samples
+const wA = windowRegion(REC, REC.regions[0]);
+ok('xlsx win A: analyzable', wA.analyzable === true);
+ok('xlsx win A: spikeCount 2', wA.spikeCount === 2);
+ok('xlsx win A: bufferSamples = round(1.0/dt) = 10', wA.window.bufferSamples === 10);
+ok('xlsx win A: bracket [firstIdx-10, lastIdx+10] = [0,30]', wA.window.startIdx === 0 && wA.window.endIdx === 30, `[${wA.window.startIdx},${wA.window.endIdx}]`);
+ok('xlsx win A: windowed grid length 31, rois sliced to match', wA.grid.n === 31 && wA.rois[0].samples.length === 31);
+ok('xlsx win A: start clamp warned (firstIdx-10 = 0 boundary, no clamp)', wA.warnings.length === 0, `[${wA.warnings}]`);
+
+// region B [2.6,10] selects only spike 3.0 → single-spike degenerate (ADR-0019 §7)
+const wB = windowRegion(REC, REC.regions[1]);
+ok('xlsx win B: single spike → non-analyzable, no throw', wB.analyzable === false && wB.spikeCount === 1);
+ok('xlsx win B: reason distinguishes 1 spike', wB.reason.includes('(1 spike)'));
+ok('xlsx win B: non-analyzable carries null grid/rois', wB.grid === null && wB.rois === null);
+
+// buffer_s override + non-clamped interior window
+const wbBuf2 = makeXlsx({
+  trace: xtTrace,
+  spikes: [['spikes'], [1.0], [2.0]],
+  metadata: [['region', 'start_s', 'end_s', 'buffer_s'], ['C', 0, 5, 0.2]],
+});
+const REC2 = loadWorkbook(wbBuf2);
+const wC = windowRegion(REC2, REC2.regions[0]);
+ok('xlsx: buffer_s override honored (0.2 s → 2 samples)', wC.window.bufferSamples === 2);
+ok('xlsx win C: interior bracket [10-2, 20+2] = [8,22]', wC.window.startIdx === 8 && wC.window.endIdx === 22, `[${wC.window.startIdx},${wC.window.endIdx}]`);
+
+// no metadata → one default region over the full trace, bracketed to all spikes
+const wbBuf3 = makeXlsx({ trace: xtTrace, spikes: [['spikes'], [1.0], [3.0]] });
+const REC3 = loadWorkbook(wbBuf3);
+const regs3 = regionsOf(REC3);
+ok('xlsx: no metadata → 1 default region spanning full trace', regs3.length === 1 && approx(regs3[0].startS, 0) && approx(regs3[0].endS, 5.0));
+ok('xlsx: no-metadata warning present', REC3.warnings.some((w) => w.includes('default region')));
+const wD = windowRegion(REC3, regs3[0]);
+ok('xlsx: default region brackets to spikes (analyzable)', wD.analyzable === true && wD.spikeCount === 2);
+
+// empty-spikes whole recording → reads fine; every region non-analyzable, no throw
+const wbEmpty = makeXlsx({ trace: xtTrace, spikes: [['spikes']], metadata: xtMeta });
+const RECe = loadWorkbook(wbEmpty);
+ok('xlsx: empty spikes sheet → nSpikes 0, no throw', RECe.meta.nSpikes === 0);
+const wEmpty = windowRegion(RECe, RECe.regions[0]);
+ok('xlsx: empty-spikes region → non-analyzable, reason distinguishes 0', wEmpty.analyzable === false && wEmpty.reason.includes('(0 spikes)'));
+
+// sheet-name match is case-insensitive (ADR-0019)
+const wbCase = makeXlsx({ trace: xtTrace, spikes: xtSpikes, names: { trace: 'TRACE', spikes: 'Spikes' } });
+ok('xlsx: sheet names matched case-insensitively', loadWorkbook(wbCase).meta.nROIs === 2);
+
+// machinery gates — hard errors
+ok('xlsx: missing trace sheet throws', throws(() => {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(xtSpikes), 'spikes');
+  loadWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+}));
+ok('xlsx: missing spikes sheet throws', throws(() => {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(xtTrace), 'trace');
+  loadWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+}));
+ok('xlsx: non-increasing time throws', throws(() => loadWorkbook(makeXlsx({
+  trace: [['time', 'r1'], [0, 1], [0, 2], [0.2, 3]],
+  spikes: [['spikes'], [0.1]],
+}))));
+ok('xlsx: overlapping regions throw', throws(() => loadWorkbook(makeXlsx({
+  trace: xtTrace,
+  spikes: xtSpikes,
+  metadata: [['region', 'start_s', 'end_s'], ['A', 0, 2.5], ['B', 2.0, 4]],
+}))));
+ok('xlsx: metadata missing required column throws', throws(() => loadWorkbook(makeXlsx({
+  trace: xtTrace,
+  spikes: xtSpikes,
+  metadata: [['region', 'start_s'], ['A', 0]],
+}))));
 
 // --- summary ----------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

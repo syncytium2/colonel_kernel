@@ -57,6 +57,19 @@
     if (!file) return;
     fileName = file.name;
     try {
+      if (/\.xlsx$/i.test(file.name)) {
+        // SEAM (ADR-0019 ingest spine ready — NOT wired this pass). Routes .xlsx to
+        // the workbook reader; the dynamic import keeps SheetJS in its own chunk
+        // (code-split, FOUNDATIONS §6) so the CSV/teaching paths pay nothing.
+        // DOWNSTREAM (not built here): region-setting UI, per-region windowing into
+        // the readout, cross-region comparison, multi-ROI re-fan — see
+        // load-xlsx.js (loadWorkbook / regionsOf / windowRegion).
+        const { loadWorkbook, regionsOf } = await import('./core/load-xlsx.js');
+        const rec = loadWorkbook(await file.arrayBuffer(), { source: file.name });
+        region = null;
+        error = `xlsx ingest spine ready: ${rec.meta.nROIs} ROI, ${rec.meta.nSpikes} spikes, ${regionsOf(rec).length} region(s). UI wiring is downstream (not in this pass).`;
+        return;
+      }
       const text = await file.text();
       region = loadCsv(text, { source: file.name });
       error = null;
@@ -290,7 +303,7 @@
       <span class="fname">{fileName}</span>
       <label class="filebtn-sm">
         choose a different file
-        <input type="file" accept=".csv,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
+        <input type="file" accept=".csv,.xlsx,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
       </label>
       {#if error}<span class="error">· {error}</span>{/if}
     </div>
@@ -299,7 +312,7 @@
       <p>Drop a region CSV here, or</p>
       <label class="filebtn">
         choose a file
-        <input type="file" accept=".csv,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
+        <input type="file" accept=".csv,.xlsx,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
       </label>
       {#if fileName}<p class="fname">{fileName}</p>{/if}
       {#if error}<p class="error">Could not load: {error}</p>{/if}

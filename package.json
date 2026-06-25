@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:core": "node src/lib/core/core.test.mjs",
     "machinery-check": "node src/lib/core/machinery-check.mjs",
+    "xlsx-acceptance": "node src/lib/core/xlsx-acceptance.mjs",
     "screenshot": "node scripts/screenshot.mjs"
   },
   "devDependencies": {
@@ -20,6 +21,7 @@
   "dependencies": {
     "fft.js": "^4.0.4",
     "papaparse": "^5.5.4",
-    "uplot": "^1.6.32"
+    "uplot": "^1.6.32",
+    "xlsx": "^0.18.5"
   }
 }
