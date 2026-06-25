@@ -122,6 +122,50 @@ not a settled point here.)
 > forward-path / alignment artifacts a smooth kernel would mask. The forward path must therefore
 > accept **any** family in this role; none is special-cased.
 
+### Future direction: spike-inference companion app (out of scope)
+
+**Purpose boundary.** Colonel Kernel solves `output = input ⊗ kernel` with **both `output`
+and `input` known** — ground-truth paired recordings where the calcium trace *and* the spike
+times are in hand. The unknown is **the kernel**, or whether a clean one exists at all. This is
+the **deconvolution-native, ground-truth-verification stance**: the tool interrogates whether
+spike–calcium coupling exists, surfaces *decoupling*, and **refuses to assume the kernel**. That
+skeptic stance is the tool's scientific contribution — the decoupling-incidence finding (§3) and
+the non-targeted-ROI kernel phenomenon (§4).
+
+**The companion direction.** Spike **inference** — solving for the *spikes* given **only** the
+calcium trace and an *assumed* generative model — is the inverse problem in the **opposite
+direction**, and is a **named future companion app, explicitly out of scope here.** The field's
+three method families already run in the lab's MATLAB: **CASCADE** (supervised deep learning,
+trained on ground truth), **MLspike** (model-based Bayesian MAP inference over a biophysical
+generative model with drifting baseline and indicator nonlinearities), and **OASIS** (fast convex
+AR-model sparse inference). A companion app could apply Colonel Kernel's *own* philosophy to the
+inference direction — **run all three in parallel, show the spread as the diagnostic,
+human-judged** — rather than trusting any single method. (This is the "separate project" the Tab 3
+demotion above gestures at, named.)
+
+**Why the separation is principled, not incidental.** The two apps embody **opposite epistemic
+stances.** Colonel Kernel is a **skeptic**: it *has* ground-truth spikes and tests whether coupling
+holds. Spike-inference tools are **believers**: they *assume* the generative coupling model and
+infer spikes through it. Merging them would **blur exactly the assumption Colonel Kernel exists to
+interrogate.** Keeping inference in a separate app keeps each tool honest about what it assumes.
+This is the canonical answer to *"why isn't OASIS / MLspike / CASCADE a button in this tool"* — it
+is **not an omission, it is the boundary.**
+
+**Relation to the parametric foil ([ADR-0021](docs/adr/0021-kernel-recovery-three-parallel-methods.md),
+method 2).** The double-exponential parametric fit in ADR-0021 is **not spike inference** and **not
+a deconvolution** — it is a deliberately minimal **linear reference shape (a "foil")** that the
+deconvolution methods are *read against*, structurally analogous to STA's cross-method role
+([ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)). It is **intentionally simpler than
+MLspike's biophysical model**: MLspike models baseline drift as a nuisance term and includes
+indicator nonlinearity / saturation; the foil **omits both by design.** Two caveats follow and are
+recorded here:
+
+1. **The foil is linear**, so a column that *departs* from it may be **nonlinearly coupled rather
+   than decoupled** — deviation from the foil is **not by itself evidence of decoupling.**
+2. The field's state of the art treats **baseline drift as something to *model*, not zero** — a
+   standing caution for ADR-0021's shape-regularized **baseline-flatness** term, and a possible
+   argument for a future **baseline-nuisance variant.**
+
 ---
 
 ## 3. The flagship's core deliverable: "is there a kernel, or isn't there?"
