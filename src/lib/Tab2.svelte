@@ -291,6 +291,7 @@
 <section
   class="tab2"
   class:dragging
+  aria-label="Tab 2 — drop a recording file to load"
   ondragover={(e) => {
     e.preventDefault();
     dragging = true;
