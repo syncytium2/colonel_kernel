@@ -17,7 +17,9 @@ import {
 } from './deconvolve.js';
 import {
   doubleExpCausal,
+  doubleExpCausalFull,
   forwardConvolveCausal,
+  reconstructParametric,
   recoverKernelParametric,
 } from './deconvolve-parametric.js';
 import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
@@ -297,6 +299,48 @@ ok('doubleExp rises off zero then is positive', decK[1] > 0 && decK[5] > 0);
   // peak lag matches the planted transient's analytic peak.
   const tStar = (Math.log(truth.tauDecay / truth.tauRise) * (truth.tauRise * truth.tauDecay)) / (truth.tauDecay - truth.tauRise);
   ok('parametric: peak lag matches planted (within ½ sample)', Math.abs(fitRes.fit.peakLagS - tStar) <= dtP / 2 + 1e-9, `peak=${fitRes.fit.peakLagS} t*=${tStar}`);
+}
+
+// --- Option B: full-analytic-kernel reconstruction (no ±window tail clipping) ---
+// When τ_decay is LONG relative to the display window, the ±ws slice clips the
+// decay tail. The reconstruction must use the FULL analytic kernel (~5·τdecay), not
+// the truncated array, so the residual is honest — not decoupling-plus-clipping.
+{
+  const dtB = 0.1;
+  const wsB = 10;                      // display window ±1.0 s — DELIBERATELY short
+  const Mb = 512;
+  const gB = makeGrid({ sampleRate: 10, duration: Mb / 10, t0: 0 });
+  const densB = rasterize([8, 8, 19, 33, 47], gB, { amplitudeMode: 'binned-count' }).samples;
+  const thetaB = { tauRise: 0.15, tauDecay: 1.0, amp: 0.3 }; // 5·τ = 5.0 s = 50 samples ≫ ws
+
+  // doubleExpCausalFull extends well past the display window; the floor keeps it ≥ ws.
+  const full = doubleExpCausalFull(thetaB, dtB, wsB);
+  ok('doubleExpCausalFull extends past the ±window (tail not clipped)', full.length > wsB + 1, `len=${full.length}`);
+  ok('doubleExpCausalFull reaches ~5·τdecay', Math.abs(full.length - 1 - Math.ceil(5 * thetaB.tauDecay / dtB)) <= 1, `len=${full.length}`);
+  ok('doubleExpCausalFull floor honored (≥ minSamples)', doubleExpCausalFull({ ...thetaB, tauDecay: 0.05 }, dtB, wsB).length === wsB + 1);
+
+  // Truth trace generated with the FULL kernel (real tails present).
+  const truthFull = doubleExpCausalFull(thetaB, dtB, wsB);
+  const truth = forwardConvolveCausal(densB, truthFull, Mb);
+
+  // Truncated reconstruction (±ws kernel) CLIPS the tail; full reconstruction is exact.
+  const reconTrunc = forwardConvolveCausal(densB, doubleExpCausal(thetaB, wsB, dtB), Mb);
+  const reconFull = reconstructParametric(densB, thetaB, dtB, Mb, wsB);
+  let maxTrunc = 0, maxFull = 0;
+  for (let i = 0; i < Mb; i++) {
+    maxTrunc = Math.max(maxTrunc, Math.abs(truth[i] - reconTrunc[i]));
+    maxFull = Math.max(maxFull, Math.abs(truth[i] - reconFull[i]));
+  }
+  ok('Option B: full reconstruction matches the full-kernel truth (exact)', maxFull < 1e-12, `maxFull=${maxFull}`);
+  ok('Option B: truncated reconstruction visibly clips the tail', maxTrunc > 1e-3, `maxTrunc=${maxTrunc}`);
+  ok('Option B: full reconstruction is strictly better than truncated', maxFull < maxTrunc);
+
+  // recoverKernelParametric reports the FULL-kernel R² (not the clipped one). With the
+  // truth made from the full kernel, the reported R² is near-perfect.
+  const recB = recoverKernelParametric(truth, densB, { windowSamples: wsB, dt: dtB });
+  ok('Option B: recoverKernelParametric reports full-kernel R² (>0.99 on full-kernel truth)', recB.fit.r2 > 0.99, `r2=${recB.fit.r2}`);
+  // The returned display contract is still the ±ws slice (unchanged ADR-0009 object).
+  ok('Option B: returned contract is still the ±ws slice', recB.samples.length === 2 * wsB + 1 && recB.zeroIndex === wsB);
 }
 
 // --- CSV loader (ADR-0016) --------------------------------------------------

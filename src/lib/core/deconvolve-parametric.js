@@ -49,6 +49,50 @@ export function doubleExpCausal({ tauRise, tauDecay, amp }, windowSamples, dt) {
   return k; // k[0] = 0 by construction (exp(0) − exp(0)); zero baseline, anchored t=0
 }
 
+// Negligible-tail cutoff for the FULL analytic kernel (Option B): the double-exponential
+// decays as exp(−t/τdecay), so by t = TAIL_FACTOR·τdecay it is exp(−TAIL_FACTOR) ≈ 0.7%
+// of its decay scale — small enough to drop. This matters because the canonical ±window
+// display slice (ws = round(WIN/dt)) is often SHORTER than the kernel's own decay (file-80
+// ROI-1: τdecay ≈ 2.89 s vs WIN = 5 s ≈ 1.7·τ), so a reconstruction built from the
+// truncated ±window array CLIPS the tail. The fit's θ is unchanged; only the forward model
+// that produces the reconstruction / R² uses this untruncated support.
+const TAIL_FACTOR = 5;
+
+/**
+ * Sample the FULL analytic causal kernel out to ~TAIL_FACTOR·τdecay (Option B), so the
+ * reconstruction is not clipped by the ±window display slice. This is legitimate and
+ * PARAMETRIC-ONLY: it is possible BECAUSE the kernel is analytic (the free-vector method
+ * has no content beyond its window and is unchanged). The returned length is at least
+ * `minSamples`+1 so the full kernel is never shorter than the display window.
+ * @param {{ tauRise:number, tauDecay:number, amp:number }} theta
+ * @param {number} dt  sample interval (seconds)
+ * @param {number} [minSamples]  floor on the causal support (e.g. the display ws)
+ * @returns {Float64Array} causal kernel, index j = lag j·dt
+ */
+export function doubleExpCausalFull(theta, dt, minSamples = 0) {
+  const tailSamples = Math.ceil((TAIL_FACTOR * theta.tauDecay) / dt);
+  const support = Math.max(minSamples, tailSamples);
+  return doubleExpCausal(theta, support, dt);
+}
+
+/**
+ * Parametric reconstruction (Option B): density ⊗ kernel(θ) using the FULL analytic
+ * kernel (untruncated tail), evaluated over `outLen` samples. This is the forward model
+ * for the reconstruction residual / R² — distinct from the ±window display slice, which
+ * stays the canonical ADR-0009 contract object. The free-vector method has no analogue
+ * (no tail beyond its window); this asymmetry is parametric-only.
+ * @param {ArrayLike<number>} spikeDensity  binned-count density
+ * @param {{ tauRise:number, tauDecay:number, amp:number }} theta
+ * @param {number} dt  sample interval (seconds)
+ * @param {number} outLen  number of output samples
+ * @param {number} [minSamples]  floor on the causal support (e.g. the display ws)
+ * @returns {Float64Array} length outLen
+ */
+export function reconstructParametric(spikeDensity, theta, dt, outLen, minSamples = 0) {
+  const fullK = doubleExpCausalFull(theta, dt, minSamples);
+  return forwardConvolveCausal(spikeDensity, fullK, outLen);
+}
+
 /**
  * Linear convolution of a spike density with a CAUSAL kernel (lags ≥ 0), evaluated
  * over the first `outLen` output samples (ADR-0006, zero-padded). This is the forward
@@ -244,12 +288,18 @@ export function recoverKernelParametric(trace, spikeDensity, opts) {
   const { tauRise, tauDecay } = theta;
   const peakLagS = (Math.log(tauDecay / tauRise) * (tauRise * tauDecay)) / (tauDecay - tauRise);
 
-  // Reconstruction R² over the fit region (reported, never gated — ADR-0011).
+  // Reconstruction R² over the fit region (reported, never gated — ADR-0011). OPTION B:
+  // the reconstruction uses the FULL analytic kernel (untruncated tail, ~5·τdecay), NOT
+  // the ±ws display slice, so the residual is honest decoupling rather than
+  // decoupling-plus-tail-clipping. The fit's θ and `sse` above are unchanged — they remain
+  // the optimizer's (±ws-support) objective; only this reported reconstruction extends the
+  // tail. The asymmetry is deliberate and parametric-only (the kernel is analytic).
+  const reconFull = reconstructParametric(spikeDensity, theta, dt, M, ws);
   let ssRes = 0, ssTot = 0, mean = 0;
   for (let i = 0; i < M; i++) mean += trace[i];
   mean /= M;
   for (let i = 0; i < M; i++) {
-    const r = trace[i] - pred[i]; ssRes += r * r;
+    const r = trace[i] - reconFull[i]; ssRes += r * r;
     const d = trace[i] - mean; ssTot += d * d;
   }
   const r2 = ssTot > 0 ? 1 - ssRes / ssTot : NaN;

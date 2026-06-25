@@ -9,7 +9,10 @@ export { SIGMA_COHORT_TYPICAL, NOISE_LEVEL_MAX, sigmaForLevel, addAWGN, mulberry
 export { nextPow2, circularConvolve, deconvolveCircular, extractSymmetric, recoverKernel } from './deconvolve.js';
 // Constrained-parametric recovery (ADR-0021 method 2): causal double-exponential fit,
 // a PARALLEL method to the free-vector recoverKernel above (never replaces it).
-export { doubleExpCausal, forwardConvolveCausal, recoverKernelParametric } from './deconvolve-parametric.js';
+export {
+  doubleExpCausal, doubleExpCausalFull, forwardConvolveCausal,
+  reconstructParametric, recoverKernelParametric,
+} from './deconvolve-parametric.js';
 export { kernelDiagnostics, compareKernels, preZeroBaselineMean } from './kernel-diagnostics.js';
 // STA (ADR-0005): the model-free cross-method validation partner for the kernel.
 export { spikeTriggeredAverage } from './sta.js';
