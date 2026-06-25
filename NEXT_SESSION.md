@@ -25,9 +25,87 @@ sample fixtures, and per-team status logs.
 
 ---
 
-## ▶ RESUME — 2026-06-25 (ADR-0021 landed; implement three-method recovery next)
+## ▶ RESUME — 2026-06-25 (late) — method 2 + the Tab 2 slice viewer built; method 3 is next
 
-**The current frontier.** The reconciled ROI-1 read (✓ RECONCILED banner) and the 2026-06-23 block
+**The current frontier.** Method 2 (constrained-parametric) is implemented and the Tab 2 **single-
+column slice viewer** is built end-to-end on `tab2-ui`. The reconciled ROI-1 read and all earlier
+blocks below remain canon/history. **Method 3 (shape-regularized) is the next recovery method.**
+
+### REPO STATE AT SESSION END (read first)
+- **`master` = `d29c3cb`** — pushed, in sync with `origin/master`. Canon only: ADRs **0022** (no-AP
+  policy), **0023** (method-3 baseline-strategy fork, *Proposed/open*), **0024** (kernel/STA overlay
+  amplitude axis — shared-y default + normalized toggle, twin-y rejected), **0025** (Tab 2 indicator
+  column + railed-fit display — facts-not-verdicts), plus the §5 zero-based fix, the symmetric
+  `round(1.0/dt)` bracket folded into ADR-0019, and FOUNDATIONS §2/§3/§5/§11 updates.
+- **`tab2-ui` = `d523af2`** — the code branch, **force-pushed** (rebased onto master, so it diverged
+  from the old `origin/tab2-ui`; future pushes need `--force-with-lease`). **165/165 `test:core`**,
+  build clean (SheetJS still code-split). Carries everything in DONE below.
+
+### DONE THIS SESSION (all on `tab2-ui` unless noted)
+- **ADR-0021 method 2 — constrained-parametric recovery, IMPLEMENTED** (`src/lib/core/deconvolve-parametric.js`):
+  causal double-exponential `kernel(θ)=amp·(exp(−t/τd)−exp(−t/τr))`, anchored t=0, zero baseline by
+  construction; nonlinear LSQ (Levenberg–Marquardt). Returns the ADR-0009 contract. **file-80 ROI-1
+  (Tony-confirmed, ADR-0018):** peak **+0.63 s**, **τ_decay 2.89 s** (the "n/a (tilt)" symptom is
+  dissolved), τ_rise 0.23 s. Canonized in FOUNDATIONS §3.
+- **Option B** — parametric reconstruction uses the FULL analytic kernel (~5·τ_decay), not the ±5 s
+  display slice, so the tail isn't clipped (`doubleExpCausalFull`, `reconstructParametric`). ROI-1
+  reconstruction R² −0.062 → **−0.030** (the residual is honest decoupling, not clipping).
+- **Tab 2 SLICE VIEWER built** (`src/lib/Tab2.svelte`): column selector over all ROI columns (col 1 =
+  target, §4); **both recovery methods** reachable (free-vector / parametric toggle); the four §3
+  checks per method; **ADR-0024** overlay amplitude toggle (shared-y default + normalized, unmissably
+  badged, kernel peak amp numeric in both modes); **ADR-0025** indicator strip (τ-railed,
+  peak-at-boundary — neutral facts), railed-parametric output **default-hidden + reversible "show
+  anyways"**, free-vector never auto-flagged.
+- **Consolidated data panel**: ONE calcium trace serving both the actual-vs-predicted reconstruction
+  (upper ~2/3, shared dF/F₀ y) AND coupling context for a **tunable-window spike histogram** (lower
+  ~1/3, own count y, pinned axis so empty AP stretches stay visible). Window range dt→5 s, default
+  1 s; at the dt floor the band **is** the §13 recovery input. Display re-bin (`rebinCounts`) **never
+  feeds recovery** (purity test green). Rotated y-axis titles (`Plot.svelte` `yLabel`).
+- **New tested core helpers** (`src/lib/core/readout.js`, all pure/framework-free): `tauRailed`,
+  `peakAtBoundary`, `normalizeUnitPeak`, `rebinCounts`; `PARAM_BOUNDS` exported from
+  deconvolve-parametric.js. (+34 `test:core` checks across the session, 131→165.)
+- **9-column re-fan RECON (read-only, Tony-confirmed)** — `darkroom/fig_refan_file80.{mjs,py}` +
+  `_table.csv`: 9/9 columns analyzable, 0 ADR-0022 skips (140 spikes shared). Surfaced free-vector +
+  parametric + STA per column, cross-method spread, baseline-tilt indicator. **7/9 parametric fits
+  railed** (τ at bound — the ADR-0021 loud-failure), several free-vector kernels boundary-peaked. No
+  verdicts asserted (ADR-0018). This was the evidence behind ADR-0024 and ADR-0025.
+
+### ▶ LIVE TASK NEXT SESSION — method 3 (shape-regularized, ADR-0021) + the 9-up view
+1. **Shape-regularized recovery** — keep the Laplacian smoothness term; **add baseline-flatness +
+   acausal-energy** lag-localized terms. **Highest-scrutiny method** (ADR-0021 epistemic-risk note).
+   **Baseline strategy is an OPEN fork — see ADR-0023 (Proposed):** (a) baseline-flatness *penalty*
+   vs (b) MLspike-flavored baseline-drift *nuisance basis*; the identifiability risk (drift ⇄ long
+   τ_decay) is the central caution. **Decide ADR-0023 deliberately before/while building method 3.**
+2. **9-up small-multiples view** — the re-fan recon is read-confirmed; promote it from a darkroom
+   figure to an in-app multi-column view (the slice viewer is per-column; this is the across-column
+   incidence sweep). Unblocked: methods + no-AP policy (ADR-0022) are canon.
+
+### CANON STATUS (the "needs canonizing" items from the earlier block are DONE)
+- ✅ No-AP policy → **ADR-0022** (Accepted). ✅ Window bracket → folded into **ADR-0019 §4**
+  (symmetric `round(1.0/dt)`). ✅ Overlay shared-y/twin-y → **ADR-0024** (resolved; MATLAB-figure
+  check dropped as prerequisite). ✅ Indicator/railed display → **ADR-0025**.
+
+### DEPENDENT / DOWNSTREAM (still open)
+- **Up-to-4-traces-on-one-axis** — ADR-0021 names it; the slice viewer shows ONE method's kernel + STA
+  at a time (method toggle), NOT both kernels at once. Surfacing all three recovered kernels + STA on
+  one lag axis is the unresolved design problem.
+- **Tab 1 vs Tab 2 spike representation differ** (flagged, not resolved): Tab 1 spike row = snap+unit
+  (height always 1, ADR-0001 teaching default); Tab 2 = binned-count (height = count, §13 validation).
+  Deliberate-distinction question for Tony to rule on.
+- Blank STA **"peak ___ s"** field; broader **UI-issues bucket**.
+
+### PARKED (unchanged)
+- **Folder move `golden/` → `data/`** (MATLAB-coordinated, prompt drafted not sent); keep the 4
+  acceptance fixtures (80/98/13/250) as a named hashed subset.
+- **Long-parked:** `fig_oracle.png` → `docs/img/` (consent + README entry); **dt-only divergence
+  warning UI** (ADR-0012); **Savitzky–Golay baseline-independent display** idea (n/a-tilt symptom;
+  now also relevant to ADR-0023's display-only baseline strand).
+
+---
+
+## ▶ RESUME — 2026-06-25 (HISTORY — ADR-0021 landed; superseded by the late-2026-06-25 block above)
+
+**The frontier at the time.** The reconciled ROI-1 read (✓ RECONCILED banner) and the 2026-06-23 block
 below remain canon/history; this is the build state on top of them.
 
 ### DONE THIS SESSION
