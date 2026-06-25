@@ -235,6 +235,17 @@ never scored as "no clean kernel." A silent recording is not evidence of decoupl
 absence of the input the question is even asked of. This is common, not a corner case: **33 fully
 silent + 22 partially silent** across the 72-file batch.
 
+**How the readout states all this: mechanical facts, never a success/failure verdict
+([ADR-0025](docs/adr/0025-tab2-indicator-column-railed-fit-display.md)).** The machinery-gated /
+fit-reported split has a direct UI consequence — the Tab 2 readout reports **computed mechanical
+facts** (a parametric τ pinned to its bound; a kernel whose max sample sits at the window edge, so its
+peak-lag number is not a transient peak) through a **neutral indicator column**, and **never
+pronounces "this fit failed" or "there is no kernel."** That judgment is the human's (ADR-0011 /
+ADR-0014). Even the convenience of **default-hiding railed-parametric output stays reader-reversible**
+("show anyways"); the **free-vector method never receives an automated failure flag at all**, because
+asserting decon failure *is* the coupling verdict the tool exists to leave to the human. Facts for the
+eye; verdicts to the human.
+
 **Empirical confirmation — ROI 1 is a real-data positive control.**
 On `APs_v1_20241004_80.mat`, ROI 1 yields a recoverable kernel: the lab `deconvreg`
 produces a clean transient with its peak at +0.6 s, and our regularized recovery
@@ -566,7 +577,10 @@ here?" or "does it affect the other tab?":
 - **Tab-local** — deconvolution method, regularization, ROI selection: only meaningful in Tabs 2/3.
   The **kernel/STA overlay amplitude-axis mode** (shared-y default vs. normalized-overlay opt-in;
   twin-y rejected) is also tab-local and display-only — a Tab 2 readout control
-  ([ADR-0024](docs/adr/0024-kernel-sta-overlay-display-mode.md)).
+  ([ADR-0024](docs/adr/0024-kernel-sta-overlay-display-mode.md)). So is the Tab 2 **indicator column
+  of mechanical facts** (τ-railed, peak-at-boundary — neutral, never pass/fail) and the
+  **"show anyways" toggle** that reverses the default-hide of railed-parametric output
+  ([ADR-0025](docs/adr/0025-tab2-indicator-column-railed-fit-display.md)).
 - **Global-but-default-off** — noise injection (AWGN, slider 0–10× cohort-typical σ, default 0/off;
   [ADR-0015](docs/adr/0015-harness-noise-model.md)).
 
