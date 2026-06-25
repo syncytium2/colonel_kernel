@@ -16,7 +16,7 @@ export {
 export { kernelDiagnostics, compareKernels, preZeroBaselineMean } from './kernel-diagnostics.js';
 // Tab 2 readout display helpers (ADR-0024 normalization, ADR-0025 indicator facts) —
 // pure, framework-free, so the Svelte readout stays wiring and the logic is test-covered.
-export { tauRailed, peakAtBoundary, normalizeUnitPeak } from './readout.js';
+export { tauRailed, peakAtBoundary, normalizeUnitPeak, rebinCounts } from './readout.js';
 // STA (ADR-0005): the model-free cross-method validation partner for the kernel.
 export { spikeTriggeredAverage } from './sta.js';
 // CSV ingestion (ADR-0016): one region's exported CSV → the signal contract.

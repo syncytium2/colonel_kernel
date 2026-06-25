@@ -23,7 +23,7 @@ import {
   recoverKernelParametric,
   PARAM_BOUNDS,
 } from './deconvolve-parametric.js';
-import { tauRailed, peakAtBoundary, normalizeUnitPeak } from './readout.js';
+import { tauRailed, peakAtBoundary, normalizeUnitPeak, rebinCounts } from './readout.js';
 import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
 import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './noise.js';
 import { loadCsv } from './load-csv.js';
@@ -374,6 +374,20 @@ ok('doubleExp rises off zero then is positive', decK[1] > 0 && decK[5] > 0);
   ok('normalizeUnitPeak: null/NaN preserved as null', nrm[4] === null && nrm[5] === null);
   ok('normalizeUnitPeak: input not mutated', src[3] === 2);
   ok('normalizeUnitPeak: all-zero input returned unscaled (no divide-by-zero)', normalizeUnitPeak([0, 0, 0]).every((v) => v === 0));
+
+  // rebinCounts — display-only spike re-binning. The hard constraint (display re-bin must
+  // not touch recovery) shows up here as PURITY: a fresh array, input never mutated, and
+  // the finest window reproduces the recovery input exactly.
+  const frameCounts = [0, 1, 2, 0, 1, 0, 0, 3, 0, 1];
+  const fine = rebinCounts(frameCounts, 0.1, 0.1); // group 1 → IS the §13 recovery input
+  ok('rebinCounts: at windowS=dt reproduces the frame counts exactly', eq(fine.values, frameCounts) && fine.group === 1, `[${fine.values}]`);
+  ok('rebinCounts: windowS snapped to dt at the finest setting', Math.abs(fine.windowS - 0.1) < 1e-12);
+  ok('rebinCounts: returns a FRESH array (not the input — cannot alias the density)', fine.values !== frameCounts);
+  ok('rebinCounts: does NOT mutate the input counts', eq(frameCounts, [0, 1, 2, 0, 1, 0, 0, 3, 0, 1]));
+  const wide = rebinCounts(frameCounts, 0.1, 0.3); // group 3 → sums consecutive frames
+  ok('rebinCounts: 0.3 s window sums groups of 3 frames', eq(wide.values, [3, 1, 3, 1]) && wide.group === 3, `[${wide.values}]`);
+  ok('rebinCounts: effective window = group·dt', Math.abs(wide.windowS - 0.3) < 1e-12);
+  ok('rebinCounts: total count is conserved across windows', wide.values.reduce((a, b) => a + b, 0) === frameCounts.reduce((a, b) => a + b, 0));
 }
 
 // --- CSV loader (ADR-0016) --------------------------------------------------

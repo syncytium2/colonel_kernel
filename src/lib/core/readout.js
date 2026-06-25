@@ -48,6 +48,33 @@ export function peakAtBoundary({ samples, zeroIndex }, edgeFrac = 0.1) {
 }
 
 /**
+ * DISPLAY-ONLY re-binning of the frame-grid spike counts into a wider review window, for
+ * the co-registered spike histogram. The recovery path ALWAYS consumes the frame-grid
+ * density (sdPad) — this aggregates a COPY for the eye and NEVER feeds recovery /
+ * reconstruction / STA. By construction the finest setting is loss-less:
+ *
+ *   • windowS ≈ dt  → group = 1 → the result EQUALS the input counts (a fresh copy): the
+ *     histogram IS the §13 recovery input at its finest setting.
+ *   • windowS > dt  → group = round(windowS/dt) consecutive frames are SUMMED, so a 2–5 AP
+ *     burst over ~1 s reads as one tall bar without zooming.
+ *
+ * Pure: returns a fresh `values` array and never mutates the input (so it cannot, even by
+ * accident, alter the density the recovery reads). The window snaps to an integer multiple
+ * of dt; the effective window is returned as `windowS`.
+ * @param {ArrayLike<number>} counts  frame-grid binned-count density (count-valued)
+ * @param {number} dt  frame interval (seconds)
+ * @param {number} windowS  requested review window (seconds); snapped to group·dt
+ * @returns {{ values:number[], group:number, windowS:number }}
+ */
+export function rebinCounts(counts, dt, windowS) {
+  const group = Math.max(1, Math.round(windowS / dt));
+  const nBins = Math.ceil(counts.length / group);
+  const values = new Array(nBins).fill(0);
+  for (let i = 0; i < counts.length; i++) values[(i / group) | 0] += counts[i];
+  return { values, group, windowS: group * dt };
+}
+
+/**
  * ADR-0024 — normalize a trace to unit peak for the NORMALIZED overlay mode, so
  * cross-method SHAPE is legible when a magnitude gap would swamp it under shared-y. Scales
  * by max |value| so the largest excursion maps to ±1. DISPLAY-ONLY: returns a new array,

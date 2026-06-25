@@ -31,6 +31,7 @@
     tauRailed,
     peakAtBoundary,
     normalizeUnitPeak,
+    rebinCounts,
     addAWGN,
     sigmaForLevel,
     mulberry32,
@@ -49,6 +50,12 @@
   const LOG_HI = Math.log10(LAM_HI);
   const NSWEEP = 13; // stability sweep points (geometric, 0.002→3)
 
+  // Spike-histogram review window (DISPLAY ONLY — never feeds recovery). Default 1.0 s
+  // (burst review); minimum is the frame dt (then the histogram = the §13 recovery input);
+  // max 5 s for a coarse overview.
+  const HIST_WIN_DEFAULT = 1.0;
+  const HIST_WIN_MAX = 5.0;
+
   let region = $state(null);
   let error = $state(null);
   let fileName = $state('');
@@ -63,6 +70,7 @@
   let method = $state('free'); // 'free' (ADR-0004) | 'parametric' (ADR-0021 method 2)
   let overlayMode = $state('shared'); // 'shared' (default) | 'normalized' (ADR-0024)
   let showRailed = $state(false); // ADR-0025: reveal default-hidden railed-parametric output
+  let histWinS = $state(HIST_WIN_DEFAULT); // spike-histogram review window (s), display only
 
   async function handleFiles(fileList) {
     const file = fileList && fileList[0];
@@ -110,6 +118,7 @@
     selectedCol = 0;
     method = 'free';
     showRailed = false;
+    histWinS = HIST_WIN_DEFAULT;
   }
 
   function onDrop(e) {
@@ -142,11 +151,32 @@
     return { n, N, sdPad, placed: sd.placed, dropped: sd.dropped };
   });
 
-  // The spikes-row series IS the binned-count density — the exact rasterized input the
-  // recovery and reconstruction consume (§13), not the raw event list. Bar height = spike
-  // count per frame, so a 2-count frame stands taller than a 1-count one. Sliced to the
-  // real region length (the padded tail is all zeros). Display-only view of density.sdPad.
-  const spikeCounts = $derived(density ? Array.from(density.sdPad.subarray(0, density.n)) : []);
+  // The frame-grid binned-count density, sliced to the real region — the exact §13
+  // recovery input (a display-only VIEW of density.sdPad). Re-binned below for the
+  // co-registered histogram; recovery keeps reading density.sdPad regardless.
+  const frameCounts = $derived(density ? Array.from(density.sdPad.subarray(0, density.n)) : []);
+
+  // Co-registered spike histogram — the spike train re-binned over the review window
+  // (DISPLAY ONLY, never feeds recovery). At histWinS = dt the bars ARE the recovery
+  // input; wider windows sum frames so bursts read as tall bars. Count axis is pinned
+  // [0, maxCount] so EMPTY stretches under a calcium hump stay as legible as tall ones
+  // (the decoupling read must not be auto-scaled away).
+  const histo = $derived.by(() => {
+    if (!region || !density) return null;
+    const dt = region.grid.dt;
+    const { values, group, windowS } = rebinCounts(frameCounts, dt, histWinS);
+    const centers = new Array(values.length);
+    for (let b = 0; b < values.length; b++) {
+      const start = b * group;
+      const end = Math.min(start + group, density.n) - 1;
+      centers[b] = (gridTimes[start] + gridTimes[end]) / 2;
+    }
+    let maxCount = 0;
+    for (const v of values) if (v > maxCount) maxCount = v;
+    return { centers, values, group, windowS, isFrameGrid: group === 1, maxCount: Math.max(1, maxCount) };
+  });
+  // Pin the count axis at [0, maxCount] (small headroom) so zero regions read clearly.
+  const histYRange = $derived(histo ? [0, histo.maxCount + 0.3] : null);
 
   // One noise realization for the selected ROI (region + column + noise level).
   const noisyTrace = $derived.by(() => {
@@ -472,21 +502,53 @@
     {/if}
 
     <div class="readout">
-      <!-- reconstruction (recording-time axis): spikes + actual vs predicted -->
+      <!-- PANEL 1 — co-registered calcium (upper) + spike histogram (lower). Shared
+           recording-time x only; each band keeps its OWN honest y (dF/F₀ vs count). NOT a
+           dual-axis overlay (ADR-0024 false-agreement hazard): the bands are not slid
+           against each other. Coupling/decoupling reads straight down the time axis. -->
       <div class="panel">
-        <div class="plot-label">spikes — binned count on the frame grid (recovery input; bar height = spike count, not amplitude)</div>
+        <div class="panel-head">
+          <span class="plot-label">calcium dF/F₀ over its spike train — read coupling top-to-bottom on the shared time axis, {colLabel(selectedCol)}</span>
+          <label class="histctl">
+            <span>spike window</span>
+            <input type="range" min={region.grid.dt} max={HIST_WIN_MAX} step={region.grid.dt} bind:value={histWinS} />
+            <output>{(histo ? histo.windowS : histWinS).toFixed(2)} s</output>
+          </label>
+        </div>
         <Plot
           xs={gridTimes}
-          ys={spikeCounts}
-          kind="stems"
-          color="var(--text-h)"
+          ys={traceYs}
+          color="#2a9d8f"
           {xRange}
           yAxisSize={44}
+          yLabel="dF/F₀"
           showXAxis={false}
-          height={56}
+          height={132}
         />
+        {#if histo}
+          <Plot
+            xs={histo.centers}
+            ys={histo.values}
+            kind="stems"
+            color="var(--text-h)"
+            {xRange}
+            yRange={histYRange}
+            yAxisSize={44}
+            yLabel="spikes"
+            xLabel="recording time (s)"
+            height={90}
+          />
+          <div class="plot-label sub">
+            count per {histo.windowS.toFixed(2)} s bin (count, not amplitude) ·
+            {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {region.grid.dt.toFixed(2)} s for the §13 recovery input{/if}
+          </div>
+        {/if}
+      </div>
+
+      <!-- PANEL 2 — reconstruction: actual dF/F₀ vs predicted (density ⊛ recovered kernel) -->
+      <div class="panel">
         <div class="plot-label">
-          reconstruction — actual dF/F₀ vs predicted (density ⊛ {method === 'free' ? 'free-vector' : 'parametric'} kernel), {colLabel(selectedCol)}
+          reconstruction — actual dF/F₀ vs predicted (density ⊛ {method === 'free' ? 'free-vector' : 'parametric'} kernel)
         </div>
         {#if railedHidden}
           <div class="hidden-note">
@@ -502,6 +564,7 @@
             color2="#c0392b"
             {xRange}
             yAxisSize={44}
+            yLabel="dF/F₀"
             xLabel="recording time (s)"
             height={150}
           />
@@ -513,10 +576,10 @@
         {/if}
       </div>
 
-      <!-- the overlay: kernel + STA on one shared zero-lag origin (ADR-0009 / 0024) -->
+      <!-- PANEL 3 — kernel + STA on one shared zero-lag origin (ADR-0009 / 0024) -->
       <div class="panel">
         <div class="plot-label">
-          recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag origin
+          recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag origin (ADR-0009)
           {#if overlayMode === 'normalized'}<span class="norm-badge">NORMALIZED — shape only, peaks scaled to 1; amplitude is in the readout below</span>{/if}
         </div>
         {#if railedHidden}
@@ -532,6 +595,7 @@
             xRange={kernelXRange}
             yRange={overlay.yRange}
             yAxisSize={44}
+            yLabel="amplitude (dF/F₀)"
             zeroLine
             xLabel="lag (s)"
             height={186}
@@ -546,6 +610,7 @@
             xRange={kernelXRange}
             yRange={overlay.yRange}
             yAxisSize={44}
+            yLabel="amplitude (dF/F₀)"
             zeroLine
             xLabel="lag (s)"
             height={186}
@@ -906,6 +971,39 @@
     font-size: 11px;
     color: var(--text);
     margin: 6px 0 2px;
+  }
+  .plot-label.sub {
+    margin-top: 4px;
+    opacity: 0.85;
+  }
+  .plot-label.sub strong {
+    color: var(--text-h);
+    font-weight: 600;
+  }
+  .panel-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .histctl {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-h);
+    white-space: nowrap;
+  }
+  .histctl input {
+    width: 130px;
+  }
+  .histctl output {
+    font-family: var(--mono);
+    font-size: 12px;
+    min-width: 46px;
+    text-align: right;
   }
   .legend {
     display: flex;

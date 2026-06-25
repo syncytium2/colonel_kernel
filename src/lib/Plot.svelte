@@ -23,6 +23,10 @@
     yAxisSize = null,
     showXAxis = true,
     xLabel = '',
+    // Vertical y-axis title (uPlot draws it rotated along the left gutter). Static per
+    // panel — carries the QUANTITY (e.g. "dF/F₀", "spikes / bin"); live qualifiers stay
+    // in reactive notes outside the canvas so the label never needs a re-init.
+    yLabel = '',
     // Optional overlaid second line series, sharing xs (the kernel/STA overlay:
     // STA is pre-aligned onto the kernel lag grid, NaN outside its ±window).
     ys2 = null,
@@ -77,7 +81,10 @@
       hooks,
       axes: [
         { show: showXAxis, label: xLabel || undefined },
-        yAxisSize != null ? { size: yAxisSize } : {},
+        {
+          ...(yAxisSize != null ? { size: yAxisSize } : {}),
+          ...(yLabel ? { label: yLabel, labelSize: 22, labelFont: '12px ' + getComputedStyle(document.documentElement).getPropertyValue('--sans') } : {}),
+        },
       ],
       series: [
         {},
