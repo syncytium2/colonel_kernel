@@ -260,6 +260,38 @@ availability, not about whether ROI 1 is coupled. (See
 choice for the machinery check follows from ground-truth availability, not from any
 claim that real ROIs lack kernels — `NEXT_SESSION.md`.)
 
+**Method-2 (constrained-parametric) corroboration on the positive control — figure
+confirmed (ADR-0018).** The parametric recovery
+([ADR-0021](docs/adr/0021-kernel-recovery-three-parallel-methods.md) method 2 — a causal
+double-exponential fit) is now implemented, and its file-80 ROI-1 read is **confirmed by
+Tony's eye** ([ADR-0018](docs/adr/0018-figure-gate-policy.md)). Three points join the
+positive-control record:
+
+- **Decay τ becomes a real number — the "n/a (tilt)" symptom is dissolved.** On this same
+  ROI the free-vector method (§3 above) could not fit a decay constant under the baseline
+  tilt (`tauDecayS = NaN`, shown as "n/a (tilt)"); the parametric method recovers
+  **τ_decay ≈ 2.89 s** (with τ_rise ≈ 0.23 s). This is **because the parametric kernel
+  zeroes its baseline by construction** (no additive offset term — there is no free
+  baseline to tilt), **not** because the tilt was removed from the data. The free-vector
+  bowl is unchanged and still raw (ADR-0017); the parametric method simply cannot express
+  it, so τ is always defined.
+- **Three-method peak agreement.** Peak lag: **free-vector +0.60 s, parametric +0.63 s,
+  STA +0.80 s.** The parametric peak sits on the free-vector peak; STA's slightly later
+  peak is **expected STA behavior, not disagreement** (the three-regime read of
+  [ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)). Peak amplitudes also agree:
+  the parametric kernel peak (**≈ 0.0101**) lands beside the free-vector baseline-relative
+  amplitude (**+0.0096**). A third recovery method now joins recovery + STA at the +0.6 s
+  feature.
+- **The machinery-gated / fit-reported split holds, unchanged.** The parametric
+  reconstruction R² on file-80 ROI-1 is **negative (≈ −0.06)** — dominated by the real
+  ~790 s calcium-without-spikes event and the 400–700 s reduced-gain stretch (the same
+  localized decoupling episodes above). Per [ADR-0011](docs/adr/0011-validation-gates-machinery-not-fit.md)
+  this is the **correct "low global fit, real kernel" read**, not a no-kernel verdict: a
+  clean +0.63 s transient with a finite τ is recovered *and* the global fit is poor for a
+  reason the tool exists to measure. (The parametric method's loud failure mode on
+  decoupled columns — [ADR-0021](docs/adr/0021-kernel-recovery-three-parallel-methods.md)
+  — is a feature, not a defect.)
+
 ---
 
 ## 4. The multi-ROI phenomenon (a genuine open research question)
