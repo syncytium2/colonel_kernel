@@ -2,7 +2,16 @@
 
 ## Status
 
-Proposed — draft for review.
+**Accepted** — for the **core contract**: the three-sheet workbook, the **zero-based shared origin**
+(t = 0 at experiment onset for trace, spikes, and region bounds), **regions-as-in-app definitions**,
+and the **spike-bracketed default region**. Acceptance is driven by the contract being **frozen at
+`CONTRACT VERSION 1.0`** in the shared `team_colonel_kernel` bus, with the MATLAB team building its
+exporter against v1.0.
+
+**This does not close the "Open items" below.** The open tails — CSV-path region-metadata container,
+skipped/empty-region manifest, recording-level metadata, and the soft spike-sufficiency threshold —
+remain genuinely undecided *within* this now-Accepted ADR; acceptance covers the core contract, not
+those.
 
 This **replaces the file *layout* of [ADR-0016](0016-csv-input-layout.md)** (the single-rectangle
 `time` / `spikes` / `roi1..roiN` CSV). ADR-0016 stays **Accepted**: its **offline-converter /
