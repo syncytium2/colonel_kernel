@@ -88,6 +88,13 @@ path**: it suppresses the bowl **without dictating a shape**.
 > be justified*, and **this is the method whose outputs need the most scrutiny** — it can manufacture
 > a clean-looking kernel the data didn't earn. Keep its weights visible (FOUNDATIONS §7) and its read
 > human-judged ([ADR-0014](0014-machinery-check-metric.md) / [ADR-0018](0018-figure-gate-policy.md)).
+>
+> **External corroboration of the risk.** The field's state-of-the-art spike-inference model
+> (**MLspike**) treats baseline drift as a **nuisance term it jointly estimates**, not something to
+> zero — independent evidence that a baseline-flatness *penalty* can suppress a bowl the data didn't
+> earn. A future **baseline-nuisance variant** that **jointly estimates the drift** (rather than
+> penalizing departures from flat) may be the more honest option than this penalty; recorded as a
+> candidate, not adopted here.
 
 ### Distinct from the rejected cleanup path ([ADR-0017](0017-circular-deconv-zero-padding-no-fix.md))
 - **Free-vector stays RAW** — no detrend, no windowing, no baseline removal in the recovery path
