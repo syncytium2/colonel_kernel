@@ -145,6 +145,17 @@ buffer** (see §4).
   ROIs, different time windows (e.g. baseline vs senktide kernels overlaid). **This is a v1 scope
   expansion** beyond the queued per-ROI re-fan (see Consequences).
 
+**Bracket convention — SYMMETRIC `round(1.0 / dt)`, authoritative (Decided 2026-06-25, Tony's
+call; canon).** The analysis-time bracket adds an **identical** `round(1.0 / dt)`-sample buffer on
+**both** ends — `[first_spike − round(1.0 / dt) … last_spike + round(1.0 / dt)]` samples. The legacy
+MATLAB pipeline's **incidental +1-sample trailing tail** (an off-by-one on the upper edge) is
+**deliberately NOT reproduced** — the symmetric bracket is the canon. This is **verified equivalent**
+on the file-80 ROI-1 positive control: the symmetric-bracket recovery matches the MATLAB-bracket
+recovery at **kernel Pearson 0.99995 with identical peak lag**, so the +1 tail is **cosmetic for
+recovery**. This closes the window-bracket open item; the buffer *value* (1.0 s default, `buffer_s`
+per-region override in seconds) is unchanged from the bullets above — only the **symmetry** and the
+**+1-tail non-reproduction** are pinned here.
+
 ### 5. xlsx numeric fidelity — invariant
 
 **Numeric cells (never text- or date-formatted); NaN is the empty cell.** Honored by both readers

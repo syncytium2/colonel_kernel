@@ -364,8 +364,10 @@ cell (§4); non-finite trace samples are the literal `NaN`; the pre-trim `timing
 > shared t=0 origin at experiment onset)), an
 > independent-length `spikes` sheet, and an optional `metadata` sheet of **region definitions**
 > (disjoint; overlap is a hard error). Regions are set in-app and bracketed to their spikes **at
-> analysis time** (trimming and the spike buffer move from export to app), enabling **cross-region
-> kernel comparison**; per-region spike sufficiency is **reported, not gated**. CSV (paired trace +
+> analysis time** with a **symmetric `round(1.0/dt)`-sample buffer on both ends** (trimming and the
+> spike buffer move from export to app; the MATLAB +1-sample tail is not reproduced — canon, ADR-0019
+> §4), enabling **cross-region kernel comparison**; per-region spike sufficiency is **reported, not
+> gated**. CSV (paired trace +
 > spikes files) is retained as a field-user fallback with padding banned. ADR-0016 stays Accepted —
 > its offline-converter / no-egress posture is inherited; only the layout and granularity
 > (per-region → per-recording) change.
