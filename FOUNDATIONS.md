@@ -225,6 +225,16 @@ In short: **machinery is gated; fit is reported.** A correct forward path that f
 reconstructs a *coupled* ROI and faithfully *fails* to reconstruct an *uncoupled* one is working
 exactly as intended.
 
+**Upstream of both: zero spikes is a policy skip, not a fit report
+([ADR-0022](docs/adr/0022-no-ap-silent-recording-policy.md)).** The machinery-gated / fit-reported
+split above governs regions that **have spikes**. A region with **zero APs** is upstream of fit
+entirely — there is no input to convolve, so recovery is *undefined*, not poorly-fit. Such regions
+are **skipped by policy** (flagged on read, batch-skipped, single-file → "no APs in this recording —
+deconvolution not possible"), and are **excluded from the decoupling-incidence denominator** (§4) —
+never scored as "no clean kernel." A silent recording is not evidence of decoupling; it is the
+absence of the input the question is even asked of. This is common, not a corner case: **33 fully
+silent + 22 partially silent** across the 72-file batch.
+
 **Empirical confirmation — ROI 1 is a real-data positive control.**
 On `APs_v1_20241004_80.mat`, ROI 1 yields a recoverable kernel: the lab `deconvreg`
 produces a clean transient with its peak at +0.6 s, and our regularized recovery
