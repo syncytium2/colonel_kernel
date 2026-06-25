@@ -58,16 +58,31 @@
     fileName = file.name;
     try {
       if (/\.xlsx$/i.test(file.name)) {
-        // SEAM (ADR-0019 ingest spine ready — NOT wired this pass). Routes .xlsx to
-        // the workbook reader; the dynamic import keeps SheetJS in its own chunk
-        // (code-split, FOUNDATIONS §6) so the CSV/teaching paths pay nothing.
-        // DOWNSTREAM (not built here): region-setting UI, per-region windowing into
-        // the readout, cross-region comparison, multi-ROI re-fan — see
-        // load-xlsx.js (loadWorkbook / regionsOf / windowRegion).
-        const { loadWorkbook, regionsOf } = await import('./core/load-xlsx.js');
+        // ADR-0019 xlsx path → the SAME single-ROI readout as the CSV path. The
+        // dynamic import keeps SheetJS in its own chunk (code-split, FOUNDATIONS §6)
+        // so the CSV/teaching paths pay nothing. Region selection here is a DUMB
+        // DEFAULT: the first analyzable region (or the default full-trace region when
+        // there is no metadata). DOWNSTREAM (not built here): a region picker to
+        // replace this default, cross-region comparison, multi-ROI re-fan.
+        const { loadWorkbook, regionsOf, windowRegion, regionViewToLoadedRegion } = await import(
+          './core/load-xlsx.js'
+        );
         const rec = loadWorkbook(await file.arrayBuffer(), { source: file.name });
-        region = null;
-        error = `xlsx ingest spine ready: ${rec.meta.nROIs} ROI, ${rec.meta.nSpikes} spikes, ${regionsOf(rec).length} region(s). UI wiring is downstream (not in this pass).`;
+        let chosen = null;
+        for (const rg of regionsOf(rec)) {
+          const w = windowRegion(rec, rg);
+          if (w.analyzable) {
+            chosen = w;
+            break;
+          }
+        }
+        if (!chosen) {
+          region = null;
+          error = `No analyzable region in ${file.name} (every region has fewer than 2 spikes).`;
+          return;
+        }
+        region = regionViewToLoadedRegion(chosen, { source: `${file.name} — ${chosen.name}` });
+        error = null;
         return;
       }
       const text = await file.text();

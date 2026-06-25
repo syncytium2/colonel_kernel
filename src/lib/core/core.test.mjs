@@ -20,7 +20,7 @@ import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './nois
 import { loadCsv } from './load-csv.js';
 import { spikeTriggeredAverage } from './sta.js';
 import * as XLSX from 'xlsx';
-import { loadWorkbook, windowRegion, regionsOf } from './load-xlsx.js';
+import { loadWorkbook, windowRegion, regionsOf, regionViewToLoadedRegion } from './load-xlsx.js';
 
 let passed = 0;
 let failed = 0;
@@ -429,6 +429,14 @@ ok('xlsx: empty-spikes region → non-analyzable, reason distinguishes 0', wEmpt
 // sheet-name match is case-insensitive (ADR-0019)
 const wbCase = makeXlsx({ trace: xtTrace, spikes: xtSpikes, names: { trace: 'TRACE', spikes: 'Spikes' } });
 ok('xlsx: sheet names matched case-insensitively', loadWorkbook(wbCase).meta.nROIs === 2);
+
+// adapter: RegionView → loadCsv shape (so the xlsx path feeds the existing readout)
+const adapted = regionViewToLoadedRegion(wA, { source: 'syn — A' });
+ok('xlsx adapter: loadCsv-shaped (grid/spikeTimes/rois/meta/warnings)', !!adapted.grid && !!adapted.spikeTimes && !!adapted.rois && !!adapted.meta);
+ok('xlsx adapter: meta.t0/tEnd from windowed grid edges', approx(adapted.meta.t0, wA.grid.times[0]) && approx(adapted.meta.tEnd, wA.grid.times[wA.grid.n - 1]));
+ok('xlsx adapter: meta counts + dt match the window', adapted.meta.nFrames === wA.grid.n && adapted.meta.nROIs === wA.rois.length && approx(adapted.meta.dt, wA.grid.dt));
+ok('xlsx adapter: rois[0] preserved as targeted', adapted.rois[0].id === wA.rois[0].id);
+ok('xlsx adapter: throws on a non-analyzable region', throws(() => regionViewToLoadedRegion(wB)));
 
 // machinery gates — hard errors
 ok('xlsx: missing trace sheet throws', throws(() => {

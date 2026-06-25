@@ -192,6 +192,35 @@ export function regionsOf(recording) {
 }
 
 /**
+ * Adapt an analyzable `RegionView` into the same `{grid, spikeTimes, rois, meta,
+ * warnings}` shape `loadCsv` returns, so the xlsx path feeds the existing readout
+ * with no change to it (both ingest paths converge here). The windowed grid's first
+ * / last `times` define `meta.t0` / `meta.tEnd`.
+ * @param {RegionView} rv  an analyzable region (throws if not)
+ * @param {{source?:string|null}} [opts]
+ * @returns {import('./load-csv.js').LoadedRegion}
+ */
+export function regionViewToLoadedRegion(rv, { source = null } = {}) {
+  if (!rv.analyzable) throw new Error(`region '${rv.name}' not analyzable: ${rv.reason}`);
+  const n = rv.grid.n;
+  return {
+    grid: rv.grid,
+    spikeTimes: rv.spikeTimes,
+    rois: rv.rois,
+    meta: {
+      source,
+      nFrames: n,
+      nROIs: rv.rois.length,
+      nSpikes: rv.spikeTimes.length,
+      dt: rv.grid.dt,
+      t0: rv.grid.times[0],
+      tEnd: rv.grid.times[n - 1],
+    },
+    warnings: rv.warnings,
+  };
+}
+
+/**
  * @typedef {Object} RegionView
  * @property {string} name
  * @property {number} startS  region marker start (s)
