@@ -502,58 +502,26 @@
     {/if}
 
     <div class="readout">
-      <!-- PANEL 1 — co-registered calcium (upper) + spike histogram (lower). Shared
-           recording-time x only; each band keeps its OWN honest y (dF/F₀ vs count). NOT a
-           dual-axis overlay (ADR-0024 false-agreement hazard): the bands are not slid
-           against each other. Coupling/decoupling reads straight down the time axis. -->
+      <!-- CONSOLIDATED PANEL — one calcium trace serving both jobs: the actual-vs-predicted
+           reconstruction (upper ~2/3, shared dF/F₀ y) AND coupling context for the spike
+           histogram (lower ~1/3, its OWN count y). Shared recording-time x ONLY; spike
+           counts NEVER share the dF/F₀ axis (ADR-0024 false-alignment guard). The ~810 s
+           decoupling reads in one place: tall actual calcium, flat prediction, empty AP band
+           beneath. -->
       <div class="panel">
         <div class="panel-head">
-          <span class="plot-label">calcium dF/F₀ over its spike train — read coupling top-to-bottom on the shared time axis, {colLabel(selectedCol)}</span>
+          <span class="plot-label">reconstruction over the spike train — actual dF/F₀ vs predicted (density ⊛ {method === 'free' ? 'free-vector' : 'parametric'} kernel), {colLabel(selectedCol)}</span>
           <label class="histctl">
             <span>spike window</span>
             <input type="range" min={region.grid.dt} max={HIST_WIN_MAX} step={region.grid.dt} bind:value={histWinS} />
             <output>{(histo ? histo.windowS : histWinS).toFixed(2)} s</output>
           </label>
         </div>
-        <Plot
-          xs={gridTimes}
-          ys={traceYs}
-          color="#2a9d8f"
-          {xRange}
-          yAxisSize={44}
-          yLabel="dF/F₀"
-          showXAxis={false}
-          height={132}
-        />
-        {#if histo}
-          <Plot
-            xs={histo.centers}
-            ys={histo.values}
-            kind="stems"
-            color="var(--text-h)"
-            {xRange}
-            yRange={histYRange}
-            yAxisSize={44}
-            yLabel="spikes"
-            xLabel="recording time (s)"
-            height={90}
-          />
-          <div class="plot-label sub">
-            count per {histo.windowS.toFixed(2)} s bin (count, not amplitude) ·
-            {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {region.grid.dt.toFixed(2)} s for the §13 recovery input{/if}
-          </div>
-        {/if}
-      </div>
-
-      <!-- PANEL 2 — reconstruction: actual dF/F₀ vs predicted (density ⊛ recovered kernel) -->
-      <div class="panel">
-        <div class="plot-label">
-          reconstruction — actual dF/F₀ vs predicted (density ⊛ {method === 'free' ? 'free-vector' : 'parametric'} kernel)
-        </div>
         {#if railedHidden}
           <div class="hidden-note">
             Parametric fit railed (τ at bound) — reconstruction hidden by default.
             <button class="linkbtn" onclick={() => (showRailed = true)}>Show anyways</button>
+            <span class="sta-still">spike train still shown below.</span>
           </div>
         {:else}
           <Plot
@@ -565,13 +533,31 @@
             {xRange}
             yAxisSize={44}
             yLabel="dF/F₀"
-            xLabel="recording time (s)"
-            height={150}
+            showXAxis={false}
+            height={172}
           />
           <div class="legend">
             <span class="key"><i style="background:#2a9d8f"></i>actual dF/F₀</span>
             <span class="key"><i style="background:#c0392b"></i>predicted</span>
             <span class="agree">reconstruction R² {f(active.r2)} — reported, not gated (§3)</span>
+          </div>
+        {/if}
+        {#if histo}
+          <Plot
+            xs={histo.centers}
+            ys={histo.values}
+            kind="stems"
+            color="var(--text-h)"
+            {xRange}
+            yRange={histYRange}
+            yAxisSize={44}
+            yLabel="count"
+            xLabel="recording time (s)"
+            height={104}
+          />
+          <div class="plot-label sub">
+            spikes — count per {histo.windowS.toFixed(2)} s bin (count, not amplitude) ·
+            {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {region.grid.dt.toFixed(2)} s for the §13 recovery input{/if}
           </div>
         {/if}
       </div>
