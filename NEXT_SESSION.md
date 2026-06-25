@@ -31,7 +31,7 @@ sample fixtures, and per-team status logs.
 
 ---
 
-## ▶ RESUME — 2026-06-25 (xlsx ingest spine built + wired; canonize bracket + no-AP policy next)
+## ▶ RESUME — 2026-06-25 (ADR-0021 landed; implement three-method recovery next)
 
 **The current frontier.** The reconciled ROI-1 read (✓ RECONCILED banner) and the 2026-06-23 block
 below remain canon/history; this is the build state on top of them.
@@ -53,32 +53,44 @@ below remain canon/history; this is the build state on top of them.
   `darkroom/fig_xlsx_file80_roi1.png` + `darkroom/xlsx_equiv_file80.mjs`.
 - **MATLAB batch:** 72/72 workbooks exported + integrity-checked in the shared bus;
   `if2_export_workbook.m` committed (`ef3ac30`).
+- **ADR-0021 — committed on `master` (`cba7140`, Accepted):** kernel recovery as **three parallel
+  methods** (free-vector / constrained-parametric / shape-regularized), spread-is-diagnostic;
+  canonizes the *design* only (implementation incremental). README row + FOUNDATIONS §2 cross-ref.
 
-### DECIDED, NEEDS CANONIZING
-1. **Window bracket** (resolve into ADR-0019 or a new ADR). Analysis-time windowing uses a
-   **symmetric `round(1.0/dt)` bracket each side of the spike span.** The old MATLAB export-time trim
-   carried an asymmetric **+1 trailing sample**; that was incidental and is **NOT reproduced — the
-   app's symmetric bracket is authoritative (Tony's call, 2026-06-25).** Evidence: file-80 ROI-1, CSV-path `tEnd 1132.21`
-   (last+11) vs xlsx-path `tEnd 1132.11` (last+10) — a **1-sample tail**, kernel corr **0.99995**,
-   peak lag identical. **Benign and characterized**, not a bug.
-2. **No-AP policy** (candidate ADR). A file/region with **no APs is non-analyzable by definition** —
-   no input to deconvolve, so windowing it is pointless. Behavior: **flag on read.** Batch mode →
-   **skip entirely** (contributes nothing to the incidence report). User-selected single-file mode →
-   load enough to tell the user *"no APs in this recording — deconvolution not possible"*, not a
-   generic error. **Supersedes** the earlier (wrong) marker-bounded-windowing idea for silent cells.
-   Covers the **33 whole-file zero-spike** cases in the batch (silent targeted cell; matches the
-   spikes-repair tally — real, not an export bug) and **22 partially-analyzable** files (APs in some
-   regions, none in others — per-region `zeroSpkRegions` in `golden/_batch_summary_v1.csv`).
+### ▶ LIVE TASK NEXT SESSION — implement the three-method recovery (ADR-0021)
+ADR-0021 is **canon (`cba7140`, Accepted — design decided, implementation incremental).**
+Implementation is the work, **in order**:
+1. **Constrained-parametric** — double-exponential (`τ_rise` / `τ_decay` / amp), **anchored t=0, zero
+   baseline by construction**; nonlinear LSQ fit of `density ⊗ kernel(θ)` to the trace over θ.
+   Returns the ADR-0009 `{samples, zeroIndex, dt, times}` contract. **Eyeball-verify against file-80
+   ROI-1 (ADR-0018) before proceeding** — expect decay τ to become a **real number** (dissolves
+   "n/a (tilt)") and a reconstruction that **doesn't carry the bowl**.
+2. **Shape-regularized** — keep the Laplacian smoothness term; **add baseline-flatness +
+   acausal-energy** terms. **Highest-scrutiny method** per the ADR-0021 epistemic-risk note.
+
+Free-vector (method 1) is **already done; never discarded.**
+
+### ALSO NEEDS CANONIZING (before / around the implementation)
+- **No-AP policy → its own ADR** (candidate, not written). Flag-on-read; **batch-skip**; user-selected
+  single-file → *"no APs in this recording — deconvolution not possible."* Covers the **33 silent-cell
+  files + 22 partial** (per-region `zeroSpkRegions`, `golden/_batch_summary_v1.csv`).
+- **Window bracket → fold into ADR-0019 or a short follow-up ADR.** Symmetric `round(1.0/dt)` bracket
+  is **authoritative** (Tony's call 2026-06-25; MATLAB's incidental +1 tail not reproduced — file-80
+  corr 0.99995, peak lag identical). **Decided, not yet canonized.**
+
+### DEPENDENT / DOWNSTREAM
+- **9-column re-fan** (the incidence sweep) — **gated on** the methods + the no-AP policy being canon.
+- **UI:** ADR-0021 creates the **up-to-4-traces-on-one-axis** problem; the unresolved kernel/STA
+  overlay **shared-y vs twin-y**; the blank STA **"peak ___ s"** field; a broader **UI-issues bucket**.
 
 ### PARKED
-3. **Folder move (MATLAB-owned, PROTOCOL §2 — coordinated, prompt drafted not sent).** `golden/` now
-   holds the full 72-file export, overloading "golden" (curated fixtures vs production dataset).
-   Proposed: move the 72-file export to `data/` alongside the archive; keep the **4 acceptance
-   fixtures (80 / 98 / 13 / 250)** as a named, hashed subset the `xlsx-acceptance` script binds to by
-   name. App-side change is trivial (`GOLDEN_DIR` default + 4 fixture paths).
-- Carried open items: stale FOUNDATIONS §5 "absolute recording time" wording (flagged `bfc9774`,
-  standalone fix pending); kernel/STA overlay **shared-y vs twin-y**; the two long-parked items
-  (`fig_oracle.png` → `docs/img/`, the Savitzky–Golay baseline-independent display).
+- **Folder move `golden/` → `data/`** (MATLAB-coordinated, prompt drafted not sent) — move the 72-file
+  export to `data/`; keep the **4 acceptance fixtures (80 / 98 / 13 / 250)** as a named, hashed subset
+  the `xlsx-acceptance` script binds to by name. App-side trivial (`GOLDEN_DIR` default + 4 paths).
+- **FOUNDATIONS §5 "absolute recording time"** stale wording (flagged `bfc9774`, standalone fix).
+- **Long-parked:** `fig_oracle.png` → `docs/img/` (consent + README entry); **dt-only divergence
+  warning UI** (ADR-0012); **Savitzky–Golay baseline-independent display** idea (motivated by the
+  n/a-tilt symptom).
 
 ---
 
