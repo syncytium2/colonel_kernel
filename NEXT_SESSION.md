@@ -7,6 +7,23 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## 🔗 MATLAB ⇄ colonel_kernel data handoff — SHARED BUS
+The data producer (MATLAB repo `interface2`) and this team coordinate via a shared
+Dropbox folder both sides read/write: **`<Dropbox>/Richard DeFazio/team_colonel_kernel/`**
+(read its `README.md` + `CHANGELOG.md` first). It holds the `.xlsx` input contract
+mirror (`contract/`, canonical = our ADR-0019), a validation checklist, `golden/`
+sample fixtures, and per-team status logs.
+- **Producer status:** source archive repaired (72/72) and ready; was blocked on us.
+- **Decisions — RESOLVED & LANDED:** clock-origin (**zero-based, one shared t=0 origin at
+  experiment onset**) and spike semantics resolved in **ADR-0019, now authored AND committed to
+  master (`c4b7909`)**; the **CONTRACT VERSION is frozen at 1.0** in the Dropbox mirror (stamped in
+  `contract/export_contract.md`, `CHANGELOG.md`, and `status/app_team.md`). **The MATLAB exporter is
+  unblocked** — build against v1.0.
+- **Awaited from MATLAB:** the v1.0 `.xlsx` exporter and the two `golden/` acceptance workbooks
+  (high-firing `20241121a_98`, empty-spikes `20240708_13`) to validate our reader against.
+
+---
+
 ## ▶ RESUME — 2026-06-23 (Tab 2 single-ROI slice committed; re-fan is next)
 
 **The current frontier.** The reconciled ROI-1 read below (✓ RECONCILED banner) is canon; this is
