@@ -564,6 +564,9 @@ here?" or "does it affect the other tab?":
 - **Global** — the timebase (sample rate / window length), see [ADR-0002](docs/adr/0002-global-timebase.md).
   The **kernel is likely global too** (so it can be carried between tabs) — *TBD when built.*
 - **Tab-local** — deconvolution method, regularization, ROI selection: only meaningful in Tabs 2/3.
+  The **kernel/STA overlay amplitude-axis mode** (shared-y default vs. normalized-overlay opt-in;
+  twin-y rejected) is also tab-local and display-only — a Tab 2 readout control
+  ([ADR-0024](docs/adr/0024-kernel-sta-overlay-display-mode.md)).
 - **Global-but-default-off** — noise injection (AWGN, slider 0–10× cohort-typical σ, default 0/off;
   [ADR-0015](docs/adr/0015-harness-noise-model.md)).
 

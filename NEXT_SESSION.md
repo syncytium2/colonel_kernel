@@ -74,8 +74,10 @@ Free-vector (method 1) is **already done; never discarded.**
 
 ### DEPENDENT / DOWNSTREAM
 - **9-column re-fan** (the incidence sweep) — **gated on** the methods + the no-AP policy being canon.
-- **UI:** ADR-0021 creates the **up-to-4-traces-on-one-axis** problem; the unresolved kernel/STA
-  overlay **shared-y vs twin-y**; the blank STA **"peak ___ s"** field; a broader **UI-issues bucket**.
+- **UI:** ADR-0021 creates the **up-to-4-traces-on-one-axis** problem; the kernel/STA overlay
+  **amplitude-axis mode is now RESOLVED — shared-y default + normalized-overlay toggle, twin-y rejected
+  ([ADR-0024](docs/adr/0024-kernel-sta-overlay-display-mode.md))**; the blank STA **"peak ___ s"**
+  field; a broader **UI-issues bucket**.
 
 ### PARKED
 - **Folder move `golden/` → `data/`** (MATLAB-coordinated, prompt drafted not sent) — move the 72-file
@@ -125,8 +127,10 @@ verified single-ROI card across columns (column 1 highlighted, §4 strip), not n
   first-derivative display idea (never in the recovery path).
 
 **STILL OPEN (unchanged):**
-- Kernel/STA overlay **shared-y vs twin-y** — check the MATLAB figure for which convention; left
-  shared-y for now (the reconstruction panel carries the check-2 evidence regardless).
+- Kernel/STA overlay **shared-y vs twin-y** — **RESOLVED ([ADR-0024](docs/adr/0024-kernel-sta-overlay-display-mode.md)):**
+  shared-y default + normalized-overlay toggle, twin-y rejected (false-agreement risk). Decided from
+  the re-fan magnitude-gap evidence + the false-agreement argument; **the MATLAB-figure check is no
+  longer a prerequisite.**
 - Long-parked (not commitments): promote `fig_oracle.png` → `docs/img/` (consent + README entry);
   the Savitzky–Golay / first-derivative baseline-independent display idea (see (c)).
 
