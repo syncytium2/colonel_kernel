@@ -7,12 +7,6 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
-## ⚠ Canon cleanup pending
-- FOUNDATIONS §5 ADR-0019 blockquote (~line 282) still says "true absolute recording time" —
-  contradicts zero-based canon. Fix in a standalone commit.
-
----
-
 ## 🔗 MATLAB ⇄ colonel_kernel data handoff — SHARED BUS
 The data producer (MATLAB repo `interface2`) and this team coordinate via a shared
 Dropbox folder both sides read/write: **`<Dropbox>/Richard DeFazio/team_colonel_kernel/`**
