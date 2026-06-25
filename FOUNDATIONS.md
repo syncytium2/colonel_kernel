@@ -46,6 +46,11 @@ The tool is organized as **three tabs**, each solving this relationship for a di
   regularization and a symmetric retained-lag kernel (see [ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)),
   and is always read against an independent STA validation partner (see
   [ADR-0005](docs/adr/0005-tab2-sta-validation-partner.md)).
+  > **Recovery is being extended to three parallel methods ([ADR-0021](docs/adr/0021-kernel-recovery-three-parallel-methods.md), proposed).** The
+  > existing regularized least squares (above) is the **free-vector** method; alongside it sit a
+  > **constrained-parametric** double-exponential fit and a **shape-regularized** variant. All three
+  > are retained — **the spread between them is diagnostic** (coupled → converge; decoupled → diverge).
+  > Build order is incremental (free → parametric → shape-regularized); the design is canon now.
 
 **The scientifically important job of Tab 2 is not just "recover the kernel" — it is to report
 whether a clean kernel exists at all.** Research indicates spikes and calcium signal can be
