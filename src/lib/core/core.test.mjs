@@ -15,6 +15,11 @@ import {
   extractSymmetric,
   recoverKernel,
 } from './deconvolve.js';
+import {
+  doubleExpCausal,
+  forwardConvolveCausal,
+  recoverKernelParametric,
+} from './deconvolve-parametric.js';
 import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
 import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './noise.js';
 import { loadCsv } from './load-csv.js';
@@ -234,6 +239,65 @@ const plDg = kernelDiagnostics(extractSymmetric(plantedFull, 50, 0.1));
 ok('oracle(mini): peak lag recovered within ½ sample', Math.abs(recDg.peakLagS - plDg.peakLagS) <= 0.05 + 1e-9, `rec=${recDg.peakLagS} pl=${plDg.peakLagS}`);
 ok('oracle(mini): peak amp within 5%', Math.abs(recDg.peakAmp / plDg.peakAmp - 1) <= 0.05, `ratio=${recDg.peakAmp / plDg.peakAmp}`);
 ok('oracle(mini): acausal ratio < 0.02', recDg.acausalRatio < 0.02, `ratio=${recDg.acausalRatio}`);
+
+// --- constrained-parametric recovery (ADR-0021 method 2) --------------------
+// doubleExpCausal: anchored t=0 (lag-0 value is exactly 0), rises then decays.
+const decK = doubleExpCausal({ tauRise: 0.1, tauDecay: 1.0, amp: 1 }, 50, 0.1);
+ok('doubleExp k[0]=0 (zero baseline, anchored t=0)', decK[0] === 0);
+ok('doubleExp rises off zero then is positive', decK[1] > 0 && decK[5] > 0);
+{
+  // analytic peak lag t* = ln(τd/τr)·(τr·τd)/(τd−τr) ≈ 0.2558 s for (0.1, 1.0)
+  let bi = 0;
+  for (let i = 1; i < decK.length; i++) if (decK[i] > decK[bi]) bi = i;
+  ok('doubleExp peak near analytic t* (~0.26 s)', Math.abs(bi * 0.1 - 0.2558) <= 0.1, `peak=${bi * 0.1}`);
+}
+
+// forwardConvolveCausal: a single unit spike stamps the kernel at the spike index.
+{
+  const d = new Float64Array(8); d[2] = 1;
+  const kk = Float64Array.from([0, 0.5, 0.25]);
+  const y = forwardConvolveCausal(d, kk, 8);
+  ok('forwardConvolveCausal stamps causal kernel at spike',
+    y[2] === 0 && y[3] === 0.5 && y[4] === 0.25 && y[0] === 0,
+    `[${Array.from(y)}]`);
+}
+
+// Recover a KNOWN planted double-exponential from a synthetic trace. Plant θ,
+// forward-convolve a binned-count density with it, then fit and confirm θ + the
+// kernel contract come back within tolerance.
+{
+  const dtP = 0.1;
+  const wsP = 50;                       // ±5 s window → kernel length 101
+  const Mp = 1024;
+  const gP = makeGrid({ sampleRate: 10, duration: Mp / 10, t0: 0 });
+  const densP = rasterize([12, 12, 27, 41, 63, 78, 95], gP, { amplitudeMode: 'binned-count' }).samples;
+  const truth = { tauRise: 0.18, tauDecay: 1.4, amp: 0.22 };
+  const truthK = doubleExpCausal(truth, wsP, dtP);
+  const tracePlanted = forwardConvolveCausal(densP, truthK, Mp);
+  const fitRes = recoverKernelParametric(tracePlanted, densP, { windowSamples: wsP, dt: dtP });
+
+  // (1) ADR-0009 contract shape.
+  ok('parametric: contract length 2·ws+1', fitRes.samples.length === 2 * wsP + 1);
+  ok('parametric: zeroIndex = ws, dt carried', fitRes.zeroIndex === wsP && approx(fitRes.dt, dtP));
+  ok('parametric: times centered at zeroIndex', approx(fitRes.times[wsP], 0) && approx(fitRes.times[wsP + 1], dtP) && approx(fitRes.times[wsP - 1], -dtP));
+  // (2) zero baseline by construction (lag-0 sample is exactly 0).
+  ok('parametric: zero baseline at lag 0', fitRes.samples[wsP] === 0);
+  // (3) causal — every negative-lag sample is identically zero.
+  let negAllZero = true;
+  for (let i = 0; i < wsP; i++) if (fitRes.samples[i] !== 0) negAllZero = false;
+  ok('parametric: causal (negative lags all zero)', negAllZero);
+  const pDg = kernelDiagnostics(fitRes);
+  ok('parametric: acausalRatio exactly 0 (causal by construction)', pDg.acausalRatio === 0, `ratio=${pDg.acausalRatio}`);
+  // (4) recovers the planted θ within tolerance.
+  ok('parametric: recovers τ_rise within 10%', Math.abs(fitRes.fit.theta.tauRise / truth.tauRise - 1) <= 0.1, `τr=${fitRes.fit.theta.tauRise}`);
+  ok('parametric: recovers τ_decay within 10%', Math.abs(fitRes.fit.theta.tauDecay / truth.tauDecay - 1) <= 0.1, `τd=${fitRes.fit.theta.tauDecay}`);
+  ok('parametric: recovers amp within 10%', Math.abs(fitRes.fit.theta.amp / truth.amp - 1) <= 0.1, `amp=${fitRes.fit.theta.amp}`);
+  ok('parametric: τ_decay reported as a real number (no n/a tilt)', Number.isFinite(fitRes.fit.theta.tauDecay));
+  ok('parametric: near-perfect reconstruction on noise-free plant (R²>0.99)', fitRes.fit.r2 > 0.99, `r2=${fitRes.fit.r2}`);
+  // peak lag matches the planted transient's analytic peak.
+  const tStar = (Math.log(truth.tauDecay / truth.tauRise) * (truth.tauRise * truth.tauDecay)) / (truth.tauDecay - truth.tauRise);
+  ok('parametric: peak lag matches planted (within ½ sample)', Math.abs(fitRes.fit.peakLagS - tStar) <= dtP / 2 + 1e-9, `peak=${fitRes.fit.peakLagS} t*=${tStar}`);
+}
 
 // --- CSV loader (ADR-0016) --------------------------------------------------
 // Canonical small region: dense time + roi1/roi2, ragged spikes (blank below the
