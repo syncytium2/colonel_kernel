@@ -519,17 +519,14 @@
   // The kernel-band series list. all-regions → every region's kernel (solid) + STA (dashed)
   // in its Okabe-Ito hue, the CURRENT region highlighted by a NON-color channel (full
   // opacity + thicker; others same hue, dimmed + thinner — never grey-out). current →
-  // the active method's kernel + STA. ADR-0024: normalized scales each series to unit peak
-  // for SHAPE; shared keeps true magnitude. The whole-recording kernel is NOT in the
-  // all-regions overlay (whole is not a region — ADR-0027 §3).
+  // the active method's kernel + STA. Each series is tagged with its curve TYPE so the
+  // ADR-0029 scale-target modes can pool the y-range by type. The whole-recording kernel is
+  // NOT in the all-regions overlay (whole is not a region — ADR-0027 §3 / ADR-0028 §1).
   const kernelBand = $derived.by(() => {
     if (!kernelLag) return null;
     const norm = overlayMode === 'normalized';
     const nv = (a) => (norm ? normalizeUnitPeak(a) : a);
     const series = [];
-    // Show ALL regions when multi-region AND (the toggle says all OR there is no current
-    // region to isolate — the full-view default, ADR-0028 §2). Otherwise show the current
-    // region's kernel alone. The whole-signal kernel is never drawn (ADR-0028 §1).
     const showAll = multiRegion && regionOverlays && (bandMode === 'all' || effectiveCurrentIdx == null);
     if (showAll) {
       const hi = effectiveCurrentIdx; // current region index, or null at full view (none highlighted)
@@ -539,8 +536,8 @@
         const cur = hi != null && i === hi;
         const alpha = hi == null ? 0.95 : cur ? 1 : 0.38;
         const w = cur ? 2.8 : hi == null ? 1.8 : 1.2;
-        series.push({ ys: nv(ov.kernelV), stroke: hexToRgba(hue, alpha), width: w, dash: null });
-        series.push({ ys: nv(ov.staV), stroke: hexToRgba(hue, alpha), width: Math.max(1, w - 0.8), dash: [6, 4] });
+        series.push({ ys: nv(ov.kernelV), stroke: hexToRgba(hue, alpha), width: w, dash: null, type: 'kernel' });
+        series.push({ ys: nv(ov.staV), stroke: hexToRgba(hue, alpha), width: Math.max(1, w - 0.8), dash: [6, 4], type: 'sta' });
       });
     } else if (analysis) {
       // The current region's kernel + STA. When the recording has metadata regions, the
@@ -551,10 +548,18 @@
       const hue = hasRegions && effectiveCurrentIdx != null ? regionColor(effectiveCurrentIdx) : null;
       const kColor = hue ?? '#7b2ff7';
       const sColor = hue ?? '#e76f51';
-      if (kv) series.push({ ys: nv(kv), stroke: kColor, width: 2.4, dash: null });
-      series.push({ ys: nv(sv), stroke: sColor, width: hue ? 1.8 : 2, dash: hue ? [6, 4] : null });
+      if (kv) series.push({ ys: nv(kv), stroke: kColor, width: 2.4, dash: null, type: 'kernel' });
+      series.push({ ys: nv(sv), stroke: sColor, width: hue ? 1.8 : 2, dash: hue ? [6, 4] : null, type: 'sta' });
     }
-    return { lag: kernelLag, series, yRange: rangeOf(series.map((s) => s.ys)) };
+    // ADR-0029 scale targets — ONE shared axis; the mode only chooses whose range sets it.
+    // kernels/sta pool by curve TYPE across regions; shared/normalized pool all curves. A
+    // type with no curves (e.g. railed-hidden kernel) falls back to all so the axis never empties.
+    const byType = (t) => series.filter((s) => s.type === t).map((s) => s.ys);
+    let yRange;
+    if (overlayMode === 'kernels') yRange = rangeOf(byType('kernel')) ?? rangeOf(series.map((s) => s.ys));
+    else if (overlayMode === 'sta') yRange = rangeOf(byType('sta')) ?? rangeOf(series.map((s) => s.ys));
+    else yRange = rangeOf(series.map((s) => s.ys)); // shared-y and normalized span all curves
+    return { lag: kernelLag, series, yRange };
   });
   // uPlot fixes its series count at init, so remount the band Plot ({#key}) when the count/
   // config changes. Value-only changes update in place.
@@ -701,13 +706,15 @@
                 <button class:on={method === 'parametric'} onclick={() => (method = 'parametric')}>Parametric</button>
               </div>
             </div>
-            <div class="field">
+            <label class="field">
               <span>Overlay scale</span>
-              <div class="seg" role="group" aria-label="Overlay amplitude scale">
-                <button class:on={overlayMode === 'shared'} onclick={() => (overlayMode = 'shared')}>Shared-y</button>
-                <button class:on={overlayMode === 'normalized'} onclick={() => (overlayMode = 'normalized')}>Normalized</button>
-              </div>
-            </div>
+              <select bind:value={overlayMode} aria-label="Overlay amplitude scale">
+                <option value="shared">Shared-y (all curves)</option>
+                <option value="normalized">Normalized (shape only)</option>
+                <option value="kernels">Scale to kernels</option>
+                <option value="sta">Scale to STA</option>
+              </select>
+            </label>
             {#if hasRegions}
               <div class="field">
                 <span>Kernel band</span>
@@ -935,7 +942,9 @@
             {:else}
               recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag origin (ADR-0009)
             {/if}
-            {#if overlayMode === 'normalized'}<span class="norm-badge">NORMALIZED — shape only, peaks scaled to 1; amplitude is in the readout</span>{/if}
+            {#if overlayMode === 'normalized'}<span class="norm-badge">NORMALIZED — shape only, peaks scaled to 1; amplitude is in the readout</span>
+            {:else if overlayMode === 'kernels'}<span class="norm-badge">AXIS: KERNELS — STA overflows honestly (one shared axis, ADR-0029)</span>
+            {:else if overlayMode === 'sta'}<span class="norm-badge">AXIS: STA — kernels sit small on the same axis (ADR-0029)</span>{/if}
           </span>
         </div>
         {#if railedHidden && !bandShowsAll}
