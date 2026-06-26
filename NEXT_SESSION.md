@@ -46,6 +46,62 @@ sample fixtures, and per-team status logs.
 
 ---
 
+## ▶ RESUME — 2026-06-26 — Tab 2 became a live instrument (ADR-0026 layout + interaction)
+
+This session turned the Tab 2 single-column slice viewer into a usable reading instrument: a
+workflow-staged layout plus a linked cursor and view-only zoom. **Every piece was eyeball-confirmed by
+Tony** (figure-gate, ADR-0018). The 2026-06-25 block below remains the build state this sits on.
+
+### DONE THIS SESSION
+- **ADR-0026 layout** (canon `81bc84f`; FOUNDATIONS §11.4 settled for Tab 2): workflow-staged **left
+  rail** (~300px) holding file line + summary + Settings + a default-collapsed **Advanced** fold
+  (λ/noise) + the **four §3 checks relocated** as a compact label:value readout ("numbers; figures are
+  the instrument"); right column = **three co-equal-height plot bands** (278px each). **Spike raster
+  promoted to first-class** — equal absolute height, filled bars (sparse-cell legible), pinned
+  [0,maxCount] retained; retires the old ~62/38 consolidated panel.
+- **recon↔raster x co-registration fixed**: the bands shared xRange + left gutter but not the right
+  edge (uPlot reserves a right gutter only when an x-axis shows). Pinned a shared `padRight` so both
+  data regions share identical edges (455/1575) — axes lock, not merely coincide.
+- **Linked cursor** across the two recording-time bands (uPlot `cursor.sync`, matched on **DATA-x** not
+  pixel). Kernel/STA band **excluded** (lag axis).
+- **Cursor value-dots**: actual + predicted on recon, count on raster; **count=0 is NOT suppressed**
+  (confirms genuine no-spike — the calcium-without-APs read). Kernel/STA excluded.
+- **View-only x-zoom**: drag to zoom, **single-click to reset** to full (drag never resets — click/drag
+  split on a shared 6px threshold). Synced across both recording-time bands; **x-only** (recon dF/F₀ and
+  the raster's pinned count axis untouched); kernel/STA excluded.
+- **New `Plot.svelte` props, all additive / defaults-off / Tab 1 untouched**: `fill`, `barSize`,
+  `padRight`, `syncKey`, `cursorPoints`, `zoomable` + `onZoom`.
+- **mat2csv legacy-CSV output stamped `__pre-adr0019`** (filename + `# RETIRED` first line + docstring) —
+  footgun removed; xlsx (ADR-0019) is the contract.
+- **165 `test:core` green throughout; build clean (no unused selectors).**
+
+### PARKED / HORIZON
+- **Zoom is view-only — canon boundary (`1b3cae2`).** The recovered kernel, STA, and §3 numbers are
+  whole-recording properties and do NOT recompute on the zoomed window (verified byte-identical across
+  zoom). **Windowed / per-epoch recovery** (a window-local kernel compared across epochs) is the
+  **future V2 regions tool** (ADR-0019 region metadata enables it), a **future ADR** with a
+  spike-sufficiency hazard — NOT a side-effect of zoom.
+- **NEXT obvious step Tony reached for: REGIONS — scope UNDECIDED, decide fresh before building.** Split:
+  (1) view regions as overlays, (2) navigate / zoom-to-region — both **view-only, small**; vs
+  (3) **edit boundaries** — canon: a **data-pipeline matter, NOT the app** (fenced off); (4) per-region
+  recovery — **that IS the windowed-recovery V2 tool** above.
+- **§3 checks can fall just below the fold** on the 300px rail (`overflow:auto`) — a rail-density tweak,
+  not a blocker.
+- **Dev-server build-stamp idea**: print the commit hash in-page so a stale HMR server can't impersonate
+  current code (it cost time this session). Cheap papercut fix.
+
+### STILL PENDING (unchanged — owed their own focused passes, NOT done this session)
+- **Canonize the file-80 cross-method spread** finding (col 1 only clean, **7/9 parametric railed**) as a
+  §4 data point.
+- The **792 s calcium-without-APs** and **1000 s spikes→calcium (+~0.6 s)** events are candidate **§4
+  illustrations of the partial biconditional** — surfaced cleanly by the new cursor, **not yet canonized**.
+
+### FRONTIER (unchanged)
+**Method 3 (shape-regularized; ADR-0023 baseline fork still open)** + the **9-up re-fan** across-column
+incidence view.
+
+---
+
 ## ▶ RESUME — 2026-06-25 (late) — method 2 + the Tab 2 slice viewer built; method 3 is next
 
 **The current frontier.** Method 2 (constrained-parametric) is implemented and the Tab 2 **single-
