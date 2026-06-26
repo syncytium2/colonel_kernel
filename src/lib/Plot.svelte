@@ -8,6 +8,11 @@
   // release, so a drag never triggers the single-click reset (ADR-0026).
   const ZOOM_DRAG_MIN = 6;
 
+  // Max gap (ms) between two clicks to count as a double-click (ADR-0027). A single click
+  // is held this long before it acts (reset), so it is NOT mistaken for the first half of a
+  // double-click; a second click inside the window cancels the pending single. PROVISIONAL.
+  const DBLCLICK_MS = 280;
+
   // A thin reactive uPlot wrapper. `kind` selects stems (input spike train)
   // vs. a continuous line (kernel, output). Data is passed as parallel
   // xs / ys arrays and pushed to the chart whenever it changes.
@@ -72,6 +77,11 @@
     // and the lag-axis kernel band pass nothing. The kernel band carries region identity in
     // its line colors instead (it shares no recording-time x).
     regions = null,
+    // ADR-0027: double-click-to-region. When provided (i.e. metadata regions exist), a
+    // double-click calls onRegionDblClick(dataX) — the parent zooms to the region under the
+    // cursor. ARMED ONLY when this is set: without it, a click is the immediate single-click
+    // zoom reset (no double handling). Off by default — Tab 1 / kernel band pass nothing.
+    onRegionDblClick = null,
   } = $props();
 
   let wrap;
@@ -239,25 +249,46 @@
     // must NOT reset. We measure pointer travel on the gesture that STARTED on this
     // band (mousedown on wrap, mouseup on window so a drag ending off-band still
     // resolves). onZoom(null) is a no-op at full range, so a click there does nothing.
-    let onDown = null, onUp = null;
+    let onDown = null, onUp = null, clickTimer = null;
     if (zoomable && onZoom) {
       let dx0 = 0, dy0 = 0, armed = false;
       onDown = (e) => { dx0 = e.clientX; dy0 = e.clientY; armed = true; };
       onUp = (e) => {
         if (!armed) return;
         armed = false;
-        if (Math.hypot(e.clientX - dx0, e.clientY - dy0) < ZOOM_DRAG_MIN) onZoom(null);
+        if (Math.hypot(e.clientX - dx0, e.clientY - dy0) >= ZOOM_DRAG_MIN) return; // a drag, not a click
+        // No double-click-to-region armed (no regions): immediate single-click reset (ADR-0026).
+        if (!onRegionDblClick) { onZoom(null); return; }
+        // Discriminate single vs double by DBLCLICK_MS (ADR-0027): a second click inside the
+        // window cancels the pending single and zooms to the region under the cursor; a lone
+        // click resets after the delay. The first click's data-x is what a double zooms to.
+        const dataX = clickDataX(e);
+        if (clickTimer) {
+          clearTimeout(clickTimer);
+          clickTimer = null;
+          onRegionDblClick(dataX);
+        } else {
+          clickTimer = setTimeout(() => { clickTimer = null; onZoom(null); }, DBLCLICK_MS);
+        }
       };
       wrap.addEventListener('mousedown', onDown);
       window.addEventListener('mouseup', onUp);
     }
     return () => {
       ro.disconnect();
+      if (clickTimer) clearTimeout(clickTimer);
       if (onDown) wrap.removeEventListener('mousedown', onDown);
       if (onUp) window.removeEventListener('mouseup', onUp);
       plot?.destroy();
     };
   });
+
+  /** Recording-time (data-x) under a mouse event, via the plot's over-layer origin. */
+  function clickDataX(e) {
+    if (!plot || !plot.over) return null;
+    const rect = plot.over.getBoundingClientRect();
+    return plot.posToVal(e.clientX - rect.left, 'x');
+  }
 
   function pinScale() {
     if (!plot) return;

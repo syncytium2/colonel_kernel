@@ -162,6 +162,18 @@
     zoomRange = min == null ? null : [min, max];
   }
 
+  // ADR-0027 double-click-to-region: zoom the view to the boundaries of the metadata region
+  // under the cursor (clamped to the displayed data range). A double-click off any region
+  // resets the zoom. View-only — never recomputes recovery (kernel/STA/§3 unchanged).
+  function handleRegionDblClick(dataX) {
+    const r = metaRegions.find((rg) => dataX >= rg.startS && dataX <= rg.endS);
+    if (r && xRange) {
+      zoomRange = [Math.max(r.startS, xRange[0]), Math.min(r.endS, xRange[1])];
+    } else {
+      zoomRange = null;
+    }
+  }
+
   function onDrop(e) {
     e.preventDefault();
     dragging = false;
@@ -762,6 +774,7 @@
               cursorPoints={true}
               zoomable
               onZoom={handleZoom}
+              onRegionDblClick={hasRegions ? handleRegionDblClick : null}
               regions={bandRegions}
               yLabel="dF/F₀"
               showXAxis={false}
@@ -802,6 +815,7 @@
               cursorPoints={true}
               zoomable
               onZoom={handleZoom}
+              onRegionDblClick={hasRegions ? handleRegionDblClick : null}
               regions={bandRegions}
               yLabel="count"
               xLabel="recording time (s)"
