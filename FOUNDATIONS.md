@@ -194,6 +194,30 @@ An **uncoupled** recording shows up as: implausible kernel shape + high residual
 + STA/deconv disagreement that the spike rate does *not* explain. Those four checks *are* the
 "there isn't one" verdict.
 
+### A whole-signal kernel across multiple regions is NOT informative
+
+When a recording spans more than the baseline region — i.e. it contains treatment
+epochs — a kernel recovered over the WHOLE signal is uninformative. It averages
+across heterogeneous epochs whose coupling may differ (or appear/disappear) by
+design of the experiment, producing a blend that is neither the baseline kernel nor
+any treatment kernel. It answers no scientific question.
+
+Only REGIONAL kernels/STA are informative: each is recovered over a span where the
+experimental condition is fixed, so its kernel (or its absence) is a meaningful
+read of coupling under that condition. Cross-region comparison — does the kernel
+change across epochs? — is the scientific payoff; the contaminated whole-signal
+average actively obscures it.
+
+Corollary: the tool does not render a whole-signal kernel when a recording contains
+more than one region ([ADR-0028](docs/adr/0028-regional-only-kernels-zoom-driven-selection.md)).
+A single-region (baseline-only) recording is the boundary case where the whole kernel and the
+regional kernel coincide — there, it is shown normally.
+
+This sharpens, and partly supersedes, the earlier framing of a whole-recording
+kernel as the §4 "is there any kernel at all" instrument: that role survives ONLY
+for single-region recordings. For multi-region recordings the question "is there a
+kernel?" is asked and answered per region, never globally.
+
 ### Validation gates machinery, not fit
 
 **The spike train and the calcium signal are, in many ground-truth recordings, discrepant —
