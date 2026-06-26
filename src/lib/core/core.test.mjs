@@ -30,6 +30,7 @@ import { loadCsv } from './load-csv.js';
 import { spikeTriggeredAverage } from './sta.js';
 import * as XLSX from 'xlsx';
 import { loadWorkbook, windowRegion, regionsOf, regionViewToLoadedRegion } from './load-xlsx.js';
+import { recoverRegion, spikeSufficiency } from './region-recovery.js';
 
 let passed = 0;
 let failed = 0;
@@ -618,6 +619,66 @@ ok('xlsx: metadata missing required column throws', throws(() => loadWorkbook(ma
   spikes: xtSpikes,
   metadata: [['region', 'start_s'], ['A', 0]],
 }))));
+
+// --- windowed (sub-window) recovery: recoverRegion (ADR-0027) ----------------
+// Synthetic recording with TWO disjoint epochs over one shared spike train: epoch
+// A is COUPLED (calcium = density ⊗ a known causal kernel), epoch B is DECOUPLED
+// (spikes present, trace flat). The whole-recording kernel is then the contaminated
+// AVERAGE of the two — exactly the ADR-0027 §2 setup. dt=0.1, 0..120 s (1201 frames).
+const RR_DT = 0.1, RR_NF = 1201;
+const rrTrace = [['time', 'cell']];
+const rrK = (t) => (t >= 0 ? Math.exp(-t / 1.0) - Math.exp(-t / 0.1) : 0); // peak ≈ 0.256 s
+const aSpikes = []; for (let t = 11; t < 49; t += 1.3) aSpikes.push(Number(t.toFixed(3))); // ~30 in [10,50]
+const bSpikes = []; for (let t = 71; t < 109; t += 1.3) bSpikes.push(Number(t.toFixed(3))); // ~30 in [70,110]
+const rrSamp = new Float64Array(RR_NF);
+for (const ts of aSpikes) {
+  for (let i = 0; i < RR_NF; i++) { const lag = i * RR_DT - ts; if (lag >= 0 && lag < 8) rrSamp[i] += 0.3 * rrK(lag); }
+} // epoch B contributes NO calcium (decoupled)
+for (let i = 0; i < RR_NF; i++) rrTrace.push([Number((i * RR_DT).toFixed(4)), rrSamp[i]]);
+const rrSpikesAoA = [['spikes'], ...[...aSpikes, ...bSpikes].map((t) => [t])];
+const rrMeta = [['region', 'start_s', 'end_s'], ['A', 10, 50], ['B', 70, 110]];
+const RR = loadWorkbook(makeXlsx({ trace: rrTrace, spikes: rrSpikesAoA, metadata: rrMeta }), { source: 'rr.xlsx' });
+
+const rrWA = windowRegion(RR, RR.regions[0]);
+const rrWB = windowRegion(RR, RR.regions[1]);
+const recA = recoverRegion(rrWA, { col: 0 });
+const recB = recoverRegion(rrWB, { col: 0 });
+const recWhole = recoverRegion(windowRegion(RR, { name: 'whole', startS: 0, endS: 120 }), { col: 0 });
+
+// bracketing / subset correctness (the windowRegion §4 bracket, seen through recoverRegion)
+ok('recoverRegion: epoch A selects exactly its spikes (subset)', rrWA.spikeCount === aSpikes.length, `got ${rrWA.spikeCount} vs ${aSpikes.length}`);
+ok('recoverRegion: ws = round(WIN/dt) = 50', recA.ws === 50, `ws=${recA.ws}`);
+ok('recoverRegion: n = window slice length (endIdx-startIdx+1)', recA.n === recA.window.endIdx - recA.window.startIdx + 1);
+ok('recoverRegion: buffer = round(1.0/dt) = 10 samples (ADR-0019 §4)', recA.window.bufferSamples === 10);
+
+// recovery returns valid ADR-0009 contracts for BOTH methods
+ok('recoverRegion: free-vector kernel is symmetric 2·ws+1, zeroIndex=ws', recA.fv.kernel.samples.length === 2 * recA.ws + 1 && recA.fv.kernel.zeroIndex === recA.ws);
+ok('recoverRegion: parametric kernel is symmetric 2·ws+1, zeroIndex=ws', recA.pm.kernel.samples.length === 2 * recA.ws + 1 && recA.pm.kernel.zeroIndex === recA.ws);
+ok('recoverRegion: parametric negative-lag half is identically zero (causal)', recA.pm.kernel.samples.slice(0, recA.ws).every((v) => v === 0));
+
+// the four §3 numbers are present and finite on the coupled epoch
+ok('recoverRegion §3-1 plausibility: fv peak lag + amp finite', Number.isFinite(recA.fv.peakLagS) && Number.isFinite(recA.fv.peakAmpAdj));
+ok('recoverRegion §3-2 reconstruction: fv R² + full-latent R² finite', Number.isFinite(recA.fv.r2) && Number.isFinite(recA.fv.r2Full));
+ok('recoverRegion §3-2: full-latent R² ≈ 1 (forward path inverts — machinery sane)', Math.abs(recA.fv.r2Full - 1) < 1e-3, `r2Full=${recA.fv.r2Full}`);
+ok('recoverRegion §3-3 stability: λ-sweep present (13 points)', recA.stability && recA.stability.sweep.length === 13);
+ok('recoverRegion §3-4 agreement: STA peak + Δlag fields present', 'staPeakLagS' in recA.agreement && 'dLagFvS' in recA.agreement);
+
+// the COUPLED epoch recovers the planted transient; the DECOUPLED one does not
+ok('recoverRegion: coupled epoch A parametric peak lag ≈ planted 0.256 s', Math.abs(recA.pm.peakLagS - 0.256) < 0.3, `pmPeak=${recA.pm.peakLagS}`);
+ok('recoverRegion: coupled A amplitude ≫ decoupled B (region-local distinct)', recA.fv.peakAmpAdj > 4 * Math.abs(recB.fv.peakAmpAdj), `A=${recA.fv.peakAmpAdj} B=${recB.fv.peakAmpAdj}`);
+// ADR-0027 §2: the whole-recording kernel is the CONTAMINATED AVERAGE — its amplitude
+// sits below the clean-window A kernel (B's spikes dilute the average). The GAP is signal.
+ok('recoverRegion: clean-window A amplitude > whole-recording average (ADR-0027 §2 contamination)', recA.fv.peakAmpAdj > recWhole.fv.peakAmpAdj, `A=${recA.fv.peakAmpAdj} whole=${recWhole.fv.peakAmpAdj}`);
+
+// spike sufficiency is REPORTED, never gated (ADR-0027 §4)
+ok('recoverRegion: ~30-spike epoch reported sufficient (default min 20)', recA.sufficiency.sufficient === true && recA.sufficiency.count === aSpikes.length);
+ok('recoverRegion: sufficiency flag is advisory (high minSpikes → not sufficient, still recovered)', recoverRegion(rrWA, { minSpikes: 1000 }).sufficiency.sufficient === false);
+ok('recoverRegion: a 0-spike span is reported non-analyzable, NOT thrown (ADR-0027 §4)', (() => {
+  const r = recoverRegion(windowRegion(RR, { name: 'gap', startS: 55, endS: 58 }), {});
+  return r.analyzable === false && r.sufficiency.count === 0 && r.reason.includes('0 spikes');
+})());
+ok('spikeSufficiency: below floor → not sufficient', spikeSufficiency(5, 0.1, 20).sufficient === false);
+ok('spikeSufficiency: at/above floor → sufficient', spikeSufficiency(25, 0.2, 20).sufficient === true);
 
 // --- summary ----------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);
