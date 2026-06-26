@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
 """mat2csv — the offline .mat → CSV bridge for colonel_kernel (FOUNDATIONS §5).
 
+⚠ RETIRED OUTPUT LAYOUT (read first)
+  This script emits the PRE-ADR-0019 single-file, per-region ragged CSV (the ADR-0016
+  layout). That layout is RETIRED — it silently truncated when nSpikes > nFrames
+  (file-250 senktide, −64.8%). The CURRENT input contract is the .xlsx workbook
+  (ADR-0019), which the app loads directly. Output here is now stamped — filenames carry
+  a `__pre-adr0019` suffix and every file opens with a `# RETIRED …` comment line — so it
+  cannot be mistaken for a live handoff (and loadCsv will reject it loudly). The script
+  is KEPT, not deleted: an offline .mat→CSV bridge plus CSV-as-field-fallback remain
+  useful, and the hard-won HDF5 navigation below is worth preserving. Treat its output as
+  reference, not the contract.
+
 WHY THIS EXISTS
   The app ingests CSV, not .mat (FOUNDATIONS §5: "CSV first; reading .mat directly
   in-browser is a deliberate later addition, not part of v1"). The app is also
@@ -62,6 +73,14 @@ except ImportError:
     )
 
 
+# Written as the first line of every emitted file — see the RETIRED banner above.
+# Marks the file as the retired pre-ADR-0019 layout so it can't pose as a live handoff.
+RETIRED_HEADER = (
+    "# RETIRED pre-ADR-0019 per-region layout (ADR-0016) — NOT the current contract; "
+    "the .xlsx workbook (ADR-0019) is canonical. Reference only."
+)
+
+
 def decode_name(arr):
     """MATLAB char array (uint* code points) → str."""
     try:
@@ -120,6 +139,7 @@ def write_region_csv(out_path, name, stack, timing, spikes):
     n_spikes = int(spikes.size)
     header = ["time", "spikes"] + [f"roi{i + 1}" for i in range(n_roi)]
     with open(out_path, "w", newline="") as fh:
+        fh.write(RETIRED_HEADER + "\n")
         fh.write(",".join(header) + "\n")
         for i in range(n_frames):
             row = [fmt(timing[i])]
@@ -150,7 +170,7 @@ def convert_file(path, out_dir, region_filter, dry_run):
         if dry_run:
             print(f"  {label}: {info}  (dry-run)")
             continue
-        out_path = os.path.join(out_dir, f"{stem}__{slug}.csv")
+        out_path = os.path.join(out_dir, f"{stem}__{slug}__pre-adr0019.csv")
         write_region_csv(out_path, name, stack, timing, spikes)
         print(f"  {label}: {info}\n    -> {out_path}")
         written += 1
@@ -184,7 +204,11 @@ def main(argv):
     for path in files:
         total += convert_file(path, args.out, args.region, args.dry_run)
     if not args.dry_run:
-        print(f"\nwrote {total} region CSV file(s) to {args.out}/  (gitignored — never commit)")
+        print(
+            f"\nwrote {total} region CSV file(s) to {args.out}/  (gitignored — never commit)\n"
+            "NOTE: this is the RETIRED pre-ADR-0019 layout (stamped __pre-adr0019); "
+            "the .xlsx workbook (ADR-0019) is the current contract."
+        )
 
 
 if __name__ == "__main__":
