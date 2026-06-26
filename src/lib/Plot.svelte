@@ -159,6 +159,14 @@
     // at the region start, clamped into view so a region scrolled off the left keeps its label.
     if (regions && regions.some((r) => r.label)) {
       const sans = getComputedStyle(document.documentElement).getPropertyValue('--sans') || 'sans-serif';
+      // uPlot's draw hook ctx is in DEVICE pixels (bbox/valToPos are device px and the ctx is
+      // not pre-scaled), so a CSS-px font size must be multiplied by the device pixel ratio —
+      // otherwise "12px" renders at ~6 CSS px on a 2× display (the unreadable-labels bug). 12px
+      // CSS matches the band axis-label scale (legibility is the point — ADR-0028).
+      const pr = uPlot.pxRatio || (typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1;
+      const fontPx = Math.round(12 * pr);
+      const padX = Math.round(4 * pr);
+      const padY = Math.round(4 * pr);
       hooks.draw = [
         (u) => {
           if (!regions) return;
@@ -166,16 +174,17 @@
           const L = u.bbox.left;
           const R = u.bbox.left + u.bbox.width;
           ctx.save();
-          ctx.font = '600 11px ' + sans;
+          ctx.font = '600 ' + fontPx + 'px ' + sans;
           ctx.textBaseline = 'top';
           for (const r of regions) {
             if (!r.label) continue;
             const xa = u.valToPos(r.x0, 'x', true);
             const xb = u.valToPos(r.x1, 'x', true);
             if (xb < L || xa > R) continue; // region entirely off-screen
-            const x = Math.max(L + 3, Math.min(xa + 4, R - 56));
+            const reserve = ctx.measureText(r.label).width + padX;
+            const x = Math.max(L + padX, Math.min(xa + padX, R - reserve));
             ctx.fillStyle = r.labelColor || resolveColor('var(--text-h)');
-            ctx.fillText(r.label, x, u.bbox.top + 3);
+            ctx.fillText(r.label, x, u.bbox.top + padY);
           }
           ctx.restore();
         },
