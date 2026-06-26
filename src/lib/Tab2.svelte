@@ -237,7 +237,15 @@
   // Metadata regions as low-alpha Okabe-Ito background shading on the recording-time bands —
   // always shown (zoom-driven model: regions are visible at every zoom; ADR-0028).
   const bandRegions = $derived(
-    hasRegions ? metaRegions.map((r, i) => ({ x0: r.startS, x1: r.endS, color: hexToRgba(regionColor(i), 0.13) })) : null,
+    hasRegions
+      ? metaRegions.map((r, i) => ({
+          x0: r.startS,
+          x1: r.endS,
+          color: hexToRgba(regionColor(i), 0.13),
+          label: r.name,
+          labelColor: regionColor(i),
+        }))
+      : null,
   );
 
   // The selected ROI column — in the DISPLAY region (recon trace) and the RECOVERY region (kernel).

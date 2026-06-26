@@ -154,6 +154,33 @@
       });
     }
     hooks.drawClear = drawClear;
+    // ADR-0028: in-band region LABELS, drawn on TOP of the data (the `draw` hook fires after
+    // series) so each treatment epoch is named on the plot itself, in its region hue. Anchored
+    // at the region start, clamped into view so a region scrolled off the left keeps its label.
+    if (regions && regions.some((r) => r.label)) {
+      const sans = getComputedStyle(document.documentElement).getPropertyValue('--sans') || 'sans-serif';
+      hooks.draw = [
+        (u) => {
+          if (!regions) return;
+          const { ctx } = u;
+          const L = u.bbox.left;
+          const R = u.bbox.left + u.bbox.width;
+          ctx.save();
+          ctx.font = '600 11px ' + sans;
+          ctx.textBaseline = 'top';
+          for (const r of regions) {
+            if (!r.label) continue;
+            const xa = u.valToPos(r.x0, 'x', true);
+            const xb = u.valToPos(r.x1, 'x', true);
+            if (xb < L || xa > R) continue; // region entirely off-screen
+            const x = Math.max(L + 3, Math.min(xa + 4, R - 56));
+            ctx.fillStyle = r.labelColor || resolveColor('var(--text-h)');
+            ctx.fillText(r.label, x, u.bbox.top + 3);
+          }
+          ctx.restore();
+        },
+      ];
+    }
     if (zoomable && onZoom) {
       // a completed drag-select carries a recording-time range; lift it to the
       // parent (which re-pins BOTH bands via xRange) then clear the selection. The
