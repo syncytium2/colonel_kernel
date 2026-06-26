@@ -95,6 +95,8 @@
   let showRailed = $state(false); // ADR-0025: reveal default-hidden railed-parametric output
   let histWinS = $state(HIST_WIN_DEFAULT); // spike-histogram review window (s), display only
   let advancedOpen = $state(false); // ADR-0026: λ/noise live in a default-collapsed Advanced fold (§11.1)
+  let settingsOpen = $state(true); // ADR-0028: Settings is a collapsible fold (rail density)
+  let checksOpen = $state(true); // ADR-0028: §3 checks is a collapsible fold (rail density)
   let zoomRange = $state(null); // ADR-0026 view-only x-zoom: [min,max] recording-time s, or null = full
 
   // ADR-0028 — regional-only recovery, zoom-driven region selection (no Mode toggle).
@@ -668,9 +670,12 @@
           {#if analysis && spikeContext}<br /><span class="muted">{recoveryRegion.regionName}: {spikeContext.placed} spikes · {f(spikeContext.rateHz, 3)} Hz</span>{/if}
         </p>
 
-        <!-- Settings -->
-        <div class="rail-sec">
-          <div class="rail-h">Settings</div>
+        <!-- Settings (collapsible, ADR-0028) -->
+        <div class="rail-sec" class:collapsed={!settingsOpen}>
+          <button class="rail-h toggle" aria-expanded={settingsOpen} onclick={() => (settingsOpen = !settingsOpen)}>
+            <span>Settings</span><span class="chev">{settingsOpen ? '▾' : '▸'}</span>
+          </button>
+          {#if settingsOpen}
           <div class="rail-bd">
             <label class="field">
               <span>Column</span>
@@ -704,6 +709,7 @@
               </div>
             {/if}
           </div>
+          {/if}
         </div>
 
         <!-- Advanced fold (λ + noise) — collapsed by default (§11.1 tiering) -->
@@ -741,9 +747,12 @@
           </div>
         {/if}
 
-        <!-- the four §3 checks — compact label:value readout (ADR-0026); figures lead -->
-        <div class="rail-sec checks-rail">
-          <div class="rail-h">§3 checks <span class="cap">numbers; figures are the instrument</span></div>
+        <!-- the four §3 checks — compact label:value readout (ADR-0026); collapsible (ADR-0028) -->
+        <div class="rail-sec checks-rail" class:collapsed={!checksOpen}>
+          <button class="rail-h toggle" aria-expanded={checksOpen} onclick={() => (checksOpen = !checksOpen)}>
+            <span>§3 checks <span class="cap">numbers; figures are the instrument</span></span><span class="chev">{checksOpen ? '▾' : '▸'}</span>
+          </button>
+          {#if checksOpen}
           <div class="rail-bd">
             {#if !analysis}
             <p class="ctl-note">{#if multiRegion}Double-click a shaded region to read its kernel & §3 checks.{:else}No analyzable region.{/if}</p>
@@ -803,6 +812,7 @@
             </div>
             {/if}
           </div>
+          {/if}
         </div>
       </aside>
 
