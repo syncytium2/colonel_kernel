@@ -7,6 +7,27 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## 🔭 HORIZON — view-zoom vs windowed recovery (the boundary)
+
+The Tab 2 recording-time bands have **view-only x-zoom** (ADR-0026 layout; drag to zoom, double-click
+to reset). The boundary this draws is canon and must not blur:
+
+- **Zoom is view-only.** It changes only the visible *slice* of the already-computed result. The
+  **recovered kernel, the STA, and the four §3 readout numbers are properties of the WHOLE recording
+  and do NOT recompute on the zoomed window.** Zooming to 950–1050 s shows the same kernel/STA/§3 as
+  full range — it just lets the eye reach a sub-pixel-spaced feature (e.g. a 1.0 s spike bin that is
+  ~1 px at full-recording zoom). If a future change ever makes recovery follow the zoom window, that is
+  a defect against this line.
+- **Windowed / per-epoch recovery is a NAMED FUTURE FEATURE, not a side-effect of zoom.** Recovering a
+  *window-local* kernel and comparing kernels across epochs — to measure whether spike↔calcium coupling
+  changes in time — is the **V2 regions tool** (the per-recording region metadata in
+  [ADR-0019](docs/adr/0019-tab2-input-contract-workbook-per-recording.md) exists precisely to enable
+  it). It is a **future ADR** carrying a **spike-sufficiency hazard** (a short window may hold too few
+  spikes to identify a kernel — report, don't silently fit). This horizon note **draws the boundary; it
+  does not decide that feature.**
+
+---
+
 ## 🔗 MATLAB ⇄ colonel_kernel data handoff — SHARED BUS
 The data producer (MATLAB repo `interface2`) and this team coordinate via a shared
 Dropbox folder both sides read/write: **`<Dropbox>/Richard DeFazio/team_colonel_kernel/`**
