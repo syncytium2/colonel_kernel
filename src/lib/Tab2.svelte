@@ -100,7 +100,7 @@
   // ADR-0028 — regional-only recovery, zoom-driven region selection (no Mode toggle).
   // currentRegionIdx = the zoom-selected current region (null = full view, no current). A
   // single-region recording is always current via effectiveCurrentIdx.
-  let currentRegionIdx = $state(0); // commit-A default 0; becomes null (zoom-driven) in the next commit
+  let currentRegionIdx = $state(null); // zoom-selected current region; null = full view, no current (ADR-0028 §2)
   let bandMode = $state('all'); // kernel band: 'all' (every region's kernel+STA) | 'current' (current region alone)
 
   async function handleFiles(fileList) {
@@ -139,25 +139,34 @@
     showRailed = false;
     histWinS = HIST_WIN_DEFAULT;
     zoomRange = null;
-    currentRegionIdx = 0;
+    currentRegionIdx = null;
   }
 
-  // View-only x-zoom (ADR-0026). The parent owns the displayed range and feeds it
-  // to BOTH recording-time bands (xView), so they stay co-registered at every zoom
-  // level. null resets to full range. This never touches recovery — kernel/STA/§3
-  // read the whole-recording arrays regardless of the visible window.
+  // View-only x-zoom (ADR-0026). The parent owns the displayed range and feeds it to BOTH
+  // recording-time bands (xView). A DRAG (min/max) is a manual zoom and leaves the current
+  // region untouched; a SINGLE-CLICK reset (min == null) returns to full view AND clears the
+  // current region — back to the all-regions/no-current default (ADR-0028 §2).
   function handleZoom(min, max) {
-    zoomRange = min == null ? null : [min, max];
+    if (min == null) {
+      zoomRange = null;
+      currentRegionIdx = null;
+    } else {
+      zoomRange = [min, max];
+    }
   }
 
-  // ADR-0027 double-click-to-region: zoom the view to the boundaries of the metadata region
-  // under the cursor (clamped to the displayed data range). A double-click off any region
-  // resets the zoom. View-only — never recomputes recovery (kernel/STA/§3 unchanged).
+  // ADR-0028 zoom-driven region selection: double-click a region → zoom the view to its
+  // boundaries AND make it the CURRENT region (its §3/kernel become regional, it bolds in the
+  // band). Double-click off any region resets to full view / no current. View-only on the
+  // trace; recovery follows the current region (§1-3), never a whole-signal kernel.
   function handleRegionDblClick(dataX) {
-    const r = metaRegions.find((rg) => dataX >= rg.startS && dataX <= rg.endS);
-    if (r && xRange) {
+    const idx = metaRegions.findIndex((rg) => dataX >= rg.startS && dataX <= rg.endS);
+    if (idx >= 0 && xRange) {
+      currentRegionIdx = idx;
+      const r = metaRegions[idx];
       zoomRange = [Math.max(r.startS, xRange[0]), Math.min(r.endS, xRange[1])];
     } else {
+      currentRegionIdx = null;
       zoomRange = null;
     }
   }
@@ -627,9 +636,10 @@
       </div>
       <p class="error">{fileName}: no APs in this recording — deconvolution not possible (ADR-0022 policy skip; not fit).</p>
     </div>
-  {:else if analysis}
-    <!-- ADR-0026: workflow-staged left rail (all controls + the four §3 checks) +
-         a stage of co-equal plot bands. -->
+  {:else}
+    <!-- ADR-0026/0028: workflow-staged left rail (controls + §3 checks for the CURRENT
+         region) + a stage of co-equal plot bands. The recon trace + raster show the WHOLE
+         recording; §3/kernel are regional (current region, double-click-selected). -->
     <div class="layout">
       <aside class="rail">
         <!-- file management — collapsed to a line post-load (ADR-0026) -->
@@ -727,6 +737,9 @@
         <div class="rail-sec checks-rail">
           <div class="rail-h">§3 checks <span class="cap">numbers; figures are the instrument</span></div>
           <div class="rail-bd">
+            {#if !analysis}
+            <p class="ctl-note">{#if multiRegion}Double-click a shaded region to read its kernel & §3 checks.{:else}No analyzable region.{/if}</p>
+            {:else}
             <div class="cgrp">
               <div class="cgh">1 · Plausibility <span class="tag">{method === 'free' ? 'free-vector' : 'parametric'}</span></div>
               {#if railedHidden}
@@ -780,6 +793,7 @@
                 {#if spikeContext}<div class="crow"><span>spike rate</span><span class="v">{f(spikeContext.rateHz, 3)} Hz</span></div>{/if}
               {/if}
             </div>
+            {/if}
           </div>
         </div>
       </aside>
@@ -837,7 +851,7 @@
         <div class="legend">
           <span class="key"><i style="background:#2a9d8f"></i>actual dF/F₀</span>
           <span class="key"><i style="background:#c0392b"></i>predicted</span>
-          {#if !railedHidden}<span class="agree">reconstruction R² {f(active.r2)} — reported, not gated (§3)</span>{/if}
+          {#if analysis && !railedHidden}<span class="agree">{recoveryRegion.regionName} reconstruction R² {f(active.r2)} — reported, not gated (§3)</span>{/if}
         </div>
       </div>
 
