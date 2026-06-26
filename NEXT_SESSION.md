@@ -50,6 +50,32 @@ sample fixtures, and per-team status logs.
   `ef3ac30`) + the **full 72/72 `.xlsx` batch**, integrity-checked, in the shared bus `golden/`. Our
   reader ingests them (see ▶ RESUME — 2026-06-25 below).
 
+### ⚠ Region analysis-window arithmetic — UNRECONCILED CROSS-TEAM, needs shared-bus contract addition (NOT a colonel_kernel-only ADR)
+
+**Symptom:** APs leak into post-switch windows (e.g. "APs in TTX") because no
+`solution_delay` trim is applied.
+
+**Diagnosis (both repos + bus searched, read-only, 2026-06-26):**
+- The app brackets raw `[start_s, end_s]` + spike buffer (`windowRegion` /
+  `load-xlsx.js`), NO `solution_delay`. This MATCHES current canon (ADR-0019 §4) and the
+  FROZEN bus contract v1.0, which explicitly says "no `solution_delay` offset, include
+  short regions (no skip), app owns all windowing." Golden fixtures encode this:
+  SB222200 `start_s = 1200` (raw 20min×60, NOT 1320). So the leak is a contract
+  OMISSION, not a bug against canon.
+- Two DIFFERENT MATLAB rules exist, neither on the bus:
+  - `aCa98_batch_APs.m` (recovery driver): +2min delay on treatments (baseline none),
+    no cap, 5-min hard SKIP of short regions, no high-K+ exception.
+  - `if2_region_windows.m` / MATLAB ADR-0005 (coordination pipeline, sce-detector
+    branch): +2min delay, 20-min cap, 12-min floor-as-FLAG (never drops), high-K+
+    raw exception (no delay/cap). Never brought to the shared bus.
+
+**Resolution path:** this is a v1.0→v1.1 SHARED-BUS CONTRACT change, made WITH the MATLAB
+lead (golden fixtures encode the current no-delay assumption and may need re-emit/
+re-validation). Open scientific decisions for both teams: (a) adopt `solution_delay`
+(leak says yes); (b) cap or no cap; (c) short-region skip vs flag; (d) high-K+
+exception or treat-as-normal. Decide ONCE on the bus, then each repo's ADR references
+it. Do not author a third divergent rule in colonel_kernel.
+
 ---
 
 ## ▶ RESUME — 2026-06-26 — Tab 2 became a live instrument (ADR-0026 layout + interaction)
