@@ -203,8 +203,15 @@
     padding: 24px 20px 64px;
     text-align: left;
   }
+  /* Tab 2 (ADR-0026): a full-height app shell so the rail + co-equal plot bands
+     own the viewport. Gated on tab===2 via class:wide, so Tab 1 is unaffected. */
   main.wide {
-    max-width: 1240px;
+    max-width: 1600px;
+    height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 20px;
   }
   .tabs {
     display: flex;

@@ -580,72 +580,84 @@
       </aside>
 
       <main class="stage">
-      <div class="readout">
-      <!-- CONSOLIDATED PANEL — one calcium trace serving both jobs: the actual-vs-predicted
-           reconstruction (upper ~2/3, shared dF/F₀ y) AND coupling context for the spike
-           histogram (lower ~1/3, its OWN count y). Shared recording-time x ONLY; spike
-           counts NEVER share the dF/F₀ axis (ADR-0024 false-alignment guard). The ~810 s
-           decoupling reads in one place: tall actual calcium, flat prediction, empty AP band
-           beneath. -->
-      <div class="panel">
-        <div class="panel-head">
-          <span class="plot-label">reconstruction over the spike train — actual dF/F₀ vs predicted (density ⊛ {method === 'free' ? 'free-vector' : 'parametric'} kernel), {colLabel(selectedCol)}</span>
+      <!-- BAND A — reconstruction: actual dF/F₀ vs predicted; spike-window slider inline.
+           Shares the recording-time x with the raster band below (same xRange + yAxisSize
+           gutter ⇒ the axes lock, not merely coincide). -->
+      <div class="band">
+        <div class="band-head">
+          <span class="plot-label">reconstruction — actual dF/F₀ vs predicted (density ⊛ {method === 'free' ? 'free-vector' : 'parametric'} kernel), {colLabel(selectedCol)}</span>
           <label class="histctl">
             <span>spike window</span>
             <input type="range" min={region.grid.dt} max={HIST_WIN_MAX} step={region.grid.dt} bind:value={histWinS} />
             <output>{(histo ? histo.windowS : histWinS).toFixed(2)} s</output>
           </label>
         </div>
-        {#if railedHidden}
-          <div class="hidden-note">
-            Parametric fit railed (τ at bound) — reconstruction hidden by default.
-            <button class="linkbtn" onclick={() => (showRailed = true)}>Show anyways</button>
-            <span class="sta-still">spike train still shown below.</span>
-          </div>
-        {:else}
-          <Plot
-            xs={gridTimes}
-            ys={traceYs}
-            color="#2a9d8f"
-            ys2={reconTrace}
-            color2="#c0392b"
-            {xRange}
-            yAxisSize={44}
-            yLabel="dF/F₀"
-            showXAxis={false}
-            height={172}
-          />
-          <div class="legend">
-            <span class="key"><i style="background:#2a9d8f"></i>actual dF/F₀</span>
-            <span class="key"><i style="background:#c0392b"></i>predicted</span>
-            <span class="agree">reconstruction R² {f(active.r2)} — reported, not gated (§3)</span>
-          </div>
-        {/if}
-        {#if histo}
-          <Plot
-            xs={histo.centers}
-            ys={histo.values}
-            kind="stems"
-            color="var(--text-h)"
-            {xRange}
-            yRange={histYRange}
-            yAxisSize={44}
-            yLabel="count"
-            xLabel="recording time (s)"
-            height={104}
-          />
-          <div class="plot-label sub">
-            spikes — count per {histo.windowS.toFixed(2)} s bin (count, not amplitude) ·
-            {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {region.grid.dt.toFixed(2)} s for the §13 recovery input{/if}
-          </div>
-        {/if}
+        <div class="band-body">
+          {#if railedHidden}
+            <div class="hidden-note">
+              Parametric fit railed (τ at bound) — reconstruction hidden by default.
+              <button class="linkbtn" onclick={() => (showRailed = true)}>Show anyways</button>
+              <span class="sta-still">spike raster still shown below.</span>
+            </div>
+          {:else}
+            <Plot
+              fill
+              xs={gridTimes}
+              ys={traceYs}
+              color="#2a9d8f"
+              ys2={reconTrace}
+              color2="#c0392b"
+              {xRange}
+              yAxisSize={44}
+              yLabel="dF/F₀"
+              showXAxis={false}
+              height={172}
+            />
+          {/if}
+        </div>
+        <div class="legend">
+          <span class="key"><i style="background:#2a9d8f"></i>actual dF/F₀</span>
+          <span class="key"><i style="background:#c0392b"></i>predicted</span>
+          {#if !railedHidden}<span class="agree">reconstruction R² {f(active.r2)} — reported, not gated (§3)</span>{/if}
+        </div>
       </div>
 
-      <!-- PANEL 3 — kernel + STA on one shared zero-lag origin (ADR-0009 / 0024) -->
-      <div class="panel">
-        <div class="plot-label">
-          recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag origin (ADR-0009)
-          {#if overlayMode === 'normalized'}<span class="norm-badge">NORMALIZED — shape only, peaks scaled to 1; amplitude is in the readout below</span>{/if}
+      <!-- BAND B — spike raster, FIRST-CLASS (equal height to the others; it is the recovery
+           input). Binned-count + pinned [0, maxCount] axis (decoupling visibility, ADR-0024);
+           wider filled bars so sparse, low-count cells read. Co-registered with band A. -->
+      <div class="band">
+        <div class="band-head">
+          <span class="plot-label">
+            spike raster — binned count per {(histo ? histo.windowS : histWinS).toFixed(2)} s bin · pinned [0, {histo ? histo.maxCount : 1}] (decoupling visibility){#if histo} · {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {region.grid.dt.toFixed(2)} s for the §13 recovery input{/if}{/if}
+          </span>
+        </div>
+        <div class="band-body">
+          {#if histo}
+            <Plot
+              fill
+              xs={histo.centers}
+              ys={histo.values}
+              kind="stems"
+              barSize={[0.9, 6]}
+              color="var(--text-h)"
+              {xRange}
+              yRange={histYRange}
+              yAxisSize={44}
+              yLabel="count"
+              xLabel="recording time (s)"
+              height={104}
+            />
+          {/if}
+        </div>
+      </div>
+
+      <!-- BAND C — recovered kernel + STA on one shared zero-lag origin (ADR-0009 / 0024) -->
+      <div class="band">
+        <div class="band-head">
+          <span class="plot-label">
+            recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag origin (ADR-0009)
+            {#if overlayMode === 'normalized'}<span class="norm-badge">NORMALIZED — shape only, peaks scaled to 1; amplitude is in the readout</span>{/if}
+          </span>
         </div>
         {#if railedHidden}
           <div class="hidden-note">
@@ -653,34 +665,40 @@
             <button class="linkbtn" onclick={() => (showRailed = true)}>Show anyways</button>
             <span class="sta-still">STA still shown.</span>
           </div>
-          <Plot
-            xs={analysis.kernelLag}
-            ys={overlay.staV}
-            color="#e76f51"
-            xRange={kernelXRange}
-            yRange={overlay.yRange}
-            yAxisSize={44}
-            yLabel="amplitude (dF/F₀)"
-            zeroLine
-            xLabel="lag (s)"
-            height={186}
-          />
-        {:else}
-          <Plot
-            xs={analysis.kernelLag}
-            ys={overlay.kernelV}
-            color="#7b2ff7"
-            ys2={overlay.staV}
-            color2="#e76f51"
-            xRange={kernelXRange}
-            yRange={overlay.yRange}
-            yAxisSize={44}
-            yLabel="amplitude (dF/F₀)"
-            zeroLine
-            xLabel="lag (s)"
-            height={186}
-          />
         {/if}
+        <div class="band-body">
+          {#if railedHidden}
+            <Plot
+              fill
+              xs={analysis.kernelLag}
+              ys={overlay.staV}
+              color="#e76f51"
+              xRange={kernelXRange}
+              yRange={overlay.yRange}
+              yAxisSize={44}
+              yLabel="amplitude (dF/F₀)"
+              zeroLine
+              xLabel="lag (s)"
+              height={186}
+            />
+          {:else}
+            <Plot
+              fill
+              xs={analysis.kernelLag}
+              ys={overlay.kernelV}
+              color="#7b2ff7"
+              ys2={overlay.staV}
+              color2="#e76f51"
+              xRange={kernelXRange}
+              yRange={overlay.yRange}
+              yAxisSize={44}
+              yLabel="amplitude (dF/F₀)"
+              zeroLine
+              xLabel="lag (s)"
+              height={186}
+            />
+          {/if}
+        </div>
         <div class="legend">
           {#if !railedHidden}<span class="key"><i style="background:#7b2ff7"></i>recovered kernel</span>{/if}
           <span class="key"><i style="background:#e76f51"></i>STA</span>
@@ -694,7 +712,6 @@
           {/if}
         </div>
       </div>
-    </div>
 
       </main>
     </div>
@@ -706,6 +723,10 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    /* fill the full-height app shell (App.svelte main.wide) so the rail + bands
+       own the viewport (ADR-0026); harmless when the parent isn't height-bound. */
+    flex: 1;
+    min-height: 0;
   }
   .tab2.dragging {
     outline: 2px dashed var(--accent);
@@ -1092,6 +1113,7 @@
     gap: 16px;
     align-items: stretch;
     min-height: 0;
+    height: 100%;
   }
   .rail {
     width: 300px;
@@ -1265,6 +1287,39 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
+  }
+  /* three co-equal ABSOLUTE-height plot bands, full vertical extent (ADR-0026) */
+  .band {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    background: var(--bg);
+  }
+  .band-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex: none;
+  }
+  .band-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /* the fill-mode Plot grows to the band body's remaining height */
+  .band-body :global(.plot.fill) {
+    flex: 1;
+    min-height: 0;
+  }
+  .band .legend {
+    flex: none;
   }
 </style>

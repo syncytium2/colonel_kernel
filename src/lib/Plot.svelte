@@ -31,11 +31,18 @@
     // STA is pre-aligned onto the kernel lag grid, NaN outside its ±window).
     ys2 = null,
     color2 = 'var(--accent)',
+    // ADR-0026: fill the parent's height (co-equal flex plot bands) instead of a
+    // fixed pixel height; measured from the container and kept in sync on resize.
+    fill = false,
+    // Bar sizing for kind='stems' — [widthFactor, maxPx]. The raster needs wider
+    // bars than the line default so sparse, low-count cells read (ADR-0026).
+    barSize = [0.35, 4],
   } = $props();
 
   let wrap;
   let plot;
   let lastWidth = 0;
+  let lastHeight = 0;
 
   function resolveColor(c) {
     if (!c.startsWith('var(')) return c;
@@ -43,11 +50,19 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
   }
 
-  function makeOpts(width) {
+  // Current pixel height: the container's measured height in fill mode (falling
+  // back to the `height` prop before layout settles), else the fixed prop.
+  function curHeight() {
+    if (!fill) return height;
+    const h = wrap?.clientHeight || 0;
+    return h > 1 ? h : height;
+  }
+
+  function makeOpts(width, h) {
     const stroke = resolveColor(color);
     const series =
       kind === 'stems'
-        ? { stroke, fill: stroke, paths: uPlot.paths.bars({ size: [0.35, 4], align: 0 }) }
+        ? { stroke, fill: stroke, paths: uPlot.paths.bars({ size: barSize, align: 0 }) }
         : { stroke, width: 2 };
     // second overlaid line series (kernel/STA share one x and one y scale).
     const series2 =
@@ -74,7 +89,7 @@
       : {};
     return {
       width,
-      height,
+      height: h,
       cursor: { y: false },
       legend: { show: false },
       scales: { x: { time: false } },
@@ -101,13 +116,16 @@
 
   onMount(() => {
     lastWidth = wrap.clientWidth || 600;
-    plot = new uPlot(makeOpts(lastWidth), plotData(), wrap);
+    lastHeight = curHeight();
+    plot = new uPlot(makeOpts(lastWidth, lastHeight), plotData(), wrap);
     pinScale();
     const ro = new ResizeObserver(() => {
       const w = wrap.clientWidth || 600;
-      if (w !== lastWidth && plot) {
+      const h = curHeight();
+      if ((w !== lastWidth || h !== lastHeight) && plot) {
         lastWidth = w;
-        plot.setSize({ width: w, height });
+        lastHeight = h;
+        plot.setSize({ width: w, height: h });
       }
     });
     ro.observe(wrap);
@@ -138,10 +156,14 @@
   });
 </script>
 
-<div class="plot" bind:this={wrap}></div>
+<div class="plot" class:fill bind:this={wrap}></div>
 
 <style>
   .plot {
     width: 100%;
+  }
+  /* fill mode: take the parent flex band's full height (ADR-0026 co-equal bands) */
+  .plot.fill {
+    height: 100%;
   }
 </style>
