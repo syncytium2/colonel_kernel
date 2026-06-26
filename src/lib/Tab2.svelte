@@ -71,6 +71,7 @@
   let overlayMode = $state('shared'); // 'shared' (default) | 'normalized' (ADR-0024)
   let showRailed = $state(false); // ADR-0025: reveal default-hidden railed-parametric output
   let histWinS = $state(HIST_WIN_DEFAULT); // spike-histogram review window (s), display only
+  let advancedOpen = $state(false); // ADR-0026: λ/noise live in a default-collapsed Advanced fold (§11.1)
 
   async function handleFiles(fileList) {
     const file = fileList && fileList[0];
@@ -421,16 +422,7 @@
   ondragleave={() => (dragging = false)}
   ondrop={onDrop}
 >
-  {#if region}
-    <div class="loader-strip">
-      <span class="fname">{fileName}</span>
-      <label class="filebtn-sm">
-        choose a different file
-        <input type="file" accept=".csv,.xlsx,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
-      </label>
-      {#if error}<span class="error">· {error}</span>{/if}
-    </div>
-  {:else}
+  {#if !region}
     <div class="dropzone" class:dragging role="button" tabindex="0">
       <p>Drop a recording (.xlsx) or region CSV here, or</p>
       <label class="filebtn">
@@ -440,68 +432,155 @@
       {#if fileName}<p class="fname">{fileName}</p>{/if}
       {#if error}<p class="error">Could not load: {error}</p>{/if}
     </div>
-  {/if}
+  {:else if analysis}
+    <!-- ADR-0026: workflow-staged left rail (all controls + the four §3 checks) +
+         a stage of co-equal plot bands. -->
+    <div class="layout">
+      <aside class="rail">
+        <!-- file management — collapsed to a line post-load (ADR-0026) -->
+        <div class="fileline">
+          <span class="fn" title={fileName}>{fileName}</span>
+          <label class="filebtn-sm">
+            change
+            <input type="file" accept=".csv,.xlsx,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
+          </label>
+        </div>
+        {#if error}<p class="error">{error}</p>{/if}
 
-  {#if region && analysis}
-    <p class="summary">
-      <strong>{region.rois.length} ROIs</strong>
-      · showing <strong>{colLabel(selectedCol)}</strong>
-      · {region.meta.nSpikes} spikes · {region.grid.n} frames · dt {region.grid.dt.toFixed(3)} s
-      {#if spikeContext}<span class="muted">— {f(spikeContext.rateHz, 3)} Hz</span>{/if}
-    </p>
+        <!-- concise summary -->
+        <p class="summary">
+          <strong>{region.rois.length} ROIs</strong> · showing <strong>{colLabel(selectedCol)}</strong><br />
+          {region.meta.nSpikes} spikes · {region.grid.n} frames · dt {region.grid.dt.toFixed(3)} s
+          {#if spikeContext}· <span class="muted">{f(spikeContext.rateHz, 3)} Hz</span>{/if}
+        </p>
 
-    <!-- slice bar: which column, which method, how the overlay amplitude is scaled -->
-    <div class="slicebar">
-      <label class="ctl-inline">
-        <span>Column</span>
-        <select bind:value={selectedCol}>
-          {#each region.rois as roi, i}
-            <option value={i}>{colLabel(i)}</option>
-          {/each}
-        </select>
-      </label>
+        <!-- Settings -->
+        <div class="rail-sec">
+          <div class="rail-h">Settings</div>
+          <div class="rail-bd">
+            <label class="field">
+              <span>Column</span>
+              <select bind:value={selectedCol}>
+                {#each region.rois as roi, i}
+                  <option value={i}>{colLabel(i)}</option>
+                {/each}
+              </select>
+            </label>
+            <div class="field">
+              <span>Method</span>
+              <div class="seg" role="group" aria-label="Recovery method">
+                <button class:on={method === 'free'} onclick={() => (method = 'free')}>Free-vector</button>
+                <button class:on={method === 'parametric'} onclick={() => (method = 'parametric')}>Parametric</button>
+              </div>
+            </div>
+            <div class="field">
+              <span>Overlay scale</span>
+              <div class="seg" role="group" aria-label="Overlay amplitude scale">
+                <button class:on={overlayMode === 'shared'} onclick={() => (overlayMode = 'shared')}>Shared-y</button>
+                <button class:on={overlayMode === 'normalized'} onclick={() => (overlayMode = 'normalized')}>Normalized</button>
+              </div>
+            </div>
+          </div>
+        </div>
 
-      <div class="seg" role="group" aria-label="Recovery method">
-        <span class="seg-label">Method</span>
-        <button class:on={method === 'free'} onclick={() => (method = 'free')}>Free-vector</button>
-        <button class:on={method === 'parametric'} onclick={() => (method = 'parametric')}>Parametric</button>
-      </div>
+        <!-- Advanced fold (λ + noise) — collapsed by default (§11.1 tiering) -->
+        <div class="rail-sec" class:collapsed={!advancedOpen}>
+          <button class="rail-h toggle" aria-expanded={advancedOpen} onclick={() => (advancedOpen = !advancedOpen)}>
+            <span>Advanced</span><span class="chev">{advancedOpen ? '▾' : '▸'}</span>
+          </button>
+          {#if advancedOpen}
+            <div class="rail-bd">
+              <label class="ctl">
+                <span>Regularization λ (log)</span>
+                <input type="range" min={LOG_LO} max={LOG_HI} step="0.01" bind:value={lambdaLog} />
+                <output>{lambda < 0.1 ? lambda.toFixed(4) : lambda.toFixed(3)}</output>
+              </label>
+              <label class="ctl">
+                <span>Noise (× cohort σ)</span>
+                <input type="range" min="0" max="10" step="0.5" bind:value={noiseLevel} />
+                <output>{noiseLevel.toFixed(1)}×</output>
+              </label>
+              {#if method === 'parametric'}<p class="ctl-note">λ drives the free-vector recovery; the parametric fit has no λ.</p>{/if}
+            </div>
+          {/if}
+        </div>
 
-      <div class="seg" role="group" aria-label="Overlay amplitude scale">
-        <span class="seg-label">Overlay scale</span>
-        <button class:on={overlayMode === 'shared'} onclick={() => (overlayMode = 'shared')}>Shared-y</button>
-        <button class:on={overlayMode === 'normalized'} onclick={() => (overlayMode = 'normalized')}>Normalized</button>
-      </div>
-    </div>
+        <!-- ADR-0025 indicator strip: neutral facts for this slice, never pass/fail -->
+        {#if facts.length}
+          <div class="indicators" aria-label="Computed facts for this slice (not verdicts)">
+            {#each facts as fact}
+              <span class="fact" title={fact.detail}>
+                <span class="dot" aria-hidden="true"></span>
+                <span class="fact-method">{fact.method}</span>
+                <span class="fact-text">{fact.text}</span>
+              </span>
+            {/each}
+          </div>
+        {/if}
 
-    <div class="controls">
-      <label class="ctl">
-        <span>Regularization λ (log)</span>
-        <input type="range" min={LOG_LO} max={LOG_HI} step="0.01" bind:value={lambdaLog} />
-        <output>{lambda < 0.1 ? lambda.toFixed(4) : lambda.toFixed(3)}</output>
-      </label>
-      <label class="ctl">
-        <span>Noise (× cohort σ)</span>
-        <input type="range" min="0" max="10" step="0.5" bind:value={noiseLevel} />
-        <output>{noiseLevel.toFixed(1)}×</output>
-      </label>
-      {#if method === 'parametric'}<span class="ctl-note">λ drives the free-vector recovery; the parametric fit has no λ.</span>{/if}
-    </div>
+        <!-- the four §3 checks — compact label:value readout (ADR-0026); figures lead -->
+        <div class="rail-sec checks-rail">
+          <div class="rail-h">§3 checks <span class="cap">numbers; figures are the instrument</span></div>
+          <div class="rail-bd">
+            <div class="cgrp">
+              <div class="cgh">1 · Plausibility <span class="tag">{method === 'free' ? 'free-vector' : 'parametric'}</span></div>
+              {#if railedHidden}
+                <div class="crow note">railed — hidden (<button class="linkbtn" onclick={() => (showRailed = true)}>show anyways</button>)</div>
+              {:else if method === 'free'}
+                <div class="crow"><span>peak lag</span><span class="v">{f(active.peakLagS, 2)} s</span></div>
+                <div class="crow"><span>peak amp (vs base)</span><span class="v">{f(active.peakAmpAdj)}</span></div>
+                <div class="crow"><span>decay τ</span><span class="v">{Number.isFinite(active.tauDecayS) ? `${f(active.tauDecayS, 2)} s` : 'n/a (tilt)'}</span></div>
+                <div class="crow"><span>acausal ratio</span><span class="v">{f(active.acausalRatio)}</span></div>
+              {:else}
+                <div class="crow"><span>peak lag</span><span class="v">{f(active.peakLagS, 2)} s</span></div>
+                <div class="crow"><span>peak amp</span><span class="v">{f(active.peakAmp)}</span></div>
+                <div class="crow"><span>τ rise</span><span class="v">{f(active.tauRiseS, 2)} s</span></div>
+                <div class="crow"><span>τ decay</span><span class="v">{f(active.tauDecayS, 2)} s</span></div>
+                <div class="crow"><span>acausal ratio</span><span class="v">{f(active.acausalRatio)}</span></div>
+              {/if}
+            </div>
 
-    <!-- ADR-0025 indicator strip: neutral facts for this slice, never pass/fail -->
-    {#if facts.length}
-      <div class="indicators" aria-label="Computed facts for this slice (not verdicts)">
-        {#each facts as fact}
-          <span class="fact" title={fact.detail}>
-            <span class="dot" aria-hidden="true"></span>
-            <span class="fact-method">{fact.method}</span>
-            <span class="fact-text">{fact.text}</span>
-          </span>
-        {/each}
-      </div>
-    {/if}
+            <div class="cgrp">
+              <div class="cgh">2 · Reconstruction <span class="tag">reported, not gated</span></div>
+              {#if railedHidden}
+                <div class="crow note">railed — hidden</div>
+              {:else if method === 'free'}
+                <div class="crow"><span>full-latent R²</span><span class="v">{f(active.r2Full)}</span></div>
+                <div class="crow"><span>retained-kernel R²</span><span class="v">{f(active.r2)}</span></div>
+                <div class="crow"><span>RMSE</span><span class="v">{e(active.rmse)}</span></div>
+                <div class="crow note">full-latent ≈1 = path sane; low retained = §3 decoupling</div>
+              {:else}
+                <div class="crow"><span>full-kernel R²</span><span class="v">{f(active.r2)}</span></div>
+                <div class="crow note">Option B forward path; low R² = §3 decoupling, reported not gated</div>
+              {/if}
+            </div>
 
-    <div class="readout">
+            <div class="cgrp">
+              <div class="cgh">3 · Stability <span class="tag">free-vector λ {LAM_LO}–{LAM_HI}</span></div>
+              {#if stability}
+                <div class="crow"><span>peak lag range</span><span class="v">{f(stability.peakLagMinS, 2)}–{f(stability.peakLagMaxS, 2)} s</span></div>
+                <div class="crow"><span>lag drift</span><span class="v">{f(stability.peakLagRangeS, 3)} s</span></div>
+                <div class="crow"><span>peak amp range</span><span class="v">{e(stability.peakAmpMin)} … {e(stability.peakAmpMax)}</span></div>
+              {/if}
+            </div>
+
+            <div class="cgrp">
+              <div class="cgh">4 · STA agreement <span class="tag">vs {method === 'free' ? 'free-vector' : 'parametric'}</span></div>
+              {#if analysis.sta.empty}
+                <div class="crow note">STA empty — no accepted events</div>
+              {:else}
+                <div class="crow"><span>kernel / STA peak</span><span class="v">{railedHidden ? '—' : f(active.peakLagS, 2)} / {f(analysis.sta.staPeakLagS, 2)} s</span></div>
+                <div class="crow"><span>Δ lag</span><span class="v">{railedHidden ? '—' : f(active.peakLagS - analysis.sta.staPeakLagS, 2)} s</span></div>
+                <div class="crow"><span>STA events</span><span class="v">{analysis.sta.nAccepted}/{analysis.sta.nEvents}</span></div>
+                {#if spikeContext}<div class="crow"><span>spike rate</span><span class="v">{f(spikeContext.rateHz, 3)} Hz</span></div>{/if}
+              {/if}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="stage">
+      <div class="readout">
       <!-- CONSOLIDATED PANEL — one calcium trace serving both jobs: the actual-vs-predicted
            reconstruction (upper ~2/3, shared dF/F₀ y) AND coupling context for the spike
            histogram (lower ~1/3, its OWN count y). Shared recording-time x ONLY; spike
@@ -617,77 +696,7 @@
       </div>
     </div>
 
-    <!-- four §3 checks: four separate readouts, raw numbers, NO rollup verdict -->
-    <div class="checks">
-      <div class="check">
-        <h4>1 · Plausibility <span class="tag">{method === 'free' ? 'free-vector' : 'parametric'}</span></h4>
-        {#if railedHidden}
-          <dl><div class="note">railed — hidden (<button class="linkbtn" onclick={() => (showRailed = true)}>show anyways</button>)</div></dl>
-        {:else if method === 'free'}
-          <dl>
-            <div><dt>peak lag</dt><dd>{f(active.peakLagS, 2)} s</dd></div>
-            <div><dt>peak amp (vs baseline)</dt><dd>{f(active.peakAmpAdj)}</dd></div>
-            <div>
-              <dt>decay τ</dt>
-              <dd>{Number.isFinite(active.tauDecayS) ? `${f(active.tauDecayS, 2)} s` : 'n/a (tilt)'}</dd>
-            </div>
-            <div><dt>acausal ratio</dt><dd>{f(active.acausalRatio)}</dd></div>
-          </dl>
-        {:else}
-          <dl>
-            <div><dt>peak lag</dt><dd>{f(active.peakLagS, 2)} s</dd></div>
-            <div><dt>peak amp</dt><dd>{f(active.peakAmp)}</dd></div>
-            <div><dt>τ rise</dt><dd>{f(active.tauRiseS, 2)} s</dd></div>
-            <div><dt>τ decay</dt><dd>{f(active.tauDecayS, 2)} s</dd></div>
-            <div><dt>acausal ratio</dt><dd>{f(active.acausalRatio)}</dd></div>
-          </dl>
-        {/if}
-      </div>
-
-      <div class="check">
-        <h4>2 · Reconstruction residual <span class="tag">reported, not gated</span></h4>
-        {#if railedHidden}
-          <dl><div class="note">railed — hidden (<button class="linkbtn" onclick={() => (showRailed = true)}>show anyways</button>)</div></dl>
-        {:else if method === 'free'}
-          <dl>
-            <div><dt>full-latent R²</dt><dd>{f(active.r2Full)}</dd></div>
-            <div><dt>retained-kernel R²</dt><dd>{f(active.r2)}</dd></div>
-            <div><dt>RMSE</dt><dd>{e(active.rmse)}</dd></div>
-            <div class="note">full-latent ≈1 = path sane; low retained = §3 decoupling</div>
-          </dl>
-        {:else}
-          <dl>
-            <div><dt>full-kernel R²</dt><dd>{f(active.r2)}</dd></div>
-            <div class="note">Option B forward path; low R² = §3 decoupling, reported not gated</div>
-          </dl>
-        {/if}
-      </div>
-
-      <div class="check">
-        <h4>3 · Stability <span class="tag">free-vector log-λ {LAM_LO}–{LAM_HI}</span></h4>
-        {#if stability}
-          <dl>
-            <div><dt>peak lag range</dt><dd>{f(stability.peakLagMinS, 2)}–{f(stability.peakLagMaxS, 2)} s</dd></div>
-            <div><dt>lag drift</dt><dd>{f(stability.peakLagRangeS, 3)} s</dd></div>
-            <div><dt>peak amp range</dt><dd>{e(stability.peakAmpMin)} … {e(stability.peakAmpMax)}</dd></div>
-            <div class="note">λ-stable peak lag = the positive control{#if method === 'parametric'} · (a free-vector diagnostic){/if}</div>
-          </dl>
-        {/if}
-      </div>
-
-      <div class="check">
-        <h4>4 · STA agreement <span class="tag">vs {method === 'free' ? 'free-vector' : 'parametric'}</span></h4>
-        {#if analysis.sta.empty}
-          <dl><div class="note">STA empty — no accepted events</div></dl>
-        {:else}
-          <dl>
-            <div><dt>kernel vs STA peak</dt><dd>{railedHidden ? '—' : f(active.peakLagS, 2)} / {f(analysis.sta.staPeakLagS, 2)} s</dd></div>
-            <div><dt>Δ lag</dt><dd>{railedHidden ? '—' : f(active.peakLagS - analysis.sta.staPeakLagS, 2)} s</dd></div>
-            <div><dt>STA events</dt><dd>{analysis.sta.nAccepted}/{analysis.sta.nEvents}</dd></div>
-            {#if spikeContext}<div><dt>spike rate</dt><dd>{f(spikeContext.rateHz, 3)} Hz</dd></div>{/if}
-          </dl>
-        {/if}
-      </div>
+      </main>
     </div>
   {/if}
 </section>
@@ -1075,5 +1084,187 @@
     color: var(--text);
     opacity: 0.7;
     font-style: italic;
+  }
+
+  /* ===== ADR-0026 layout: workflow-staged left rail + plot stage ===== */
+  .layout {
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+    min-height: 0;
+  }
+  .rail {
+    width: 300px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: auto;
+    padding-right: 14px;
+    border-right: 1px solid var(--border);
+    box-sizing: border-box;
+  }
+  .fileline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    background: var(--bg);
+  }
+  .fileline .fn {
+    flex: 1;
+    font-family: var(--mono);
+    color: var(--text-h);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rail-sec {
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .rail-h {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 8px 11px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-h);
+  }
+  .rail-h.toggle {
+    width: 100%;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-h);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+  }
+  .rail-h .chev {
+    color: var(--text);
+    opacity: 0.6;
+    font-size: 10px;
+  }
+  .rail-h .cap {
+    font-weight: 400;
+    font-size: 10px;
+    color: var(--text);
+    opacity: 0.7;
+    font-style: italic;
+  }
+  .rail-sec.collapsed .rail-h.toggle {
+    color: var(--text);
+  }
+  .rail-bd {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    padding: 2px 11px 11px;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 14px;
+  }
+  .field > span {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .field select {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text-h);
+    width: 100%;
+  }
+  .rail .seg {
+    display: flex;
+  }
+  .rail .seg button {
+    flex: 1;
+  }
+  /* compact λ/noise sliders in the narrow rail */
+  .rail .ctl {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'lab out' 'rng rng';
+    gap: 3px 8px;
+  }
+  .rail .ctl > span {
+    grid-area: lab;
+    font-size: 12px;
+  }
+  .rail .ctl > output {
+    grid-area: out;
+  }
+  .rail .ctl > input {
+    grid-area: rng;
+    width: 100%;
+  }
+
+  /* §3 checks — compact label:value readout in the rail */
+  .checks-rail .rail-bd {
+    gap: 10px;
+  }
+  .cgrp {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .cgh {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-h);
+    margin-bottom: 1px;
+  }
+  .cgh .tag {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--text);
+    opacity: 0.7;
+  }
+  .crow {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11.5px;
+    color: var(--text);
+    line-height: 1.45;
+  }
+  .crow .v {
+    font-family: var(--mono);
+    color: var(--text-h);
+    text-align: right;
+  }
+  .crow.note {
+    display: block;
+    font-size: 10.5px;
+    opacity: 0.7;
+    font-style: italic;
+  }
+
+  .stage {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
 </style>
