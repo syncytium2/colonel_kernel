@@ -619,6 +619,7 @@
               yAxisSize={44}
               padRight={PLOT_PAD_R}
               syncKey="tab2-rec-x"
+              cursorPoints={true}
               yLabel="dF/F₀"
               showXAxis={false}
               height={172}
@@ -655,6 +656,7 @@
               yAxisSize={44}
               padRight={PLOT_PAD_R}
               syncKey="tab2-rec-x"
+              cursorPoints={true}
               yLabel="count"
               xLabel="recording time (s)"
               height={104}
@@ -689,6 +691,7 @@
               yRange={overlay.yRange}
               yAxisSize={44}
               padRight={PLOT_PAD_R}
+              cursorPoints={false}
               yLabel="amplitude (dF/F₀)"
               zeroLine
               xLabel="lag (s)"
@@ -706,6 +709,7 @@
               yRange={overlay.yRange}
               yAxisSize={44}
               padRight={PLOT_PAD_R}
+              cursorPoints={false}
               yLabel="amplitude (dF/F₀)"
               zeroLine
               xLabel="lag (s)"

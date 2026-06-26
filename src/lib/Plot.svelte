@@ -48,6 +48,11 @@
     // recording-time across stacked bands even if gutters/widths ever diverge.
     // Off by default — Tab 1 and the lag-axis kernel band pass nothing.
     syncKey = undefined,
+    // Cursor value-dots (ADR-0026): per-series points snapped to the actual data
+    // value at the cursor index — the dashed line shows WHERE in time, the dot
+    // shows the VALUE there. Tri-state: undefined = uPlot default (Tab 1 untouched);
+    // true = show styled dots (recon/raster); false = explicitly off (kernel band).
+    cursorPoints = undefined,
   } = $props();
 
   let wrap;
@@ -103,6 +108,16 @@
       height: h,
       cursor: {
         y: false,
+        // value-dots snapped to each series' datum at the cursor index. uPlot's
+        // cursor.points.show is a FACTORY that must return the point element, so we
+        // keep the default factory and only size it up to show dots; show:()=>false
+        // (a falsy-returning factory) hides them. Tri-state: an unset prop leaves
+        // uPlot's default untouched (Tab 1) (ADR-0026).
+        ...(cursorPoints === true
+          ? { points: { size: 9, width: 2 } }
+          : cursorPoints === false
+            ? { points: { show: () => false } }
+            : {}),
         // link the cursor by DATA-x across same-syncKey plots (scales: ['x', null]
         // syncs only the x scale, by value); match on the x-scale key so only the
         // recording-time bands link (ADR-0026).
