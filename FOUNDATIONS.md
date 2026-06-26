@@ -622,8 +622,17 @@ break a signal as it moves between tabs.
   ([ADR-0026](docs/adr/0026-tab2-layout-left-rail-three-plot-bands.md)):** a workflow-staged left
   rail (~300px) holds all controls + the four §3 checks (file management auto-collapses post-load;
   λ/noise in a default-collapsed "Advanced" fold, §11.1), with the right column given to three
-  co-equal-height plot bands (reconstruction / first-class spike raster / kernel+STA overlay). Tabs 1
-  and 3 remain to be designed when built.
+  co-equal-height plot bands (reconstruction / first-class spike raster / kernel+STA overlay).
+  **Region selection within Tab 2 is *zoom-driven*, not a mode
+  ([ADR-0028](docs/adr/0028-regional-only-kernels-zoom-driven-selection.md), superseding
+  [ADR-0027](docs/adr/0027-subwindow-recovery-region-view-mode.md) §3):** regions are shaded and
+  labeled in-band on the recording-time bands and selected by **double-click-to-region** (zoom in →
+  that region becomes current; single-click resets; drag = manual zoom) — there is **no Whole/Region
+  mode toggle and no prev/next navigation**. The kernel band shows **regional kernels/STA only** (a
+  whole-signal kernel across >1 region is not rendered, §3), each in its region hue, with a retained
+  **Current/All overlay toggle** (current region alone vs. cross-epoch comparison; ADR-0024 amplitude
+  policy). Sub-window recovery itself is first-class and view-zoom stays view-only (ADR-0027 §1/§2,
+  unchanged). Tabs 1 and 3 remain to be designed when built.
 - **Kernel scope** — partly resolved. Because the kernel is a *chosen* object in Tabs 1 and 3 but
   a *recovered* object in Tab 2 (see "The kernel plays three distinct roles", §2), a single global
   kernel across all tabs does not cleanly hold. **Likely model:** the *chosen* kernel is shared
