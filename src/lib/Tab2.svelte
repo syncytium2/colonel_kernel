@@ -64,7 +64,8 @@
   // widest last x-tick label's right overhang (~25px for "1,100") so nothing clips.
   const PLOT_PAD_R = 32;
 
-  let region = $state(null);
+  let recording = $state(null); // LoadedRecording (xlsx, has .regions) or LoadedRegion (csv) — the loaded file
+  let xlsxApi = $state(null); // load-xlsx fns stashed after dynamic import (keeps SheetJS code-split, §6)
   let error = $state(null);
   let fileName = $state('');
   let dragging = $state(false);
@@ -82,45 +83,37 @@
   let advancedOpen = $state(false); // ADR-0026: λ/noise live in a default-collapsed Advanced fold (§11.1)
   let zoomRange = $state(null); // ADR-0026 view-only x-zoom: [min,max] recording-time s, or null = full
 
+  // ADR-0027 stage 2 — two view modes + region navigation (sub-window recovery is first-class).
+  let viewMode = $state('whole'); // 'whole' = genuine all-APs (ADR-0027 §2) | 'region' = one metadata region
+  let currentRegionIdx = $state(0); // index into metaRegions (region mode)
+
   async function handleFiles(fileList) {
     const file = fileList && fileList[0];
     if (!file) return;
     fileName = file.name;
     try {
       if (/\.xlsx$/i.test(file.name)) {
-        // ADR-0019 xlsx path. SheetJS stays in its own code-split chunk (FOUNDATIONS §6).
-        // Region selection is a dumb default: the first analyzable region (ADR-0022 skips
-        // are not exercised on file-80 — it has one analyzable region). Cross-region
-        // comparison is out of scope for this slice.
-        const { loadWorkbook, regionsOf, windowRegion, regionViewToLoadedRegion } = await import(
-          './core/load-xlsx.js'
-        );
-        const rec = loadWorkbook(await file.arrayBuffer(), { source: file.name });
-        let chosen = null;
-        for (const rg of regionsOf(rec)) {
-          const w = windowRegion(rec, rg);
-          if (w.analyzable) {
-            chosen = w;
-            break;
-          }
-        }
-        if (!chosen) {
-          region = null;
-          error = `No analyzable region in ${file.name} (every region has fewer than 2 spikes).`;
-          return;
-        }
-        region = regionViewToLoadedRegion(chosen, { source: `${file.name} — ${chosen.name}` });
+        // ADR-0019 xlsx path. SheetJS stays in its own code-split chunk (FOUNDATIONS §6); we
+        // stash the (SheetJS-free) windowing fns so the reactive view-mode deriveds can call
+        // them synchronously without statically importing the SheetJS module.
+        const mod = await import('./core/load-xlsx.js');
+        const rec = mod.loadWorkbook(await file.arrayBuffer(), { source: file.name });
+        xlsxApi = mod;
+        recording = rec;
         resetSlice();
+        // ADR-0022: a fully silent recording (no APs) is surfaced by the activeRegion guard
+        // below as the single-file no-AP message — not fit, not an error.
         error = null;
         return;
       }
       const text = await file.text();
-      region = loadCsv(text, { source: file.name });
+      xlsxApi = null;
+      recording = loadCsv(text, { source: file.name });
       resetSlice();
       error = null;
     } catch (e) {
       error = String(e && e.message ? e.message : e);
-      region = null;
+      recording = null;
     }
   }
 
@@ -129,6 +122,22 @@
     method = 'free';
     showRailed = false;
     histWinS = HIST_WIN_DEFAULT;
+    zoomRange = null;
+    viewMode = 'whole';
+    currentRegionIdx = 0;
+  }
+
+  // Region navigation (region mode). Switching region/mode clears the view-only zoom so the
+  // new region opens at its own full extent.
+  function setViewMode(m) {
+    if (m === viewMode) return;
+    viewMode = m;
+    zoomRange = null;
+  }
+  function gotoRegion(i) {
+    const n = metaRegions.length;
+    if (!n) return;
+    currentRegionIdx = ((i % n) + n) % n;
     zoomRange = null;
   }
 
@@ -146,25 +155,54 @@
     handleFiles(e.dataTransfer?.files);
   }
 
+  // --- ADR-0027 region model: the metadata regions + the active analyzable view ---
+  // metaRegions = the recording's REAL metadata regions (xlsx). CSV / no-metadata → [].
+  const metaRegions = $derived(recording && recording.regions ? recording.regions : []);
+  const hasRegions = $derived(metaRegions.length > 0);
+
+  // The active analyzable region the readout recovers over (ADR-0027):
+  //   whole mode  → the full span bracketed to ALL APs (genuine all-APs recovery, §2);
+  //   region mode → the current metadata region, bracketed to its spikes (ADR-0019 §4).
+  // Both go through windowRegion (the stage-1 bracket); a non-analyzable result (silent
+  // recording / region) is carried as {analyzable:false} and surfaced, never fit (ADR-0022).
+  const activeRegion = $derived.by(() => {
+    if (!recording) return null;
+    if (xlsxApi && recording.regions) {
+      const span =
+        viewMode === 'region' && metaRegions.length
+          ? metaRegions[Math.min(currentRegionIdx, metaRegions.length - 1)]
+          : { name: 'whole (all APs)', startS: recording.meta.t0, endS: recording.meta.tEnd };
+      const v = xlsxApi.windowRegion(recording, span);
+      if (!v.analyzable) return { analyzable: false, regionName: span.name, reason: v.reason };
+      const lr = xlsxApi.regionViewToLoadedRegion(v, { source: `${fileName} — ${span.name}` });
+      lr.analyzable = true;
+      lr.regionName = span.name;
+      return lr;
+    }
+    // CSV: the loaded region as-is (no metadata regions; whole mode only) — unchanged.
+    return Object.assign({ analyzable: recording.spikeTimes.length >= 2, regionName: 'recording' }, recording);
+  });
+  const analyzable = $derived(!!activeRegion && activeRegion.analyzable !== false);
+
   // --- shared display axes (core untouched) ---
-  const gridTimes = $derived(region ? Array.from(region.grid.times) : []);
-  const xRange = $derived(region ? [region.meta.t0, region.meta.tEnd] : null);
+  const gridTimes = $derived(analyzable ? Array.from(activeRegion.grid.times) : []);
+  const xRange = $derived(analyzable ? [activeRegion.meta.t0, activeRegion.meta.tEnd] : null);
   // The displayed recording-time range: the zoom window when set, else full. Both
   // recording-time bands receive THIS, so a zoom on one applies identically to both.
   const xView = $derived(zoomRange ?? xRange);
   const kernelXRange = [-WIN, WIN]; // the overlay axis; STA (±STAWIN) sits inside it.
 
   // The selected ROI column.
-  const selected = $derived(region ? region.rois[selectedCol] : null);
+  const selected = $derived(analyzable ? activeRegion.rois[selectedCol] : null);
 
   // binned-count spike density on the trace timebase, zero-padded to a power of two
   // (§13, ADR-0013 preFirstBin 'keep'; ADR-0017 raw). One shared spike train per
   // recording (ADR-0019), so this depends only on the region, not the column.
   const density = $derived.by(() => {
-    if (!region) return null;
-    const n = region.grid.n;
+    if (!analyzable) return null;
+    const n = activeRegion.grid.n;
     const N = nextPow2(n);
-    const sd = rasterize(region.spikeTimes, region.grid, {
+    const sd = rasterize(activeRegion.spikeTimes, activeRegion.grid, {
       amplitudeMode: 'binned-count',
       preFirstBin: 'keep',
     });
@@ -184,8 +222,8 @@
   // [0, maxCount] so EMPTY stretches under a calcium hump stay as legible as tall ones
   // (the decoupling read must not be auto-scaled away).
   const histo = $derived.by(() => {
-    if (!region || !density) return null;
-    const dt = region.grid.dt;
+    if (!analyzable || !density) return null;
+    const dt = activeRegion.grid.dt;
     const { values, group, windowS } = rebinCounts(frameCounts, dt, histWinS);
     const centers = new Array(values.length);
     for (let b = 0; b < values.length; b++) {
@@ -202,7 +240,7 @@
 
   // One noise realization for the selected ROI (region + column + noise level).
   const noisyTrace = $derived.by(() => {
-    if (!region || !density || !selected) return null;
+    if (!analyzable || !density || !selected) return null;
     const { n, N } = density;
     const sigma = sigmaForLevel(noiseLevel);
     const noise = sigma > 0 ? addAWGN(new Float64Array(n), sigma, mulberry32(NOISE_SEED)) : null;
@@ -243,8 +281,8 @@
 
   // --- the live readout for the selected ROI: BOTH methods + STA + ADR-0025 facts ---
   const analysis = $derived.by(() => {
-    if (!region || !density || !noisyTrace) return null;
-    const dt = region.grid.dt;
+    if (!analyzable || !density || !noisyTrace) return null;
+    const dt = activeRegion.grid.dt;
     const { n, N, sdPad } = density;
     const ws = Math.round(WIN / dt);
     const staWs = Math.round(STAWIN / dt);
@@ -283,7 +321,7 @@
     const pmRailed = tauRailed(pm.fit.theta); // ADR-0025 fact
 
     // ---- STA (method-independent) ----
-    const sta = spikeTriggeredAverage(region.spikeTimes, staTrace, region.grid.times, {
+    const sta = spikeTriggeredAverage(activeRegion.spikeTimes, staTrace, activeRegion.grid.times, {
       window: STAWIN,
       baseline: STABASE,
     });
@@ -336,8 +374,8 @@
   // CHECK 3 — free-vector stability across the log-λ sweep (a property of the FV
   // recovery; the parametric method has no λ knob, so this stays the FV diagnostic).
   const stability = $derived.by(() => {
-    if (!region || !density || !noisyTrace) return null;
-    const dt = region.grid.dt;
+    if (!analyzable || !density || !noisyTrace) return null;
+    const dt = activeRegion.grid.dt;
     const { N, sdPad } = density;
     const ws = Math.round(WIN / dt);
     const { recReal } = noisyTrace;
@@ -362,9 +400,9 @@
 
   // Spike-rate context (ADR-0005 three regimes — which method to believe).
   const spikeContext = $derived.by(() => {
-    if (!region || !density) return null;
-    const duration = region.meta.tEnd - region.meta.t0;
-    return { rateHz: density.placed / duration, placed: density.placed, nSpikes: region.meta.nSpikes, duration };
+    if (!analyzable || !density) return null;
+    const duration = activeRegion.meta.tEnd - activeRegion.meta.t0;
+    return { rateHz: density.placed / duration, placed: density.placed, nSpikes: activeRegion.meta.nSpikes, duration };
   });
 
   // --- the active method's view, applying the ADR-0025 railed default-hide ---
@@ -428,7 +466,7 @@
 
   const f = (x, p = 4) => (Number.isFinite(x) ? x.toFixed(p) : '—');
   const e = (x) => (Number.isFinite(x) ? x.toExponential(2) : '—');
-  const colLabel = (i) => (i === 0 ? `${region.rois[0].id} (target)` : region.rois[i].id);
+  const colLabel = (i) => (i === 0 ? `${activeRegion.rois[0].id} (target)` : activeRegion.rois[i].id);
 </script>
 
 <!-- drop is sensitive across the whole tab; the affordance shrinks once a file loads. -->
@@ -443,7 +481,7 @@
   ondragleave={() => (dragging = false)}
   ondrop={onDrop}
 >
-  {#if !region}
+  {#if !recording}
     <div class="dropzone" class:dragging role="button" tabindex="0">
       <p>Drop a recording (.xlsx) or region CSV here, or</p>
       <label class="filebtn">
@@ -452,6 +490,34 @@
       </label>
       {#if fileName}<p class="fname">{fileName}</p>{/if}
       {#if error}<p class="error">Could not load: {error}</p>{/if}
+    </div>
+  {:else if !analyzable}
+    <!-- ADR-0022: no APs in the active span — a policy SKIP, not a fit (and not an error). -->
+    <div class="dropzone">
+      <div class="fileline">
+        <span class="fn" title={fileName}>{fileName}</span>
+        <label class="filebtn-sm">
+          change
+          <input type="file" accept=".csv,.xlsx,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
+        </label>
+      </div>
+      {#if hasRegions}
+        <div class="field" style="margin:10px 0">
+          <span>View</span>
+          <div class="seg" role="group" aria-label="View mode">
+            <button class:on={viewMode === 'whole'} onclick={() => setViewMode('whole')}>Whole recording</button>
+            <button class:on={viewMode === 'region'} onclick={() => setViewMode('region')}>Region</button>
+          </div>
+        </div>
+        {#if viewMode === 'region'}
+          <div class="regnav">
+            <button onclick={() => gotoRegion(currentRegionIdx - 1)} aria-label="previous region">‹</button>
+            <span>{activeRegion.regionName} ({currentRegionIdx + 1}/{metaRegions.length})</span>
+            <button onclick={() => gotoRegion(currentRegionIdx + 1)} aria-label="next region">›</button>
+          </div>
+        {/if}
+      {/if}
+      <p class="error">{activeRegion?.regionName ?? 'this recording'}: no APs — deconvolution not possible (ADR-0022 policy skip; not fit).</p>
     </div>
   {:else if analysis}
     <!-- ADR-0026: workflow-staged left rail (all controls + the four §3 checks) +
@@ -470,10 +536,38 @@
 
         <!-- concise summary -->
         <p class="summary">
-          <strong>{region.rois.length} ROIs</strong> · showing <strong>{colLabel(selectedCol)}</strong><br />
-          {region.meta.nSpikes} spikes · {region.grid.n} frames · dt {region.grid.dt.toFixed(3)} s
-          {#if spikeContext}· <span class="muted">{f(spikeContext.rateHz, 3)} Hz</span>{/if}
+          <strong>{activeRegion.rois.length} ROIs</strong> · showing <strong>{colLabel(selectedCol)}</strong><br />
+          {activeRegion.grid.n} frames · dt {activeRegion.grid.dt.toFixed(3)} s · {viewMode === 'region' ? activeRegion.regionName : 'whole recording'}
+          {#if spikeContext}· <span class="muted">{spikeContext.placed} spikes · {f(spikeContext.rateHz, 3)} Hz</span>{/if}
         </p>
+
+        <!-- ADR-0027 view mode + region navigation (only when the file carries metadata regions) -->
+        {#if hasRegions}
+          <div class="rail-sec">
+            <div class="rail-h">View</div>
+            <div class="rail-bd">
+              <div class="field">
+                <span>Mode</span>
+                <div class="seg" role="group" aria-label="View mode">
+                  <button class:on={viewMode === 'whole'} onclick={() => setViewMode('whole')}>Whole</button>
+                  <button class:on={viewMode === 'region'} onclick={() => setViewMode('region')}>Region</button>
+                </div>
+              </div>
+              {#if viewMode === 'region'}
+                <div class="field">
+                  <span>Region ({currentRegionIdx + 1}/{metaRegions.length})</span>
+                  <div class="regnav">
+                    <button onclick={() => gotoRegion(currentRegionIdx - 1)} aria-label="previous region">‹</button>
+                    <span class="regname">{activeRegion.regionName}</span>
+                    <button onclick={() => gotoRegion(currentRegionIdx + 1)} aria-label="next region">›</button>
+                  </div>
+                </div>
+              {:else}
+                <p class="ctl-note">All APs (genuine whole-recording recovery). Regions shown as shaded bands.</p>
+              {/if}
+            </div>
+          </div>
+        {/if}
 
         <!-- Settings -->
         <div class="rail-sec">
@@ -482,7 +576,7 @@
             <label class="field">
               <span>Column</span>
               <select bind:value={selectedCol}>
-                {#each region.rois as roi, i}
+                {#each activeRegion.rois as roi, i}
                   <option value={i}>{colLabel(i)}</option>
                 {/each}
               </select>
@@ -615,7 +709,7 @@
             {/if}
             <label class="histctl">
               <span>spike window</span>
-              <input type="range" min={region.grid.dt} max={HIST_WIN_MAX} step={region.grid.dt} bind:value={histWinS} />
+              <input type="range" min={activeRegion.grid.dt} max={HIST_WIN_MAX} step={activeRegion.grid.dt} bind:value={histWinS} />
               <output>{(histo ? histo.windowS : histWinS).toFixed(2)} s</output>
             </label>
           </div>
@@ -661,7 +755,7 @@
       <div class="band">
         <div class="band-head">
           <span class="plot-label">
-            spike raster — binned count per {(histo ? histo.windowS : histWinS).toFixed(2)} s bin · pinned [0, {histo ? histo.maxCount : 1}] (decoupling visibility){#if histo} · {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {region.grid.dt.toFixed(2)} s for the §13 recovery input{/if}{/if}
+            spike raster — binned count per {(histo ? histo.windowS : histWinS).toFixed(2)} s bin · pinned [0, {histo ? histo.maxCount : 1}] (decoupling visibility){#if histo} · {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {activeRegion.grid.dt.toFixed(2)} s for the §13 recovery input{/if}{/if}
           </span>
         </div>
         <div class="band-body">
@@ -883,6 +977,37 @@
     color: var(--text);
     opacity: 0.75;
     font-style: italic;
+  }
+
+  /* ADR-0027 region navigation (prev / name / next) */
+  .regnav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .regnav button {
+    font: inherit;
+    font-size: 15px;
+    line-height: 1;
+    padding: 2px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text-h);
+    cursor: pointer;
+  }
+  .regnav button:hover {
+    border-color: var(--accent-border);
+  }
+  .regnav .regname {
+    flex: 1;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-h);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* indicator strip — neutral facts (ADR-0025), deliberately NOT pass/fail colored */
