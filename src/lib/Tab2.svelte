@@ -652,6 +652,11 @@
          recording; §3/kernel are regional (current region, double-click-selected). -->
     <div class="layout">
       <aside class="rail">
+        <!-- ADR-0028: tab title folded into the rail (the top row is tab nav only). -->
+        <div class="railtitle">
+          <strong>colonel_kernel</strong>
+          <span>recover the kernel: <code>output, input → kernel</code></span>
+        </div>
         <!-- file management — collapsed to a line post-load (ADR-0026) -->
         <div class="fileline">
           <span class="fn" title={fileName}>{fileName}</span>
@@ -1034,6 +1039,22 @@
   .error {
     color: #c0392b;
     font-size: 14px;
+  }
+  /* ADR-0028: compact tab title folded into the rail top */
+  .railtitle {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--border);
+  }
+  .railtitle strong {
+    font-size: 15px;
+    color: var(--text-h);
+  }
+  .railtitle span {
+    font-size: 11px;
+    color: var(--text);
   }
   .summary {
     font-size: 14px;

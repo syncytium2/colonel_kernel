@@ -82,14 +82,14 @@
 </script>
 
 <main class:wide={tab === 2}>
-  <header>
-    <h1>colonel_kernel</h1>
-    {#if tab === 1}
+  <!-- ADR-0028: on Tab 2 the title folds into the left rail so the top row is tab nav only,
+       maximizing vertical space for the three plot bands. Tab 1 keeps its header. -->
+  {#if tab === 1}
+    <header>
+      <h1>colonel_kernel</h1>
       <p class="sub">Tab 1 — forward convolution: <code>output = input ⊗ kernel</code></p>
-    {:else}
-      <p class="sub">Tab 2 — recover the kernel: <code>output, input → kernel</code></p>
-    {/if}
-  </header>
+    </header>
+  {/if}
 
   <nav class="tabs">
     <button class:active={tab === 1} onclick={() => (tab = 1)}>1 · Convolution</button>
@@ -217,6 +217,10 @@
     display: flex;
     gap: 6px;
     margin-bottom: 24px;
+  }
+  /* Tab 2 (ADR-0028): tighten the nav row (no header above it) to give the bands height. */
+  main.wide .tabs {
+    margin-bottom: 12px;
   }
   .tabs button {
     font: inherit;
