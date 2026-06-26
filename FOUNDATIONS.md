@@ -594,7 +594,12 @@ break a signal as it moves between tabs.
 ### 11.4 Still open (do not treat as settled)
 
 - **Per-tab disclosure layout** — exactly which controls are surfaced vs. collapsed on each tab.
-  To be designed when each tab is built.
+  To be designed when each tab is built. **Tab 2 is now settled
+  ([ADR-0026](docs/adr/0026-tab2-layout-left-rail-three-plot-bands.md)):** a workflow-staged left
+  rail (~300px) holds all controls + the four §3 checks (file management auto-collapses post-load;
+  λ/noise in a default-collapsed "Advanced" fold, §11.1), with the right column given to three
+  co-equal-height plot bands (reconstruction / first-class spike raster / kernel+STA overlay). Tabs 1
+  and 3 remain to be designed when built.
 - **Kernel scope** — partly resolved. Because the kernel is a *chosen* object in Tabs 1 and 3 but
   a *recovered* object in Tab 2 (see "The kernel plays three distinct roles", §2), a single global
   kernel across all tabs does not cleanly hold. **Likely model:** the *chosen* kernel is shared
