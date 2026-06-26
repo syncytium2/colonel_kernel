@@ -3,6 +3,11 @@
   import uPlot from 'uplot';
   import 'uplot/dist/uPlot.min.css';
 
+  // Min pointer travel (px) that counts as a zoom-drag rather than a click. Shared
+  // by uPlot's drag.dist (when a select begins) and the click-vs-drag split on
+  // release, so a drag never triggers the single-click reset (ADR-0026).
+  const ZOOM_DRAG_MIN = 6;
+
   // A thin reactive uPlot wrapper. `kind` selects stems (input spike train)
   // vs. a continuous line (kernel, output). Data is passed as parallel
   // xs / ys arrays and pushed to the chart whenever it changes.
@@ -118,7 +123,7 @@
       hooks.setSelect = [
         (u) => {
           const { left, width } = u.select;
-          if (width > 6) {
+          if (width > ZOOM_DRAG_MIN) {
             const min = u.posToVal(left, 'x');
             const max = u.posToVal(left + width, 'x');
             if (max > min) onZoom(min, max);
@@ -143,11 +148,13 @@
             ? { points: { show: () => false } }
             : {}),
         // VIEW-ONLY x-zoom: drag selects an x range (y untouched) but does NOT
-        // rescale here (setScale:false) — the parent owns the range. Disable uPlot's
-        // own dblclick so it can't autorange behind the parent; we bind our own
-        // dblclick→reset below (ADR-0026).
+        // rescale here (setScale:false) — the parent owns the range. `dist` is the
+        // min px to count as a drag, so anything below it is a click (→ reset, wired
+        // below); uPlot only fires setSelect past `dist`, so a zoom-drag's release
+        // never resets. Disable uPlot's own dblclick so it can't autorange behind the
+        // parent (ADR-0026).
         ...(zoomable
-          ? { drag: { x: true, y: false, setScale: false }, bind: { dblclick: () => null } }
+          ? { drag: { x: true, y: false, setScale: false, dist: ZOOM_DRAG_MIN }, bind: { dblclick: () => null } }
           : {}),
         // link the cursor by DATA-x across same-syncKey plots (scales: ['x', null]
         // syncs only the x scale, by value); match on the x-scale key so only the
@@ -204,15 +211,27 @@
       }
     });
     ro.observe(wrap);
-    // double-click resets the view-only zoom (parent clears its range on null).
-    let onDbl = null;
+    // SINGLE-CLICK on a zoomed band resets to full (ADR-0026). A click is a
+    // mousedown→mouseup with travel below ZOOM_DRAG_MIN; a zoom-drag exceeds it and
+    // must NOT reset. We measure pointer travel on the gesture that STARTED on this
+    // band (mousedown on wrap, mouseup on window so a drag ending off-band still
+    // resolves). onZoom(null) is a no-op at full range, so a click there does nothing.
+    let onDown = null, onUp = null;
     if (zoomable && onZoom) {
-      onDbl = () => onZoom(null);
-      wrap.addEventListener('dblclick', onDbl);
+      let dx0 = 0, dy0 = 0, armed = false;
+      onDown = (e) => { dx0 = e.clientX; dy0 = e.clientY; armed = true; };
+      onUp = (e) => {
+        if (!armed) return;
+        armed = false;
+        if (Math.hypot(e.clientX - dx0, e.clientY - dy0) < ZOOM_DRAG_MIN) onZoom(null);
+      };
+      wrap.addEventListener('mousedown', onDown);
+      window.addEventListener('mouseup', onUp);
     }
     return () => {
       ro.disconnect();
-      if (onDbl) wrap.removeEventListener('dblclick', onDbl);
+      if (onDown) wrap.removeEventListener('mousedown', onDown);
+      if (onUp) window.removeEventListener('mouseup', onUp);
       plot?.destroy();
     };
   });

@@ -609,7 +609,7 @@
           <span class="plot-label">reconstruction — actual dF/F₀ vs predicted (density ⊛ {method === 'free' ? 'free-vector' : 'parametric'} kernel), {colLabel(selectedCol)}</span>
           <div class="head-right">
             {#if zoomRange}
-              <button class="zoomnote zoomed" onclick={() => (zoomRange = null)} title="reset to full recording">zoomed {zoomRange[0].toFixed(0)}–{zoomRange[1].toFixed(0)} s · reset</button>
+              <span class="zoomnote zoomed">zoomed {zoomRange[0].toFixed(0)}–{zoomRange[1].toFixed(0)} s · click plot to reset</span>
             {:else}
               <span class="zoomnote">drag to zoom · view only</span>
             {/if}
@@ -980,16 +980,13 @@
     opacity: 0.7;
     white-space: nowrap;
   }
-  button.zoomnote {
-    font: inherit;
-    font-size: 11px;
+  .zoomnote.zoomed {
     border: 1px solid var(--accent-border);
     background: var(--accent-bg);
     color: var(--text-h);
     opacity: 1;
     border-radius: 6px;
     padding: 2px 8px;
-    cursor: pointer;
   }
   .histctl {
     display: inline-flex;
