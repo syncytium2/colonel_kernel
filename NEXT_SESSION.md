@@ -7,6 +7,25 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ▶ NEXT CODE ACTION — ADR-0028 Mode-removal + layout pass (on `tab2-regions`)
+
+**ADR-0028 landed (canon, master): regional-only kernels; Mode toggle removed; zoom-driven region
+selection** (supersedes ADR-0027 §3; §1/§2 intact). FOUNDATIONS §3 (whole-signal kernel across
+regions is not informative) + §11.4 (zoom-driven, no Mode toggle) reconciled in the same pass.
+
+The **stage-2 region UI is built on `tab2-regions`** (7 commits: spine + view-mode/coloring/
+double-click/kernel-band), but it predates ADR-0028 — it still has the **Whole/Region Mode toggle,
+prev/next nav, and a whole-recording kernel**. The next CODE action (on `tab2-regions`):
+- **remove the Mode toggle + prev/next nav**; region selection is double-click-to-region zoom only;
+- **never render the whole-signal kernel when >1 region** (single-region = boundary, shown normally);
+- default view = full recording, all regions shaded+labeled, kernel band = all regions none
+  highlighted; double-click zooms + makes a region current; keep the **Current/All band toggle**;
+- layout follow-ons (in-band region labels; collapsible Settings/§3 folds; tab title into the rail).
+
+`test:core` stays green; figure-gate the file-98 3-region case after.
+
+---
+
 ## 🔭 HORIZON — view-zoom vs sub-window recovery → see [ADR-0027](docs/adr/0027-subwindow-recovery-region-view-mode.md)
 
 The old over-broad fence here (all sub-window recovery = future V2) is **superseded by
