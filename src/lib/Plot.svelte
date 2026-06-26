@@ -53,6 +53,14 @@
     // shows the VALUE there. Tri-state: undefined = uPlot default (Tab 1 untouched);
     // true = show styled dots (recon/raster); false = explicitly off (kernel band).
     cursorPoints = undefined,
+    // VIEW-ONLY x-zoom (ADR-0026). When zoomable, drag-select a recording-time range
+    // and onZoom(min,max) is called; double-click calls onZoom(null) to reset. The
+    // PARENT owns the resulting range and feeds it back as xRange to BOTH synced
+    // bands, so they stay co-registered at every zoom level. Zoom changes only the
+    // visible slice — it never recomputes recovery (the data arrays are whole-recording).
+    // Off by default — Tab 1 and the kernel band pass nothing.
+    zoomable = false,
+    onZoom = null,
   } = $props();
 
   let wrap;
@@ -83,26 +91,42 @@
     // second overlaid line series (kernel/STA share one x and one y scale).
     const series2 =
       ys2 != null ? { points: { show: false }, stroke: resolveColor(color2), width: 2 } : null;
-    const hooks = zeroLine
-      ? {
-          // mark the lag-0 (spike-aligned) line — central to the kernel panel.
-          drawClear: [
-            (u) => {
-              const cx = u.valToPos(0, 'x', true);
-              if (cx < u.bbox.left || cx > u.bbox.left + u.bbox.width) return;
-              const { ctx } = u;
-              ctx.save();
-              ctx.strokeStyle = resolveColor('var(--border)');
-              ctx.setLineDash([3, 3]);
-              ctx.beginPath();
-              ctx.moveTo(cx, u.bbox.top);
-              ctx.lineTo(cx, u.bbox.top + u.bbox.height);
-              ctx.stroke();
-              ctx.restore();
-            },
-          ],
-        }
-      : {};
+    const hooks = {};
+    if (zeroLine) {
+      // mark the lag-0 (spike-aligned) line — central to the kernel panel.
+      hooks.drawClear = [
+        (u) => {
+          const cx = u.valToPos(0, 'x', true);
+          if (cx < u.bbox.left || cx > u.bbox.left + u.bbox.width) return;
+          const { ctx } = u;
+          ctx.save();
+          ctx.strokeStyle = resolveColor('var(--border)');
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(cx, u.bbox.top);
+          ctx.lineTo(cx, u.bbox.top + u.bbox.height);
+          ctx.stroke();
+          ctx.restore();
+        },
+      ];
+    }
+    if (zoomable && onZoom) {
+      // a completed drag-select carries a recording-time range; lift it to the
+      // parent (which re-pins BOTH bands via xRange) then clear the selection. The
+      // `false` suppresses re-firing this hook, so no recursion. Tiny drags (<6px,
+      // i.e. a click) are ignored so a stray click doesn't zoom.
+      hooks.setSelect = [
+        (u) => {
+          const { left, width } = u.select;
+          if (width > 6) {
+            const min = u.posToVal(left, 'x');
+            const max = u.posToVal(left + width, 'x');
+            if (max > min) onZoom(min, max);
+          }
+          u.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
+        },
+      ];
+    }
     return {
       width,
       height: h,
@@ -118,6 +142,13 @@
           : cursorPoints === false
             ? { points: { show: () => false } }
             : {}),
+        // VIEW-ONLY x-zoom: drag selects an x range (y untouched) but does NOT
+        // rescale here (setScale:false) — the parent owns the range. Disable uPlot's
+        // own dblclick so it can't autorange behind the parent; we bind our own
+        // dblclick→reset below (ADR-0026).
+        ...(zoomable
+          ? { drag: { x: true, y: false, setScale: false }, bind: { dblclick: () => null } }
+          : {}),
         // link the cursor by DATA-x across same-syncKey plots (scales: ['x', null]
         // syncs only the x scale, by value); match on the x-scale key so only the
         // recording-time bands link (ADR-0026).
@@ -173,8 +204,15 @@
       }
     });
     ro.observe(wrap);
+    // double-click resets the view-only zoom (parent clears its range on null).
+    let onDbl = null;
+    if (zoomable && onZoom) {
+      onDbl = () => onZoom(null);
+      wrap.addEventListener('dblclick', onDbl);
+    }
     return () => {
       ro.disconnect();
+      if (onDbl) wrap.removeEventListener('dblclick', onDbl);
       plot?.destroy();
     };
   });

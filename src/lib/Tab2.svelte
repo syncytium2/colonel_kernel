@@ -80,6 +80,7 @@
   let showRailed = $state(false); // ADR-0025: reveal default-hidden railed-parametric output
   let histWinS = $state(HIST_WIN_DEFAULT); // spike-histogram review window (s), display only
   let advancedOpen = $state(false); // ADR-0026: λ/noise live in a default-collapsed Advanced fold (§11.1)
+  let zoomRange = $state(null); // ADR-0026 view-only x-zoom: [min,max] recording-time s, or null = full
 
   async function handleFiles(fileList) {
     const file = fileList && fileList[0];
@@ -128,6 +129,15 @@
     method = 'free';
     showRailed = false;
     histWinS = HIST_WIN_DEFAULT;
+    zoomRange = null;
+  }
+
+  // View-only x-zoom (ADR-0026). The parent owns the displayed range and feeds it
+  // to BOTH recording-time bands (xView), so they stay co-registered at every zoom
+  // level. null resets to full range. This never touches recovery — kernel/STA/§3
+  // read the whole-recording arrays regardless of the visible window.
+  function handleZoom(min, max) {
+    zoomRange = min == null ? null : [min, max];
   }
 
   function onDrop(e) {
@@ -139,6 +149,9 @@
   // --- shared display axes (core untouched) ---
   const gridTimes = $derived(region ? Array.from(region.grid.times) : []);
   const xRange = $derived(region ? [region.meta.t0, region.meta.tEnd] : null);
+  // The displayed recording-time range: the zoom window when set, else full. Both
+  // recording-time bands receive THIS, so a zoom on one applies identically to both.
+  const xView = $derived(zoomRange ?? xRange);
   const kernelXRange = [-WIN, WIN]; // the overlay axis; STA (±STAWIN) sits inside it.
 
   // The selected ROI column.
@@ -594,11 +607,18 @@
       <div class="band">
         <div class="band-head">
           <span class="plot-label">reconstruction — actual dF/F₀ vs predicted (density ⊛ {method === 'free' ? 'free-vector' : 'parametric'} kernel), {colLabel(selectedCol)}</span>
-          <label class="histctl">
-            <span>spike window</span>
-            <input type="range" min={region.grid.dt} max={HIST_WIN_MAX} step={region.grid.dt} bind:value={histWinS} />
-            <output>{(histo ? histo.windowS : histWinS).toFixed(2)} s</output>
-          </label>
+          <div class="head-right">
+            {#if zoomRange}
+              <button class="zoomnote zoomed" onclick={() => (zoomRange = null)} title="reset to full recording">zoomed {zoomRange[0].toFixed(0)}–{zoomRange[1].toFixed(0)} s · reset</button>
+            {:else}
+              <span class="zoomnote">drag to zoom · view only</span>
+            {/if}
+            <label class="histctl">
+              <span>spike window</span>
+              <input type="range" min={region.grid.dt} max={HIST_WIN_MAX} step={region.grid.dt} bind:value={histWinS} />
+              <output>{(histo ? histo.windowS : histWinS).toFixed(2)} s</output>
+            </label>
+          </div>
         </div>
         <div class="band-body">
           {#if railedHidden}
@@ -615,11 +635,13 @@
               color="#2a9d8f"
               ys2={reconTrace}
               color2="#c0392b"
-              {xRange}
+              xRange={xView}
               yAxisSize={44}
               padRight={PLOT_PAD_R}
               syncKey="tab2-rec-x"
               cursorPoints={true}
+              zoomable
+              onZoom={handleZoom}
               yLabel="dF/F₀"
               showXAxis={false}
               height={172}
@@ -651,12 +673,14 @@
               kind="stems"
               barSize={[0.9, 6]}
               color="var(--text-h)"
-              {xRange}
+              xRange={xView}
               yRange={histYRange}
               yAxisSize={44}
               padRight={PLOT_PAD_R}
               syncKey="tab2-rec-x"
               cursorPoints={true}
+              zoomable
+              onZoom={handleZoom}
               yLabel="count"
               xLabel="recording time (s)"
               height={104}
@@ -943,6 +967,29 @@
     font-size: 11px;
     color: var(--text);
     margin: 6px 0 2px;
+  }
+  .head-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+  }
+  /* zoom-state hint / reset (ADR-0026 view-only x-zoom) */
+  .zoomnote {
+    font-size: 11px;
+    color: var(--text);
+    opacity: 0.7;
+    white-space: nowrap;
+  }
+  button.zoomnote {
+    font: inherit;
+    font-size: 11px;
+    border: 1px solid var(--accent-border);
+    background: var(--accent-bg);
+    color: var(--text-h);
+    opacity: 1;
+    border-radius: 6px;
+    padding: 2px 8px;
+    cursor: pointer;
   }
   .histctl {
     display: inline-flex;
