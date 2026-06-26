@@ -21,3 +21,7 @@ export { tauRailed, peakAtBoundary, normalizeUnitPeak, rebinCounts } from './rea
 export { spikeTriggeredAverage } from './sta.js';
 // CSV ingestion (ADR-0016): one region's exported CSV → the signal contract.
 export { loadCsv } from './load-csv.js';
+// Windowed (sub-window) recovery (ADR-0027): region-local kernel/STA over a windowed
+// region view. SheetJS-free (takes the already-windowed view; the bracket stays in
+// load-xlsx) so it is barrel-safe (FOUNDATIONS §6 code-split preserved).
+export { recoverRegion, spikeSufficiency } from './region-recovery.js';
