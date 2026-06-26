@@ -56,6 +56,14 @@
   const HIST_WIN_DEFAULT = 1.0;
   const HIST_WIN_MAX = 5.0;
 
+  // Shared plot-area right padding (px). uPlot only auto-reserves a right gutter
+  // when an x-axis is shown; the reconstruction band hides its x-axis while the
+  // raster shows one, so without a pinned value their right edges (and thus the
+  // shared recording-time x) shear apart. Pinning both to one value forces
+  // identical right edges — the ADR-0026 co-registration lock. Must exceed the
+  // widest last x-tick label's right overhang (~25px for "1,100") so nothing clips.
+  const PLOT_PAD_R = 32;
+
   let region = $state(null);
   let error = $state(null);
   let fileName = $state('');
@@ -609,6 +617,7 @@
               color2="#c0392b"
               {xRange}
               yAxisSize={44}
+              padRight={PLOT_PAD_R}
               yLabel="dF/F₀"
               showXAxis={false}
               height={172}
@@ -643,6 +652,7 @@
               {xRange}
               yRange={histYRange}
               yAxisSize={44}
+              padRight={PLOT_PAD_R}
               yLabel="count"
               xLabel="recording time (s)"
               height={104}
@@ -676,6 +686,7 @@
               xRange={kernelXRange}
               yRange={overlay.yRange}
               yAxisSize={44}
+              padRight={PLOT_PAD_R}
               yLabel="amplitude (dF/F₀)"
               zeroLine
               xLabel="lag (s)"
@@ -692,6 +703,7 @@
               xRange={kernelXRange}
               yRange={overlay.yRange}
               yAxisSize={44}
+              padRight={PLOT_PAD_R}
               yLabel="amplitude (dF/F₀)"
               zeroLine
               xLabel="lag (s)"

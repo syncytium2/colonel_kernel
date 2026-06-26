@@ -37,6 +37,12 @@
     // Bar sizing for kind='stems' — [widthFactor, maxPx]. The raster needs wider
     // bars than the line default so sparse, low-count cells read (ADR-0026).
     barSize = [0.35, 4],
+    // Pin the right-edge padding (px) of the plot AREA. uPlot auto-reserves space
+    // on the right only when an x-axis is shown (for the last tick label), so a
+    // stacked pair where one plot hides its x-axis ends up with mismatched right
+    // edges and the shared-x lock shears. Setting an equal padRight on both forces
+    // identical right edges regardless of x-axis presence (ADR-0026 co-registration).
+    padRight = null,
   } = $props();
 
   let wrap;
@@ -93,6 +99,9 @@
       cursor: { y: false },
       legend: { show: false },
       scales: { x: { time: false } },
+      // pin only the right padding (others stay auto) so stacked plots share an
+      // identical right edge even when one hides its x-axis (ADR-0026).
+      ...(padRight != null ? { padding: [null, padRight, null, null] } : {}),
       hooks,
       axes: [
         { show: showXAxis, label: xLabel || undefined },
