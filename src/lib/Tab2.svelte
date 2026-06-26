@@ -97,10 +97,11 @@
   let advancedOpen = $state(false); // ADR-0026: λ/noise live in a default-collapsed Advanced fold (§11.1)
   let zoomRange = $state(null); // ADR-0026 view-only x-zoom: [min,max] recording-time s, or null = full
 
-  // ADR-0027 stage 2 — two view modes + region navigation (sub-window recovery is first-class).
-  let viewMode = $state('whole'); // 'whole' = genuine all-APs (ADR-0027 §2) | 'region' = one metadata region
-  let currentRegionIdx = $state(0); // index into metaRegions (region mode)
-  let bandMode = $state('current'); // kernel band: 'current' (active recovery) | 'all' (every region's kernel+STA)
+  // ADR-0028 — regional-only recovery, zoom-driven region selection (no Mode toggle).
+  // currentRegionIdx = the zoom-selected current region (null = full view, no current). A
+  // single-region recording is always current via effectiveCurrentIdx.
+  let currentRegionIdx = $state(0); // commit-A default 0; becomes null (zoom-driven) in the next commit
+  let bandMode = $state('all'); // kernel band: 'all' (every region's kernel+STA) | 'current' (current region alone)
 
   async function handleFiles(fileList) {
     const file = fileList && fileList[0];
@@ -116,8 +117,8 @@
         xlsxApi = mod;
         recording = rec;
         resetSlice();
-        // ADR-0022: a fully silent recording (no APs) is surfaced by the activeRegion guard
-        // below as the single-file no-AP message — not fit, not an error.
+        // ADR-0022: a fully silent recording (no APs) is surfaced by the displayAnalyzable
+        // guard below as the single-file no-AP message — not fit, not an error.
         error = null;
         return;
       }
@@ -138,22 +139,7 @@
     showRailed = false;
     histWinS = HIST_WIN_DEFAULT;
     zoomRange = null;
-    viewMode = 'whole';
     currentRegionIdx = 0;
-  }
-
-  // Region navigation (region mode). Switching region/mode clears the view-only zoom so the
-  // new region opens at its own full extent.
-  function setViewMode(m) {
-    if (m === viewMode) return;
-    viewMode = m;
-    zoomRange = null;
-  }
-  function gotoRegion(i) {
-    const n = metaRegions.length;
-    if (!n) return;
-    currentRegionIdx = ((i % n) + n) % n;
-    zoomRange = null;
   }
 
   // View-only x-zoom (ADR-0026). The parent owns the displayed range and feeds it
@@ -182,62 +168,80 @@
     handleFiles(e.dataTransfer?.files);
   }
 
-  // --- ADR-0027 region model: the metadata regions + the active analyzable view ---
-  // metaRegions = the recording's REAL metadata regions (xlsx). CSV / no-metadata → [].
+  // --- ADR-0028 region model: regional-only recovery, DISPLAY decoupled from RECOVERY ---
+  // metaRegions = the recording's REAL metadata regions (xlsx). For CSV / no-metadata we
+  // synthesize ONE implicit region spanning the whole recording — the single-region boundary
+  // case where whole == regional (FOUNDATIONS §3 / ADR-0028 §5).
   const metaRegions = $derived(recording && recording.regions ? recording.regions : []);
-  const hasRegions = $derived(metaRegions.length > 0);
+  const hasRegions = $derived(metaRegions.length > 0); // TRUE metadata regions (shading / dbl-click)
+  const regions = $derived(
+    metaRegions.length
+      ? metaRegions
+      : recording
+        ? [{ name: 'recording', startS: recording.meta.t0, endS: recording.meta.tEnd }]
+        : [],
+  );
+  const regionCount = $derived(regions.length);
+  const multiRegion = $derived(regionCount > 1);
+  // A single-region recording is ALWAYS current (whole == regional); a multi-region one has a
+  // current region only when one is zoom-selected (null = full view, no current — ADR-0028 §2).
+  const effectiveCurrentIdx = $derived(
+    regionCount === 1 ? 0 : currentRegionIdx != null ? Math.min(currentRegionIdx, regionCount - 1) : null,
+  );
 
-  // The active analyzable region the readout recovers over (ADR-0027):
-  //   whole mode  → the full span bracketed to ALL APs (genuine all-APs recovery, §2);
-  //   region mode → the current metadata region, bracketed to its spikes (ADR-0019 §4).
-  // Both go through windowRegion (the stage-1 bracket); a non-analyzable result (silent
-  // recording / region) is carried as {analyzable:false} and surfaced, never fit (ADR-0022).
-  const activeRegion = $derived.by(() => {
+  // Window one region [startS,endS] to its spikes (ADR-0019 §4) → a LoadedRegion the readout
+  // consumes. CSV (no xlsxApi) has only the whole recording, returned as-is.
+  function regionToLR(span, label) {
     if (!recording) return null;
     if (xlsxApi && recording.regions) {
-      const span =
-        viewMode === 'region' && metaRegions.length
-          ? metaRegions[Math.min(currentRegionIdx, metaRegions.length - 1)]
-          : { name: 'whole (all APs)', startS: recording.meta.t0, endS: recording.meta.tEnd };
       const v = xlsxApi.windowRegion(recording, span);
       if (!v.analyzable) return { analyzable: false, regionName: span.name, reason: v.reason };
-      const lr = xlsxApi.regionViewToLoadedRegion(v, { source: `${fileName} — ${span.name}` });
+      const lr = xlsxApi.regionViewToLoadedRegion(v, { source: `${fileName} — ${label ?? span.name}` });
       lr.analyzable = true;
       lr.regionName = span.name;
       return lr;
     }
-    // CSV: the loaded region as-is (no metadata regions; whole mode only) — unchanged.
-    return Object.assign({ analyzable: recording.spikeTimes.length >= 2, regionName: 'recording' }, recording);
-  });
-  const analyzable = $derived(!!activeRegion && activeRegion.analyzable !== false);
+    return Object.assign({ analyzable: recording.spikeTimes.length >= 2, regionName: span.name }, recording);
+  }
 
-  // --- shared display axes (core untouched) ---
-  const gridTimes = $derived(analyzable ? Array.from(activeRegion.grid.times) : []);
-  const xRange = $derived(analyzable ? [activeRegion.meta.t0, activeRegion.meta.tEnd] : null);
-  // The displayed recording-time range: the zoom window when set, else full. Both
-  // recording-time bands receive THIS, so a zoom on one applies identically to both.
+  // DISPLAY region = the whole recording (all APs). The recon trace + spike raster ALWAYS show
+  // the full recording; zoom is view-only (ADR-0027 §1). NO kernel is recovered from it — a
+  // whole-signal kernel across >1 region is not informative (FOUNDATIONS §3 / ADR-0028 §1).
+  const displayRegion = $derived(
+    recording ? regionToLR({ name: 'whole', startS: recording.meta.t0, endS: recording.meta.tEnd }, 'whole') : null,
+  );
+  const displayAnalyzable = $derived(!!displayRegion && displayRegion.analyzable !== false);
+
+  // RECOVERY region = the CURRENT region (zoom-selected; single-region → always region 0).
+  // null when multi-region at full view → no §3/kernel/predicted (kernel band shows all regions).
+  const recoveryRegion = $derived(
+    recording && effectiveCurrentIdx != null ? regionToLR(regions[effectiveCurrentIdx]) : null,
+  );
+  const analyzable = $derived(!!recoveryRegion && recoveryRegion.analyzable !== false);
+
+  // --- shared display axes — the WHOLE recording (display); zoom view-only ---
+  const gridTimes = $derived(displayAnalyzable ? Array.from(displayRegion.grid.times) : []);
+  const xRange = $derived(displayAnalyzable ? [displayRegion.meta.t0, displayRegion.meta.tEnd] : null);
   const xView = $derived(zoomRange ?? xRange);
   const kernelXRange = [-WIN, WIN]; // the overlay axis; STA (±STAWIN) sits inside it.
 
-  // ADR-0027: metadata regions as low-alpha background shading on the recording-time bands,
-  // each in its Okabe-Ito hue. WHOLE mode only — in region mode the band IS one region.
+  // Metadata regions as low-alpha Okabe-Ito background shading on the recording-time bands —
+  // always shown (zoom-driven model: regions are visible at every zoom; ADR-0028).
   const bandRegions = $derived(
-    viewMode === 'whole' && hasRegions
-      ? metaRegions.map((r, i) => ({ x0: r.startS, x1: r.endS, color: hexToRgba(regionColor(i), 0.13) }))
-      : null,
+    hasRegions ? metaRegions.map((r, i) => ({ x0: r.startS, x1: r.endS, color: hexToRgba(regionColor(i), 0.13) })) : null,
   );
 
-  // The selected ROI column.
-  const selected = $derived(analyzable ? activeRegion.rois[selectedCol] : null);
+  // The selected ROI column — in the DISPLAY region (recon trace) and the RECOVERY region (kernel).
+  const displaySelected = $derived(displayAnalyzable ? displayRegion.rois[selectedCol] : null);
+  const selected = $derived(analyzable ? recoveryRegion.rois[selectedCol] : null);
 
-  // binned-count spike density on the trace timebase, zero-padded to a power of two
-  // (§13, ADR-0013 preFirstBin 'keep'; ADR-0017 raw). One shared spike train per
-  // recording (ADR-0019), so this depends only on the region, not the column.
+  // RECOVERY binned-count density — over the CURRENT region (§13, ADR-0013 keep; ADR-0017 raw),
+  // zero-padded to a power of two. Drives the §3 recovery for the current region only.
   const density = $derived.by(() => {
     if (!analyzable) return null;
-    const n = activeRegion.grid.n;
+    const n = recoveryRegion.grid.n;
     const N = nextPow2(n);
-    const sd = rasterize(activeRegion.spikeTimes, activeRegion.grid, {
+    const sd = rasterize(recoveryRegion.spikeTimes, recoveryRegion.grid, {
       amplitudeMode: 'binned-count',
       preFirstBin: 'keep',
     });
@@ -246,10 +250,17 @@
     return { n, N, sdPad, placed: sd.placed, dropped: sd.dropped };
   });
 
-  // The frame-grid binned-count density, sliced to the real region — the exact §13
-  // recovery input (a display-only VIEW of density.sdPad). Re-binned below for the
-  // co-registered histogram; recovery keeps reading density.sdPad regardless.
-  const frameCounts = $derived(density ? Array.from(density.sdPad.subarray(0, density.n)) : []);
+  // DISPLAY binned-count density — over the WHOLE recording, for the co-registered raster
+  // (display only, never feeds recovery). Shows all APs across all regions at every zoom.
+  const displayDensity = $derived.by(() => {
+    if (!displayAnalyzable) return null;
+    const sd = rasterize(displayRegion.spikeTimes, displayRegion.grid, {
+      amplitudeMode: 'binned-count',
+      preFirstBin: 'keep',
+    });
+    return { n: displayRegion.grid.n, counts: Array.from(sd.samples), placed: sd.placed };
+  });
+  const frameCounts = $derived(displayDensity ? displayDensity.counts : []);
 
   // Co-registered spike histogram — the spike train re-binned over the review window
   // (DISPLAY ONLY, never feeds recovery). At histWinS = dt the bars ARE the recovery
@@ -257,13 +268,13 @@
   // [0, maxCount] so EMPTY stretches under a calcium hump stay as legible as tall ones
   // (the decoupling read must not be auto-scaled away).
   const histo = $derived.by(() => {
-    if (!analyzable || !density) return null;
-    const dt = activeRegion.grid.dt;
+    if (!displayAnalyzable || !displayDensity) return null;
+    const dt = displayRegion.grid.dt;
     const { values, group, windowS } = rebinCounts(frameCounts, dt, histWinS);
     const centers = new Array(values.length);
     for (let b = 0; b < values.length; b++) {
       const start = b * group;
-      const end = Math.min(start + group, density.n) - 1;
+      const end = Math.min(start + group, displayDensity.n) - 1;
       centers[b] = (gridTimes[start] + gridTimes[end]) / 2;
     }
     let maxCount = 0;
@@ -317,7 +328,7 @@
   // --- the live readout for the selected ROI: BOTH methods + STA + ADR-0025 facts ---
   const analysis = $derived.by(() => {
     if (!analyzable || !density || !noisyTrace) return null;
-    const dt = activeRegion.grid.dt;
+    const dt = recoveryRegion.grid.dt;
     const { n, N, sdPad } = density;
     const ws = Math.round(WIN / dt);
     const staWs = Math.round(STAWIN / dt);
@@ -356,7 +367,7 @@
     const pmRailed = tauRailed(pm.fit.theta); // ADR-0025 fact
 
     // ---- STA (method-independent) ----
-    const sta = spikeTriggeredAverage(activeRegion.spikeTimes, staTrace, activeRegion.grid.times, {
+    const sta = spikeTriggeredAverage(recoveryRegion.spikeTimes, staTrace, recoveryRegion.grid.times, {
       window: STAWIN,
       baseline: STABASE,
     });
@@ -410,7 +421,7 @@
   // recovery; the parametric method has no λ knob, so this stays the FV diagnostic).
   const stability = $derived.by(() => {
     if (!analyzable || !density || !noisyTrace) return null;
-    const dt = activeRegion.grid.dt;
+    const dt = recoveryRegion.grid.dt;
     const { N, sdPad } = density;
     const ws = Math.round(WIN / dt);
     const { recReal } = noisyTrace;
@@ -436,8 +447,8 @@
   // Spike-rate context (ADR-0005 three regimes — which method to believe).
   const spikeContext = $derived.by(() => {
     if (!analyzable || !density) return null;
-    const duration = activeRegion.meta.tEnd - activeRegion.meta.t0;
-    return { rateHz: density.placed / duration, placed: density.placed, nSpikes: activeRegion.meta.nSpikes, duration };
+    const duration = recoveryRegion.meta.tEnd - recoveryRegion.meta.t0;
+    return { rateHz: density.placed / duration, placed: density.placed, nSpikes: recoveryRegion.meta.nSpikes, duration };
   });
 
   // --- the active method's view, applying the ADR-0025 railed default-hide ---
@@ -458,9 +469,21 @@
     return [lo - pad, hi + pad];
   }
 
-  // ADR-0027 all-regions kernel/STA overlays — one recoverRegion per metadata region
-  // (noise-off; stability skipped, the band needs only kernel + STA). Every region shares
-  // the lag grid (same whole-recording dt → same ws). null = a non-analyzable region.
+  // The shared kernel lag axis (±WIN), from the recording dt — available whenever a file is
+  // loaded, independent of whether a region is currently selected (so the all-regions band
+  // can draw even at full view with no current region).
+  const kernelLag = $derived.by(() => {
+    if (!recording) return null;
+    const dt = recording.meta.dt;
+    const ws = Math.round(WIN / dt);
+    const lag = new Array(2 * ws + 1);
+    for (let j = -ws; j <= ws; j++) lag[ws + j] = j * dt;
+    return lag;
+  });
+
+  // ADR-0028 regional kernel/STA overlays — one recoverRegion per metadata region (noise-off;
+  // stability skipped, the band needs only kernel + STA). Every region shares the lag grid
+  // (same whole-recording dt → same ws). null = a non-analyzable region.
   const regionOverlays = $derived.by(() => {
     if (!recording || !xlsxApi || !hasRegions) return null;
     return metaRegions.map((r) => {
@@ -481,49 +504,67 @@
   // for SHAPE; shared keeps true magnitude. The whole-recording kernel is NOT in the
   // all-regions overlay (whole is not a region — ADR-0027 §3).
   const kernelBand = $derived.by(() => {
-    if (!analysis) return null;
-    const lag = analysis.kernelLag;
+    if (!kernelLag) return null;
     const norm = overlayMode === 'normalized';
     const nv = (a) => (norm ? normalizeUnitPeak(a) : a);
     const series = [];
-    if (bandMode === 'all' && hasRegions && regionOverlays) {
-      const highlightIdx = viewMode === 'region' ? currentRegionIdx : -1;
+    // Show ALL regions when multi-region AND (the toggle says all OR there is no current
+    // region to isolate — the full-view default, ADR-0028 §2). Otherwise show the current
+    // region's kernel alone. The whole-signal kernel is never drawn (ADR-0028 §1).
+    const showAll = multiRegion && regionOverlays && (bandMode === 'all' || effectiveCurrentIdx == null);
+    if (showAll) {
+      const hi = effectiveCurrentIdx; // current region index, or null at full view (none highlighted)
       regionOverlays.forEach((ov, i) => {
         if (!ov) return;
         const hue = regionColor(i);
-        const cur = i === highlightIdx;
-        const alpha = highlightIdx < 0 ? 0.95 : cur ? 1 : 0.38;
-        const w = cur ? 2.8 : highlightIdx < 0 ? 1.8 : 1.2;
+        const cur = hi != null && i === hi;
+        const alpha = hi == null ? 0.95 : cur ? 1 : 0.38;
+        const w = cur ? 2.8 : hi == null ? 1.8 : 1.2;
         series.push({ ys: nv(ov.kernelV), stroke: hexToRgba(hue, alpha), width: w, dash: null });
         series.push({ ys: nv(ov.staV), stroke: hexToRgba(hue, alpha), width: Math.max(1, w - 0.8), dash: [6, 4] });
       });
-    } else {
-      // current-region only. Region mode → the region's hue (kernel solid, STA dashed, to
-      // match its band shade). Whole mode → all-APs recovery (not a region) → the neutral
-      // purple/orange of the established single-slice view.
+    } else if (analysis) {
+      // The current region's kernel + STA. When the recording has metadata regions, the
+      // current region wears its Okabe-Ito hue (kernel solid, STA dashed); a single implicit
+      // region (CSV / no metadata) uses the neutral purple/orange single-slice colors.
       const kv = railedHidden ? null : active.kernelV.slice();
       const sv = analysis.staOnKernel;
-      if (viewMode === 'region') {
-        const hue = regionColor(currentRegionIdx);
-        if (kv) series.push({ ys: nv(kv), stroke: hue, width: 2.4, dash: null });
-        series.push({ ys: nv(sv), stroke: hue, width: 1.8, dash: [6, 4] });
-      } else {
-        if (kv) series.push({ ys: nv(kv), stroke: '#7b2ff7', width: 2, dash: null });
-        series.push({ ys: nv(sv), stroke: '#e76f51', width: 2, dash: null });
-      }
+      const hue = hasRegions && effectiveCurrentIdx != null ? regionColor(effectiveCurrentIdx) : null;
+      const kColor = hue ?? '#7b2ff7';
+      const sColor = hue ?? '#e76f51';
+      if (kv) series.push({ ys: nv(kv), stroke: kColor, width: 2.4, dash: null });
+      series.push({ ys: nv(sv), stroke: sColor, width: hue ? 1.8 : 2, dash: hue ? [6, 4] : null });
     }
-    return { lag, series, yRange: rangeOf(series.map((s) => s.ys)) };
+    return { lag: kernelLag, series, yRange: rangeOf(series.map((s) => s.ys)) };
   });
   // uPlot fixes its series count at init, so remount the band Plot ({#key}) when the count/
-  // config changes (mode/region count/railed). Value-only changes update in place.
+  // config changes. Value-only changes update in place.
   const kernelBandKey = $derived(
-    kernelBand ? `${bandMode}-${kernelBand.series.length}-${railedHidden}-${viewMode}` : 'none',
+    kernelBand ? `${kernelBand.series.length}-${railedHidden}-${effectiveCurrentIdx}-${bandMode}` : 'none',
+  );
+  // Whether the band is drawing ALL regions (multi-region, toggle 'all' or no current region).
+  const bandShowsAll = $derived(
+    multiRegion && !!regionOverlays && (bandMode === 'all' || effectiveCurrentIdx == null),
   );
 
-  // Reconstruction predicted trace for the active method (null while railed+hidden).
-  const reconTrace = $derived(active && !railedHidden ? active.reconTrace : null);
+  // Reconstruction predicted overlay (current region) placed onto the WHOLE-recording timeline
+  // at the region's offset, null elsewhere — so it aligns with the full recon trace. Null while
+  // railed-hidden or when no region is current.
+  const reconTrace = $derived.by(() => {
+    if (!active || railedHidden || !analysis || !recoveryRegion || !displayAnalyzable) return null;
+    const out = new Array(displayRegion.grid.n).fill(null);
+    const dt = displayRegion.grid.dt;
+    const off = Math.round((recoveryRegion.grid.times[0] - displayRegion.grid.times[0]) / dt);
+    const rt = active.reconTrace;
+    for (let j = 0; j < rt.length; j++) {
+      const i = off + j;
+      if (i >= 0 && i < out.length) out[i] = rt[j];
+    }
+    return out;
+  });
+  // Actual dF/F₀ = the WHOLE recording trace for the selected column (display; zoom view-only).
   const traceYs = $derived(
-    selected ? Array.from(selected.samples, (v) => (Number.isFinite(v) ? v : null)) : [],
+    displaySelected ? Array.from(displaySelected.samples, (v) => (Number.isFinite(v) ? v : null)) : [],
   );
 
   // ADR-0025 indicator facts for the current slice (neutral; never pass/fail).
@@ -549,7 +590,7 @@
 
   const f = (x, p = 4) => (Number.isFinite(x) ? x.toFixed(p) : '—');
   const e = (x) => (Number.isFinite(x) ? x.toExponential(2) : '—');
-  const colLabel = (i) => (i === 0 ? `${activeRegion.rois[0].id} (target)` : activeRegion.rois[i].id);
+  const colLabel = (i) => (i === 0 ? `${displayRegion.rois[0].id} (target)` : displayRegion.rois[i].id);
 </script>
 
 <!-- drop is sensitive across the whole tab; the affordance shrinks once a file loads. -->
@@ -574,8 +615,8 @@
       {#if fileName}<p class="fname">{fileName}</p>{/if}
       {#if error}<p class="error">Could not load: {error}</p>{/if}
     </div>
-  {:else if !analyzable}
-    <!-- ADR-0022: no APs in the active span — a policy SKIP, not a fit (and not an error). -->
+  {:else if !displayAnalyzable}
+    <!-- ADR-0022: no APs in the whole recording — a policy SKIP, not a fit (and not an error). -->
     <div class="dropzone">
       <div class="fileline">
         <span class="fn" title={fileName}>{fileName}</span>
@@ -584,23 +625,7 @@
           <input type="file" accept=".csv,.xlsx,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
         </label>
       </div>
-      {#if hasRegions}
-        <div class="field" style="margin:10px 0">
-          <span>View</span>
-          <div class="seg" role="group" aria-label="View mode">
-            <button class:on={viewMode === 'whole'} onclick={() => setViewMode('whole')}>Whole recording</button>
-            <button class:on={viewMode === 'region'} onclick={() => setViewMode('region')}>Region</button>
-          </div>
-        </div>
-        {#if viewMode === 'region'}
-          <div class="regnav">
-            <button onclick={() => gotoRegion(currentRegionIdx - 1)} aria-label="previous region">‹</button>
-            <span>{activeRegion.regionName} ({currentRegionIdx + 1}/{metaRegions.length})</span>
-            <button onclick={() => gotoRegion(currentRegionIdx + 1)} aria-label="next region">›</button>
-          </div>
-        {/if}
-      {/if}
-      <p class="error">{activeRegion?.regionName ?? 'this recording'}: no APs — deconvolution not possible (ADR-0022 policy skip; not fit).</p>
+      <p class="error">{fileName}: no APs in this recording — deconvolution not possible (ADR-0022 policy skip; not fit).</p>
     </div>
   {:else if analysis}
     <!-- ADR-0026: workflow-staged left rail (all controls + the four §3 checks) +
@@ -619,43 +644,11 @@
 
         <!-- concise summary -->
         <p class="summary">
-          <strong>{activeRegion.rois.length} ROIs</strong> · showing <strong>{colLabel(selectedCol)}</strong><br />
-          {activeRegion.grid.n} frames · dt {activeRegion.grid.dt.toFixed(3)} s · {viewMode === 'region' ? activeRegion.regionName : 'whole recording'}
-          {#if spikeContext}· <span class="muted">{spikeContext.placed} spikes · {f(spikeContext.rateHz, 3)} Hz</span>{/if}
+          <strong>{displayRegion.rois.length} ROIs</strong> · showing <strong>{colLabel(selectedCol)}</strong><br />
+          {displayRegion.grid.n} frames · dt {displayRegion.grid.dt.toFixed(3)} s · {#if hasRegions}{metaRegions.length} regions{:else}whole recording{/if}
+          {#if hasRegions}<br /><span class="muted">double-click a shaded region to read its kernel</span>{/if}
+          {#if analysis && spikeContext}<br /><span class="muted">{recoveryRegion.regionName}: {spikeContext.placed} spikes · {f(spikeContext.rateHz, 3)} Hz</span>{/if}
         </p>
-
-        <!-- ADR-0027 view mode + region navigation (only when the file carries metadata regions) -->
-        {#if hasRegions}
-          <div class="rail-sec">
-            <div class="rail-h">View</div>
-            <div class="rail-bd">
-              <div class="field">
-                <span>Mode</span>
-                <div class="seg" role="group" aria-label="View mode">
-                  <button class:on={viewMode === 'whole'} onclick={() => setViewMode('whole')}>Whole</button>
-                  <button class:on={viewMode === 'region'} onclick={() => setViewMode('region')}>Region</button>
-                </div>
-              </div>
-              {#if viewMode === 'region'}
-                <div class="field">
-                  <span>Region ({currentRegionIdx + 1}/{metaRegions.length})</span>
-                  <div class="regnav">
-                    <button onclick={() => gotoRegion(currentRegionIdx - 1)} aria-label="previous region">‹</button>
-                    <span class="regname">{activeRegion.regionName}</span>
-                    <button onclick={() => gotoRegion(currentRegionIdx + 1)} aria-label="next region">›</button>
-                  </div>
-                </div>
-              {:else}
-                <p class="ctl-note">All APs (genuine whole-recording recovery). Regions shaded:</p>
-                <ul class="reglegend">
-                  {#each metaRegions as r, i}
-                    <li><span class="sw" style="background:{regionColor(i)}"></span>{r.name}</li>
-                  {/each}
-                </ul>
-              {/if}
-            </div>
-          </div>
-        {/if}
 
         <!-- Settings -->
         <div class="rail-sec">
@@ -664,7 +657,7 @@
             <label class="field">
               <span>Column</span>
               <select bind:value={selectedCol}>
-                {#each activeRegion.rois as roi, i}
+                {#each displayRegion.rois as roi, i}
                   <option value={i}>{colLabel(i)}</option>
                 {/each}
               </select>
@@ -806,7 +799,7 @@
             {/if}
             <label class="histctl">
               <span>spike window</span>
-              <input type="range" min={activeRegion.grid.dt} max={HIST_WIN_MAX} step={activeRegion.grid.dt} bind:value={histWinS} />
+              <input type="range" min={displayRegion.grid.dt} max={HIST_WIN_MAX} step={displayRegion.grid.dt} bind:value={histWinS} />
               <output>{(histo ? histo.windowS : histWinS).toFixed(2)} s</output>
             </label>
           </div>
@@ -854,7 +847,7 @@
       <div class="band">
         <div class="band-head">
           <span class="plot-label">
-            spike raster — binned count per {(histo ? histo.windowS : histWinS).toFixed(2)} s bin · pinned [0, {histo ? histo.maxCount : 1}] (decoupling visibility){#if histo} · {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {activeRegion.grid.dt.toFixed(2)} s for the §13 recovery input{/if}{/if}
+            spike raster — binned count per {(histo ? histo.windowS : histWinS).toFixed(2)} s bin · pinned [0, {histo ? histo.maxCount : 1}] (decoupling visibility){#if histo} · {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {displayRegion.grid.dt.toFixed(2)} s for the §13 recovery input{/if}{/if}
           </span>
         </div>
         <div class="band-body">
@@ -890,15 +883,15 @@
       <div class="band">
         <div class="band-head">
           <span class="plot-label">
-            {#if bandMode === 'all' && hasRegions}
-              all-region kernels (±{WIN}s, solid) + STA (±{STAWIN}s, dashed) — each in its region hue (ADR-0027)
+            {#if bandShowsAll}
+              all-region kernels (±{WIN}s, solid) + STA (±{STAWIN}s, dashed) — each in its region hue (ADR-0028)
             {:else}
               recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag origin (ADR-0009)
             {/if}
             {#if overlayMode === 'normalized'}<span class="norm-badge">NORMALIZED — shape only, peaks scaled to 1; amplitude is in the readout</span>{/if}
           </span>
         </div>
-        {#if railedHidden && bandMode === 'current'}
+        {#if railedHidden && !bandShowsAll}
           <div class="hidden-note">
             Parametric fit railed (τ at bound) — kernel hidden by default.
             <button class="linkbtn" onclick={() => (showRailed = true)}>Show anyways</button>
@@ -926,14 +919,15 @@
           {/if}
         </div>
         <div class="legend">
-          {#if bandMode === 'all' && hasRegions}
+          {#if bandShowsAll}
             {#each metaRegions as r, i}
-              <span class="key"><i style="background:{regionColor(i)}"></i>{r.name}{#if viewMode === 'region' && i === currentRegionIdx} ·current{/if}</span>
+              <span class="key"><i style="background:{regionColor(i)}"></i>{r.name}{#if effectiveCurrentIdx === i} ·current{/if}</span>
             {/each}
-            <span class="agree">solid = kernel · dashed = STA{#if viewMode === 'region'} · current = bold{/if}</span>
-          {:else}
-            {#if !railedHidden}<span class="key"><i style="background:{viewMode === 'region' ? regionColor(currentRegionIdx) : '#7b2ff7'}"></i>recovered kernel</span>{/if}
-            <span class="key"><i style="background:{viewMode === 'region' ? regionColor(currentRegionIdx) : '#e76f51'}"></i>STA{#if viewMode === 'region'} (dashed){/if}</span>
+            <span class="agree">solid = kernel · dashed = STA{#if effectiveCurrentIdx != null} · current = bold{/if}</span>
+          {:else if analysis}
+            {@const hue = hasRegions && effectiveCurrentIdx != null ? regionColor(effectiveCurrentIdx) : null}
+            {#if !railedHidden}<span class="key"><i style="background:{hue ?? '#7b2ff7'}"></i>recovered kernel</span>{/if}
+            <span class="key"><i style="background:{hue ?? '#e76f51'}"></i>STA{#if hue} (dashed){/if}</span>
             {#if showRailed && method === 'parametric' && analysis.pm.railed.railed}
               <button class="linkbtn" onclick={() => (showRailed = false)}>Hide railed output</button>
             {/if}
@@ -1074,61 +1068,6 @@
     color: var(--text);
     opacity: 0.75;
     font-style: italic;
-  }
-
-  /* ADR-0027 region navigation (prev / name / next) */
-  .regnav {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .regnav button {
-    font: inherit;
-    font-size: 15px;
-    line-height: 1;
-    padding: 2px 9px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--text-h);
-    cursor: pointer;
-  }
-  .regnav button:hover {
-    border-color: var(--accent-border);
-  }
-  .regnav .regname {
-    flex: 1;
-    text-align: center;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--text-h);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  /* region color legend (whole mode) — hue ↔ region name */
-  .reglegend {
-    list-style: none;
-    margin: 4px 0 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .reglegend li {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 12px;
-    color: var(--text-h);
-    font-family: var(--mono);
-  }
-  .reglegend .sw {
-    width: 14px;
-    height: 10px;
-    border-radius: 2px;
-    flex: none;
-    border: 1px solid var(--border);
   }
 
   /* indicator strip — neutral facts (ADR-0025), deliberately NOT pass/fail colored */
