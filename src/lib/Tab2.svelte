@@ -618,6 +618,7 @@
               {xRange}
               yAxisSize={44}
               padRight={PLOT_PAD_R}
+              syncKey="tab2-rec-x"
               yLabel="dF/F₀"
               showXAxis={false}
               height={172}
@@ -653,6 +654,7 @@
               yRange={histYRange}
               yAxisSize={44}
               padRight={PLOT_PAD_R}
+              syncKey="tab2-rec-x"
               yLabel="count"
               xLabel="recording time (s)"
               height={104}

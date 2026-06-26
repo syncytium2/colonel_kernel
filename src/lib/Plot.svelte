@@ -43,6 +43,11 @@
     // edges and the shared-x lock shears. Setting an equal padRight on both forces
     // identical right edges regardless of x-axis presence (ADR-0026 co-registration).
     padRight = null,
+    // Opt-in cursor link (ADR-0026): plots sharing a syncKey link their cursor on
+    // the x scale by DATA value (not pixel), so the crosshair tracks the same
+    // recording-time across stacked bands even if gutters/widths ever diverge.
+    // Off by default — Tab 1 and the lag-axis kernel band pass nothing.
+    syncKey = undefined,
   } = $props();
 
   let wrap;
@@ -96,7 +101,22 @@
     return {
       width,
       height: h,
-      cursor: { y: false },
+      cursor: {
+        y: false,
+        // link the cursor by DATA-x across same-syncKey plots (scales: ['x', null]
+        // syncs only the x scale, by value); match on the x-scale key so only the
+        // recording-time bands link (ADR-0026).
+        ...(syncKey
+          ? {
+              sync: {
+                key: syncKey,
+                setSeries: false,
+                scales: ['x', null],
+                match: [(own, ext) => own === ext, (own, ext) => own === ext],
+              },
+            }
+          : {}),
+      },
       legend: { show: false },
       scales: { x: { time: false } },
       // pin only the right padding (others stay auto) so stacked plots share an
