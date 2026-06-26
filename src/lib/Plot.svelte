@@ -82,6 +82,12 @@
     // cursor. ARMED ONLY when this is set: without it, a click is the immediate single-click
     // zoom reset (no double handling). Off by default — Tab 1 / kernel band pass nothing.
     onRegionDblClick = null,
+    // ADR-0027 kernel-band overlay: render an arbitrary list of line series sharing `xs`
+    // (the lag grid), each { ys, stroke, width, dash }. Used for the all-regions kernel+STA
+    // overlay (≤4 regions → ≤8 lines), each in its region's Okabe-Ito hue, STA dashed.
+    // When set it REPLACES the ys/ys2 path. The series COUNT is fixed at init, so the parent
+    // remounts (via {#key}) when the count changes. Off by default — only the kernel band uses it.
+    seriesList = null,
   } = $props();
 
   let wrap;
@@ -216,16 +222,27 @@
           ...(yLabel ? { label: yLabel, labelSize: 22, labelFont: '12px ' + getComputedStyle(document.documentElement).getPropertyValue('--sans') } : {}),
         },
       ],
-      series: [
-        {},
-        { points: { show: false }, ...series },
-        ...(series2 ? [series2] : []),
-      ],
+      series: seriesList
+        ? [
+            {},
+            ...seriesList.map((s) => ({
+              points: { show: false },
+              stroke: resolveColor(s.stroke),
+              width: s.width ?? 2,
+              ...(s.dash ? { dash: s.dash } : {}),
+            })),
+          ]
+        : [
+            {},
+            { points: { show: false }, ...series },
+            ...(series2 ? [series2] : []),
+          ],
     };
   }
 
-  /** Data array for uPlot — adds the second y series when present. */
+  /** Data array for uPlot — multi-series list, or the ys (+ optional ys2) pair. */
   function plotData() {
+    if (seriesList) return [xs, ...seriesList.map((s) => s.ys)];
     return ys2 != null ? [xs, ys, ys2] : [xs, ys];
   }
 
@@ -306,6 +323,7 @@
     const __ = yRange;
     const ___ = ys2;
     const ____ = regions; // track so region shading refreshes on view-mode switch
+    const _____ = seriesList; // track so overlay series values refresh (count changes remount via {#key})
     if (!plot) return;
     plot.setData(data); // redraws → the drawClear hook reads the current `regions`
     pinScale();

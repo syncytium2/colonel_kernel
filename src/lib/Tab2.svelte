@@ -28,6 +28,7 @@
     spikeTriggeredAverage,
     recoverKernelParametric,
     reconstructParametric,
+    recoverRegion,
     tauRailed,
     peakAtBoundary,
     normalizeUnitPeak,
@@ -99,6 +100,7 @@
   // ADR-0027 stage 2 — two view modes + region navigation (sub-window recovery is first-class).
   let viewMode = $state('whole'); // 'whole' = genuine all-APs (ADR-0027 §2) | 'region' = one metadata region
   let currentRegionIdx = $state(0); // index into metaRegions (region mode)
+  let bandMode = $state('current'); // kernel band: 'current' (active recovery) | 'all' (every region's kernel+STA)
 
   async function handleFiles(fileList) {
     const file = fileList && fileList[0];
@@ -456,19 +458,67 @@
     return [lo - pad, hi + pad];
   }
 
-  // Overlay series for the active method (kernel + STA). ADR-0024: normalized mode
-  // scales each to unit peak so SHAPE is legible; shared mode keeps true magnitude.
-  const overlay = $derived.by(() => {
-    if (!analysis || !active) return null;
-    const len = analysis.kernelLag.length;
-    let kernelV = railedHidden ? new Array(len).fill(null) : active.kernelV.slice();
-    let staV = analysis.staOnKernel;
-    if (overlayMode === 'normalized') {
-      kernelV = normalizeUnitPeak(kernelV);
-      staV = normalizeUnitPeak(staV);
-    }
-    return { kernelV, staV, yRange: rangeOf([kernelV, staV]) };
+  // ADR-0027 all-regions kernel/STA overlays — one recoverRegion per metadata region
+  // (noise-off; stability skipped, the band needs only kernel + STA). Every region shares
+  // the lag grid (same whole-recording dt → same ws). null = a non-analyzable region.
+  const regionOverlays = $derived.by(() => {
+    if (!recording || !xlsxApi || !hasRegions) return null;
+    return metaRegions.map((r) => {
+      const v = xlsxApi.windowRegion(recording, r);
+      if (!v.analyzable) return null;
+      const rr = recoverRegion(v, { col: selectedCol, lambda, stability: false });
+      if (!rr.analyzable) return null;
+      const kSamples = method === 'free' ? rr.fv.kernel.samples : rr.pm.kernel.samples;
+      const staWs = Math.round(STAWIN / rr.dt);
+      return { kernelV: Array.from(kSamples), staV: staOntoKernel(rr.sta, kSamples.length, rr.ws, staWs) };
+    });
   });
+
+  // The kernel-band series list. all-regions → every region's kernel (solid) + STA (dashed)
+  // in its Okabe-Ito hue, the CURRENT region highlighted by a NON-color channel (full
+  // opacity + thicker; others same hue, dimmed + thinner — never grey-out). current →
+  // the active method's kernel + STA. ADR-0024: normalized scales each series to unit peak
+  // for SHAPE; shared keeps true magnitude. The whole-recording kernel is NOT in the
+  // all-regions overlay (whole is not a region — ADR-0027 §3).
+  const kernelBand = $derived.by(() => {
+    if (!analysis) return null;
+    const lag = analysis.kernelLag;
+    const norm = overlayMode === 'normalized';
+    const nv = (a) => (norm ? normalizeUnitPeak(a) : a);
+    const series = [];
+    if (bandMode === 'all' && hasRegions && regionOverlays) {
+      const highlightIdx = viewMode === 'region' ? currentRegionIdx : -1;
+      regionOverlays.forEach((ov, i) => {
+        if (!ov) return;
+        const hue = regionColor(i);
+        const cur = i === highlightIdx;
+        const alpha = highlightIdx < 0 ? 0.95 : cur ? 1 : 0.38;
+        const w = cur ? 2.8 : highlightIdx < 0 ? 1.8 : 1.2;
+        series.push({ ys: nv(ov.kernelV), stroke: hexToRgba(hue, alpha), width: w, dash: null });
+        series.push({ ys: nv(ov.staV), stroke: hexToRgba(hue, alpha), width: Math.max(1, w - 0.8), dash: [6, 4] });
+      });
+    } else {
+      // current-region only. Region mode → the region's hue (kernel solid, STA dashed, to
+      // match its band shade). Whole mode → all-APs recovery (not a region) → the neutral
+      // purple/orange of the established single-slice view.
+      const kv = railedHidden ? null : active.kernelV.slice();
+      const sv = analysis.staOnKernel;
+      if (viewMode === 'region') {
+        const hue = regionColor(currentRegionIdx);
+        if (kv) series.push({ ys: nv(kv), stroke: hue, width: 2.4, dash: null });
+        series.push({ ys: nv(sv), stroke: hue, width: 1.8, dash: [6, 4] });
+      } else {
+        if (kv) series.push({ ys: nv(kv), stroke: '#7b2ff7', width: 2, dash: null });
+        series.push({ ys: nv(sv), stroke: '#e76f51', width: 2, dash: null });
+      }
+    }
+    return { lag, series, yRange: rangeOf(series.map((s) => s.ys)) };
+  });
+  // uPlot fixes its series count at init, so remount the band Plot ({#key}) when the count/
+  // config changes (mode/region count/railed). Value-only changes update in place.
+  const kernelBandKey = $derived(
+    kernelBand ? `${bandMode}-${kernelBand.series.length}-${railedHidden}-${viewMode}` : 'none',
+  );
 
   // Reconstruction predicted trace for the active method (null while railed+hidden).
   const reconTrace = $derived(active && !railedHidden ? active.reconTrace : null);
@@ -633,6 +683,15 @@
                 <button class:on={overlayMode === 'normalized'} onclick={() => (overlayMode = 'normalized')}>Normalized</button>
               </div>
             </div>
+            {#if hasRegions}
+              <div class="field">
+                <span>Kernel band</span>
+                <div class="seg" role="group" aria-label="Kernel band overlay">
+                  <button class:on={bandMode === 'current'} onclick={() => (bandMode = 'current')}>Current</button>
+                  <button class:on={bandMode === 'all'} onclick={() => (bandMode = 'all')}>All regions</button>
+                </div>
+              </div>
+            {/if}
           </div>
         </div>
 
@@ -825,15 +884,21 @@
         </div>
       </div>
 
-      <!-- BAND C — recovered kernel + STA on one shared zero-lag origin (ADR-0009 / 0024) -->
+      <!-- BAND C — recovered kernel + STA on one shared zero-lag origin (ADR-0009/0024/0027).
+           Kernel-band toggle (independent of view mode): current recovery, or every region's
+           kernel+STA in its Okabe-Ito hue (STA dashed), current region highlighted by weight. -->
       <div class="band">
         <div class="band-head">
           <span class="plot-label">
-            recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag origin (ADR-0009)
+            {#if bandMode === 'all' && hasRegions}
+              all-region kernels (±{WIN}s, solid) + STA (±{STAWIN}s, dashed) — each in its region hue (ADR-0027)
+            {:else}
+              recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag origin (ADR-0009)
+            {/if}
             {#if overlayMode === 'normalized'}<span class="norm-badge">NORMALIZED — shape only, peaks scaled to 1; amplitude is in the readout</span>{/if}
           </span>
         </div>
-        {#if railedHidden}
+        {#if railedHidden && bandMode === 'current'}
           <div class="hidden-note">
             Parametric fit railed (τ at bound) — kernel hidden by default.
             <button class="linkbtn" onclick={() => (showRailed = true)}>Show anyways</button>
@@ -841,52 +906,42 @@
           </div>
         {/if}
         <div class="band-body">
-          {#if railedHidden}
-            <Plot
-              fill
-              xs={analysis.kernelLag}
-              ys={overlay.staV}
-              color="#e76f51"
-              xRange={kernelXRange}
-              yRange={overlay.yRange}
-              yAxisSize={44}
-              padRight={PLOT_PAD_R}
-              cursorPoints={false}
-              yLabel="amplitude (dF/F₀)"
-              zeroLine
-              xLabel="lag (s)"
-              height={186}
-            />
-          {:else}
-            <Plot
-              fill
-              xs={analysis.kernelLag}
-              ys={overlay.kernelV}
-              color="#7b2ff7"
-              ys2={overlay.staV}
-              color2="#e76f51"
-              xRange={kernelXRange}
-              yRange={overlay.yRange}
-              yAxisSize={44}
-              padRight={PLOT_PAD_R}
-              cursorPoints={false}
-              yLabel="amplitude (dF/F₀)"
-              zeroLine
-              xLabel="lag (s)"
-              height={186}
-            />
+          {#if kernelBand}
+            {#key kernelBandKey}
+              <Plot
+                fill
+                xs={kernelBand.lag}
+                seriesList={kernelBand.series}
+                xRange={kernelXRange}
+                yRange={kernelBand.yRange}
+                yAxisSize={44}
+                padRight={PLOT_PAD_R}
+                cursorPoints={false}
+                yLabel="amplitude (dF/F₀)"
+                zeroLine
+                xLabel="lag (s)"
+                height={186}
+              />
+            {/key}
           {/if}
         </div>
         <div class="legend">
-          {#if !railedHidden}<span class="key"><i style="background:#7b2ff7"></i>recovered kernel</span>{/if}
-          <span class="key"><i style="background:#e76f51"></i>STA</span>
-          {#if showRailed && method === 'parametric' && analysis.pm.railed.railed}
-            <button class="linkbtn" onclick={() => (showRailed = false)}>Hide railed output</button>
-          {/if}
-          {#if !railedHidden && !analysis.staEmpty}
-            <span class="agree">
-              kernel peak {f(active.peakLagS, 2)} s · amp {f(method === 'free' ? active.peakAmpAdj : active.peakAmp)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
-            </span>
+          {#if bandMode === 'all' && hasRegions}
+            {#each metaRegions as r, i}
+              <span class="key"><i style="background:{regionColor(i)}"></i>{r.name}{#if viewMode === 'region' && i === currentRegionIdx} ·current{/if}</span>
+            {/each}
+            <span class="agree">solid = kernel · dashed = STA{#if viewMode === 'region'} · current = bold{/if}</span>
+          {:else}
+            {#if !railedHidden}<span class="key"><i style="background:{viewMode === 'region' ? regionColor(currentRegionIdx) : '#7b2ff7'}"></i>recovered kernel</span>{/if}
+            <span class="key"><i style="background:{viewMode === 'region' ? regionColor(currentRegionIdx) : '#e76f51'}"></i>STA{#if viewMode === 'region'} (dashed){/if}</span>
+            {#if showRailed && method === 'parametric' && analysis.pm.railed.railed}
+              <button class="linkbtn" onclick={() => (showRailed = false)}>Hide railed output</button>
+            {/if}
+            {#if !railedHidden && !analysis.staEmpty}
+              <span class="agree">
+                kernel peak {f(active.peakLagS, 2)} s · amp {f(method === 'free' ? active.peakAmpAdj : active.peakAmp)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
+              </span>
+            {/if}
           {/if}
         </div>
       </div>
