@@ -64,6 +64,19 @@
   // widest last x-tick label's right overhang (~25px for "1,100") so nothing clips.
   const PLOT_PAD_R = 32;
 
+  // ADR-0027 region color identity — Okabe-Ito, colorblind-safe (the family used in the
+  // lab's R work). v1 cap: ≤4 metadata regions, so no cycling/interpolation. ONE hue per
+  // region, carried everywhere: background band shading, the region's kernel, its STA.
+  // (Assignment order is PROVISIONAL — easy to reorder after Tony's first read.)
+  const REGION_COLORS = ['#E69F00', '#56B4E9', '#009E73', '#D55E00']; // orange / sky / green / vermillion
+  const regionColor = (i) => REGION_COLORS[i % REGION_COLORS.length];
+  /** Hex (#rrggbb) → rgba() string at the given alpha — for the low-alpha band shading. */
+  function hexToRgba(hex, alpha) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   let recording = $state(null); // LoadedRecording (xlsx, has .regions) or LoadedRegion (csv) — the loaded file
   let xlsxApi = $state(null); // load-xlsx fns stashed after dynamic import (keeps SheetJS code-split, §6)
   let error = $state(null);
@@ -191,6 +204,14 @@
   // recording-time bands receive THIS, so a zoom on one applies identically to both.
   const xView = $derived(zoomRange ?? xRange);
   const kernelXRange = [-WIN, WIN]; // the overlay axis; STA (±STAWIN) sits inside it.
+
+  // ADR-0027: metadata regions as low-alpha background shading on the recording-time bands,
+  // each in its Okabe-Ito hue. WHOLE mode only — in region mode the band IS one region.
+  const bandRegions = $derived(
+    viewMode === 'whole' && hasRegions
+      ? metaRegions.map((r, i) => ({ x0: r.startS, x1: r.endS, color: hexToRgba(regionColor(i), 0.13) }))
+      : null,
+  );
 
   // The selected ROI column.
   const selected = $derived(analyzable ? activeRegion.rois[selectedCol] : null);
@@ -563,7 +584,12 @@
                   </div>
                 </div>
               {:else}
-                <p class="ctl-note">All APs (genuine whole-recording recovery). Regions shown as shaded bands.</p>
+                <p class="ctl-note">All APs (genuine whole-recording recovery). Regions shaded:</p>
+                <ul class="reglegend">
+                  {#each metaRegions as r, i}
+                    <li><span class="sw" style="background:{regionColor(i)}"></span>{r.name}</li>
+                  {/each}
+                </ul>
               {/if}
             </div>
           </div>
@@ -736,6 +762,7 @@
               cursorPoints={true}
               zoomable
               onZoom={handleZoom}
+              regions={bandRegions}
               yLabel="dF/F₀"
               showXAxis={false}
               height={172}
@@ -775,6 +802,7 @@
               cursorPoints={true}
               zoomable
               onZoom={handleZoom}
+              regions={bandRegions}
               yLabel="count"
               xLabel="recording time (s)"
               height={104}
@@ -1008,6 +1036,30 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  /* region color legend (whole mode) — hue ↔ region name */
+  .reglegend {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .reglegend li {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--text-h);
+    font-family: var(--mono);
+  }
+  .reglegend .sw {
+    width: 14px;
+    height: 10px;
+    border-radius: 2px;
+    flex: none;
+    border: 1px solid var(--border);
   }
 
   /* indicator strip — neutral facts (ADR-0025), deliberately NOT pass/fail colored */

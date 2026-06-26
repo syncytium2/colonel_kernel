@@ -66,6 +66,12 @@
     // Off by default — Tab 1 and the kernel band pass nothing.
     zoomable = false,
     onZoom = null,
+    // ADR-0027: metadata-region background shading on the recording-time bands. Array of
+    // { x0, x1, color } in DATA-x (recording-time s); `color` is a low-alpha rgba in the
+    // region's Okabe-Ito hue. Drawn BEHIND the data (drawClear hook). Off by default — Tab 1
+    // and the lag-axis kernel band pass nothing. The kernel band carries region identity in
+    // its line colors instead (it shares no recording-time x).
+    regions = null,
   } = $props();
 
   let wrap;
@@ -97,24 +103,41 @@
     const series2 =
       ys2 != null ? { points: { show: false }, stroke: resolveColor(color2), width: 2 } : null;
     const hooks = {};
+    const drawClear = [];
+    // ADR-0027: region background shading, drawn first so it sits BEHIND the data. Reads the
+    // live `regions` prop each draw (refreshed by the $effect on view-mode switch).
+    drawClear.push((u) => {
+      if (!regions || !regions.length) return;
+      const { ctx } = u;
+      ctx.save();
+      for (const r of regions) {
+        const xa = u.valToPos(r.x0, 'x', true);
+        const xb = u.valToPos(r.x1, 'x', true);
+        const left = Math.max(u.bbox.left, Math.min(xa, xb));
+        const right = Math.min(u.bbox.left + u.bbox.width, Math.max(xa, xb));
+        if (right <= left) continue;
+        ctx.fillStyle = r.color;
+        ctx.fillRect(left, u.bbox.top, right - left, u.bbox.height);
+      }
+      ctx.restore();
+    });
     if (zeroLine) {
       // mark the lag-0 (spike-aligned) line — central to the kernel panel.
-      hooks.drawClear = [
-        (u) => {
-          const cx = u.valToPos(0, 'x', true);
-          if (cx < u.bbox.left || cx > u.bbox.left + u.bbox.width) return;
-          const { ctx } = u;
-          ctx.save();
-          ctx.strokeStyle = resolveColor('var(--border)');
-          ctx.setLineDash([3, 3]);
-          ctx.beginPath();
-          ctx.moveTo(cx, u.bbox.top);
-          ctx.lineTo(cx, u.bbox.top + u.bbox.height);
-          ctx.stroke();
-          ctx.restore();
-        },
-      ];
+      drawClear.push((u) => {
+        const cx = u.valToPos(0, 'x', true);
+        if (cx < u.bbox.left || cx > u.bbox.left + u.bbox.width) return;
+        const { ctx } = u;
+        ctx.save();
+        ctx.strokeStyle = resolveColor('var(--border)');
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(cx, u.bbox.top);
+        ctx.lineTo(cx, u.bbox.top + u.bbox.height);
+        ctx.stroke();
+        ctx.restore();
+      });
     }
+    hooks.drawClear = drawClear;
     if (zoomable && onZoom) {
       // a completed drag-select carries a recording-time range; lift it to the
       // parent (which re-pins BOTH bands via xRange) then clear the selection. The
@@ -251,8 +274,9 @@
     const _ = xRange; // track for reactivity
     const __ = yRange;
     const ___ = ys2;
+    const ____ = regions; // track so region shading refreshes on view-mode switch
     if (!plot) return;
-    plot.setData(data);
+    plot.setData(data); // redraws → the drawClear hook reads the current `regions`
     pinScale();
   });
 </script>
