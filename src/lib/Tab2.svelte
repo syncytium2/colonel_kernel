@@ -733,16 +733,6 @@
     outline-offset: 6px;
     border-radius: 8px;
   }
-  .loader-strip {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 13px;
-    color: var(--text);
-  }
-  .loader-strip .fname {
-    margin: 0 !important;
-  }
   .filebtn-sm {
     cursor: pointer;
     color: var(--accent);
@@ -799,43 +789,11 @@
     opacity: 0.65;
   }
 
-  /* slice bar: column selector + method / overlay-scale segmented toggles */
-  .slicebar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 18px;
-    padding: 10px 16px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-  }
-  .ctl-inline {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-h);
-  }
-  .ctl-inline select {
-    font-family: var(--mono);
-    font-size: 13px;
-    padding: 4px 8px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--text-h);
-  }
+  /* method / overlay-scale segmented toggles (in the rail Settings section) */
   .seg {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-  }
-  .seg-label {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-h);
-    margin-right: 2px;
   }
   .seg button {
     font: inherit;
@@ -864,15 +822,6 @@
     outline-offset: 1px;
   }
 
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 22px;
-    padding: 12px 16px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-  }
   .ctl {
     display: grid;
     grid-template-columns: auto 160px 64px;
@@ -972,36 +921,10 @@
     outline-offset: 2px;
   }
 
-  .readout {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-  .panel {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 12px;
-    background: var(--bg);
-  }
   .plot-label {
     font-size: 11px;
     color: var(--text);
     margin: 6px 0 2px;
-  }
-  .plot-label.sub {
-    margin-top: 4px;
-    opacity: 0.85;
-  }
-  .plot-label.sub strong {
-    color: var(--text-h);
-    font-weight: 600;
-  }
-  .panel-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
   }
   .histctl {
     display: inline-flex;
@@ -1045,66 +968,6 @@
     margin-left: auto;
     font-family: var(--mono);
     color: var(--text-h);
-  }
-
-  .checks {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-  }
-  @media (max-width: 900px) {
-    .checks {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
-  .check {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 12px;
-    background: var(--bg);
-  }
-  .check h4 {
-    margin: 0 0 8px;
-    font-size: 13px;
-    color: var(--text-h);
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .check .tag {
-    font-size: 10px;
-    font-weight: 500;
-    color: var(--text);
-    opacity: 0.7;
-    font-family: var(--mono);
-  }
-  .check dl {
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-  .check dl > div {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 13px;
-  }
-  .check dt {
-    color: var(--text);
-  }
-  .check dd {
-    margin: 0;
-    font-family: var(--mono);
-    color: var(--text-h);
-    text-align: right;
-  }
-  .check .note {
-    display: block;
-    font-size: 11px;
-    color: var(--text);
-    opacity: 0.7;
-    font-style: italic;
   }
 
   /* ===== ADR-0026 layout: workflow-staged left rail + plot stage ===== */
