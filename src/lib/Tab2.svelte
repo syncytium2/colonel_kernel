@@ -652,6 +652,10 @@
          recording; §3/kernel are regional (current region, double-click-selected). -->
     <div class="layout">
       <aside class="rail">
+        <!-- ADR-0028 rail model: TOP region (title + controls) scrolls independently; the §3
+             numbers are PINNED to the bottom with their own internal scroll. Every tile folds
+             independently — controls and numbers can both be visible at once. -->
+        <div class="rail-top">
         <!-- ADR-0028: tab title folded into the rail (the top row is tab nav only). -->
         <div class="railtitle">
           <strong>colonel_kernel</strong>
@@ -751,7 +755,12 @@
             {/each}
           </div>
         {/if}
+        </div><!-- /.rail-top -->
 
+        <!-- BOTTOM region: §3 checks pinned to the rail bottom, foldable, with its OWN internal
+             scroll when expanded so it never pushes the controls off-screen nor is pushed off
+             (ADR-0028 rail model). -->
+        <div class="rail-bottom" class:expanded={checksOpen}>
         <!-- the four §3 checks — compact label:value readout (ADR-0026); collapsible (ADR-0028) -->
         <div class="rail-sec checks-rail" class:collapsed={!checksOpen}>
           <button class="rail-h toggle" aria-expanded={checksOpen} onclick={() => (checksOpen = !checksOpen)}>
@@ -819,6 +828,7 @@
           </div>
           {/if}
         </div>
+        </div><!-- /.rail-bottom -->
       </aside>
 
       <main class="stage">
@@ -1283,11 +1293,41 @@
     flex: none;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    overflow: auto;
+    min-height: 0;
     padding-right: 14px;
     border-right: 1px solid var(--border);
     box-sizing: border-box;
+  }
+  /* ADR-0028 rail model: TOP controls region scrolls independently; §3 numbers pinned bottom. */
+  .rail-top {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .rail-bottom {
+    flex: 0 0 auto; /* collapsed: just the §3 header height, returning space to the controls */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .rail-bottom.expanded {
+    flex: 0 1 46%; /* expanded: a bounded bottom region that scrolls within itself */
+  }
+  .rail-bottom .checks-rail {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+  .rail-bottom.expanded .checks-rail .rail-bd {
+    overflow-y: auto;
+    min-height: 0;
   }
   .fileline {
     display: flex;
