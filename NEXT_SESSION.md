@@ -7,6 +7,20 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ⚠ CANON↔CODE DRIFT — master is behind tab2-regions; reconciliation is its own session
+master (canon-only) is ~36 commits BEHIND origin/tab2-regions, which carries the real
+implementation: the regions feature, parametric (method 2) graduated to src/, the xlsx
+loader, and now method 3 on method3-shaped (cut from tab2-regions, pushed to origin).
+This is BACKWARDS from the workflow (code rebases onto canon; canon shouldn't trail
+code). CC flagged possible history-rewrite signs (duplicated commit messages) — so
+canon and code may genuinely DISAGREE, not just lag. Folding tab2-regions back into
+master is a DEDICATED reconciliation session: reconcile 36 commits of code against what
+FOUNDATIONS/ADRs actually say, resolve any rewrite divergence, then --no-ff. NOT a
+tail-end merge. Until then, origin is the truth; the work is safe (pushed, multiple
+places), just unblessed.
+
+---
+
 ## ▶ NEXT CODE ACTION — ADR-0028 Mode-removal + layout pass (on `tab2-regions`)
 
 **ADR-0028 landed (canon, master): regional-only kernels; Mode toggle removed; zoom-driven region
