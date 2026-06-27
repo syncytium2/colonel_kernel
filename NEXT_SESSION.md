@@ -48,6 +48,33 @@ The old over-broad fence here (all sub-window recovery = future V2) is **superse
 
 ---
 
+## 🔭 HORIZON — method-1 bowl separability check (Konnerth backward-min) — darkroom-first, oracle-gated
+**Sequenced BEHIND closing out method 3** (the reconciliation above + ADR-0023 graduation) — pick up
+only once method 3 is fully landed. A DIFFERENT track from methods 2/3. Methods 2/3 buy a clean kernel
+by foreclosing the bowl during recovery (parametric zeroes baseline by construction; method 3 hands
+drift to a basis). Method 1 alone lets the raw bowl exist — diagnostically honest, but unreadable.
+PROPOSAL: rehabilitate the raw method-1 kernel POST HOC — estimate the bowl as a lower-envelope via
+Konnerth backward-minimum baseline correction (ref impl minBarF2.m, placed in repo MATLAB reference
+dir), subtract, check whether the residual is the same +0.6 s kernel methods 2/3 show. The real
+question this answers that 2/3 CANNOT: is the bowl ADDITIVELY SEPARABLE from the kernel? Methods 2/3
+assume separability by construction and can't test it; method 1 + Konnerth can.
+
+HAZARD: backward-min is a trough-hugging envelope — it can CARVE OUT a clean kernel from entangled
+structure, manufacturing the separability it's meant to test (§4: negative-lag energy is sometimes
+real lead/lag, sometimes artifact — human judgment; a min-envelope can't make that call and will eat
+both). So:
+- Oracle FIRST: plant known kernel + known bowl on the synthetic oracle, run Konnerth, subtract, check
+  recovery vs planted truth. A clean file-80 result is uninterpretable WITHOUT the oracle as
+  interpretive key (same lesson as the raw −0.74 correlation).
+- Recalibrate t2/t4: minBarF2's values are recording-time-tuned for F₀ estimation; meaningless on the
+  ±5 s lag axis. "Backward in time" has no physical meaning on a lag axis — it's borrowing the
+  envelope-extraction MECHANISM, not the algorithm's semantics.
+- DISPLAY-ONLY, raw kernel untouched, bowl stays visible (ADR-0017 quiet-anchored fence).
+- If it passes the oracle → earns its OWN ADR (the "rehabilitate the raw kernel" track vs the "extract
+  a clean kernel by construction" track). NOT part of ADR-0023, NOT on the method-3 graduation.
+
+---
+
 ## 🔗 MATLAB ⇄ colonel_kernel data handoff — SHARED BUS
 The data producer (MATLAB repo `interface2`) and this team coordinate via a shared
 Dropbox folder both sides read/write: **`<Dropbox>/Richard DeFazio/team_colonel_kernel/`**
