@@ -75,6 +75,41 @@ both). So:
 
 ---
 
+## 🔭 HORIZON — Tab 2 multi-trace overlay (all methods + STA on one lag axis) — scale-mode question is the real work, NOT the rendering
+**Sequenced after the method-3 toggle wiring lands.** ADR-0021 names an up-to-4-traces-on-one-axis
+need (free-vector + parametric + shaped + STA); the slice viewer deliberately shows ONE method at a
+time. With 3 recovery methods now, the method-3 spread (coupled→converge, decoupled→diverge) is the
+diagnostic — a one-at-a-time toggle HIDES exactly what method 3 exists to show, so the overlay is
+worth building.
+
+CAUTION — do not mistake "easy in the darkroom" for "solved": fig_method3_on80.png shows all four
+traces legibly on one shared-y axis, but ONLY because matplotlib auto-scaled and file-80 ROI-1 happened
+to have compatible amplitude ranges. That is the EASY case. The slice viewer shows one method at a time
+BY DESIGN: ADR-0024 rejected twin-y (false-agreement hazard), and ADR-0029 built a four-way scale toggle
+(shared-y / normalized / scale-to-kernels / scale-to-STA) precisely because NO single scaling is honest
+across all cases. On a decoupled column, or one where STA and kernels live in different amplitude
+regimes, four-on-one-axis either crushes a trace flat or visually IMPLIES agreement that isn't there —
+the exact hazard ADR-0024 exists to prevent. The rendering is trivial (uPlot draws 4 series easily); the
+unsolved design is WHICH of ADR-0029's four scale modes governs a 4-trace overlay on the cases that
+aren't file-80 ROI-1. The darkroom figure is evidence the overlay is worth building, NOT evidence it's
+already solved. Face the scale-mode question head-on; do not let "it looked easy in the darkroom" become
+a reason to skip it. Collides with the existing ADR-0029 overlay-scale work on tab2-regions — coordinate,
+don't duplicate.
+
+---
+
+## 🔭 HORIZON — longer-τ_decay oracle (the one stress ADR-0023's named hazard targets) — still unrun
+**Sequenced after the method-3 toggle wiring lands.** ADR-0023's flagged follow-up: all method-3
+evidence (oracle, noise sweep, file-80 graduation) plants τ_decay near 2.89 s. The structural
+decay-tail-leakage argument predicts the drift⇄τ_decay confound is WORST at longer true τ_decay (longer
+tail = more drift-like energy for the basis to absorb). A ~5–6 s τ_decay oracle was never run — it is the
+single stress the named hazard most directly targets. Run it (extend the existing method-3 oracle
+harness; plant τ_decay ~5–6 s, same 4 treatments, read whether basis/both still recover planted τ or
+finally steal decay) BEFORE method 3 is relied on for long-decay indicators. Darkroom-first, figure-gated
+(ADR-0018).
+
+---
+
 ## 🔗 MATLAB ⇄ colonel_kernel data handoff — SHARED BUS
 The data producer (MATLAB repo `interface2`) and this team coordinate via a shared
 Dropbox folder both sides read/write: **`<Dropbox>/Richard DeFazio/team_colonel_kernel/`**
