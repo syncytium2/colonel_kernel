@@ -23,6 +23,12 @@ import {
   recoverKernelParametric,
   PARAM_BOUNDS,
 } from './deconvolve-parametric.js';
+import {
+  recoverKernelShaped,
+  makeDriftBasis,
+  SHAPED_DIALS,
+  DRIFT_BASIS_DEGREE,
+} from './deconvolve-shaped.js';
 import { tauRailed, peakAtBoundary, normalizeUnitPeak, rebinCounts } from './readout.js';
 import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
 import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './noise.js';
@@ -344,6 +350,82 @@ ok('doubleExp rises off zero then is positive', decK[1] > 0 && decK[5] > 0);
   ok('Option B: recoverKernelParametric reports full-kernel R² (>0.99 on full-kernel truth)', recB.fit.r2 > 0.99, `r2=${recB.fit.r2}`);
   // The returned display contract is still the ±ws slice (unchanged ADR-0009 object).
   ok('Option B: returned contract is still the ±ws slice', recB.samples.length === 2 * wsB + 1 && recB.zeroIndex === wsB);
+}
+
+// --- ADR-0021 method 3: shape-regularized recovery + joint drift basis ------
+// Plant a KNOWN calcium kernel AND a KNOWN low-order drift, forward-convolve a
+// binned-count density (circular, as method 1), add the drift, then recover and
+// confirm: the ADR-0009 contract, the kernel stays causal/physiological under the
+// flatness+acausal penalties, and — the headline (ADR-0023) — τ_decay comes back
+// near planted, i.e. the drift basis does NOT steal decay.
+{
+  const dtS = 0.1, wsS = 50;           // ±5 s → kernel length 101
+  const Ns = 2048;                     // power of two (circular forward model)
+  const gS = makeGrid({ sampleRate: 10, duration: Ns / 10, t0: 0 });
+  const plantP = { tauRise: 0.2, tauDecay: 1.5 };
+  const pk = buildKernel('calcium', plantP, dtS);
+  const plantedFull = new Float64Array(Ns);
+  for (let i = 0; i < pk.samples.length && i < Ns; i++) plantedFull[i] = pk.samples[i] * 0.2;
+  const plantedDiag = kernelDiagnostics(extractSymmetric(plantedFull, wsS, dtS));
+  // Dense spiking (~80 events) — the regime the method is for (real recordings, the
+  // oracle's 328-spike plant): the data term dominates the flatness penalty, so τ is
+  // preserved. (A SPARSE plant lets the far-lag flatness penalty over-crush the tail.)
+  const spikesS = [];
+  for (let k = 0; k < 80; k++) spikesS.push(10 + k * 2.3);
+  const densS = rasterize(spikesS, gS, { amplitudeMode: 'binned-count' }).samples;
+  const conv = circularConvolve(densS, plantedFull);
+  // planted drift in the SAME low-order family as the nuisance basis (degree 2).
+  const { cols: pb } = makeDriftBasis(Ns, 2, Ns);
+  const traceS = new Float64Array(Ns);
+  for (let i = 0; i < Ns; i++) traceS[i] = conv[i] + (0.03 * pb[0][i] + 0.015 * pb[1][i]);
+
+  const rec = recoverKernelShaped(traceS, densS, { windowSamples: wsS, dt: dtS });
+  const dg = kernelDiagnostics(rec);
+
+  // (1) ADR-0009 contract shape (same as methods 1 & 2).
+  ok('shaped: contract length 2·ws+1', rec.samples.length === 2 * wsS + 1);
+  ok('shaped: zeroIndex = ws, dt carried', rec.zeroIndex === wsS && approx(rec.dt, dtS));
+  ok('shaped: times centered at zeroIndex',
+    approx(rec.times[wsS], 0) && approx(rec.times[wsS + 1], dtS) && approx(rec.times[wsS - 1], -dtS));
+  // (2) negative-lag content is RETAINED (free-vector taps, unlike causal method 2) but
+  // the acausal-energy penalty keeps it small on a clean causal plant.
+  ok('shaped: acausal energy small under the acausal penalty', dg.acausalRatio < 0.05, `ratio=${dg.acausalRatio}`);
+  // (3) peak lag matches the planted transient within ½ sample.
+  ok('shaped: peak lag matches planted (within 1 sample)',
+    Math.abs(dg.peakLagS - plantedDiag.peakLagS) <= dtS + 1e-9, `peak=${dg.peakLagS} planted=${plantedDiag.peakLagS}`);
+  // (4) THE headline (ADR-0023): τ_decay is a real number near planted — the basis does
+  // NOT steal decay (the oracle showed a slight smoothing-induced LENGTHENING, not theft).
+  ok('shaped: τ_decay is finite (no n/a tilt)', Number.isFinite(dg.tauDecayS), `τ=${dg.tauDecayS}`);
+  ok('shaped: τ_decay near planted (within 30%, basis does not steal decay)',
+    Math.abs(dg.tauDecayS / plantedDiag.tauDecayS - 1) <= 0.3, `τ=${dg.tauDecayS} planted=${plantedDiag.tauDecayS}`);
+  // (5) the combined model (kernel + drift) explains the noise-free plant well.
+  ok('shaped: high reconstruction R² on the noise-free combined plant', rec.fit.r2 > 0.9, `r2=${rec.fit.r2}`);
+
+  // (6) the fit object carries the recovered drift + dials (FOUNDATIONS §7 visibility).
+  ok('shaped: drift recovered over the real region', rec.fit.drift.length === Ns);
+  ok('shaped: driftCoeffs has DRIFT_BASIS_DEGREE entries', rec.fit.driftCoeffs.length === DRIFT_BASIS_DEGREE);
+  ok('shaped: fit reports the oracle-validated dials',
+    rec.fit.lambdas.lambdaSmooth === SHAPED_DIALS.lambdaSmooth &&
+    rec.fit.lambdas.lambdaFlat === SHAPED_DIALS.lambdaFlat &&
+    rec.fit.lambdas.lambdaAcausal === SHAPED_DIALS.lambdaAcausal);
+
+  // (7) deterministic (no RNG): identical inputs → identical taps.
+  const rec2 = recoverKernelShaped(traceS, densS, { windowSamples: wsS, dt: dtS });
+  ok('shaped: deterministic', rec2.samples[wsS + 6] === rec.samples[wsS + 6]);
+
+  // (8) input guards.
+  ok('shaped: throws on length mismatch',
+    throws(() => recoverKernelShaped(traceS, densS.slice(0, Ns - 1), { windowSamples: wsS, dt: dtS })));
+  ok('shaped: throws on non-positive windowSamples',
+    throws(() => recoverKernelShaped(traceS, densS, { windowSamples: 0, dt: dtS })));
+
+  // makeDriftBasis: degree-2 columns, mean-zero over the real region, zero in padding.
+  const mb = makeDriftBasis(100, 2, 128);
+  let m0 = 0, m1 = 0;
+  for (let i = 0; i < 100; i++) { m0 += mb.cols[0][i]; m1 += mb.cols[1][i]; }
+  ok('makeDriftBasis: degree columns', mb.cols.length === 2 && mb.labels.length === 2);
+  ok('makeDriftBasis: columns mean-zero over the real region', Math.abs(m0) < 1e-9 && Math.abs(m1) < 1e-9);
+  ok('makeDriftBasis: zero in the padded tail', mb.cols[0][120] === 0 && mb.cols[1][127] === 0);
 }
 
 // --- readout display helpers: ADR-0025 facts + ADR-0024 normalization -------

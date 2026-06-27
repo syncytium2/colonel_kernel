@@ -13,6 +13,13 @@ export {
   doubleExpCausal, doubleExpCausalFull, forwardConvolveCausal,
   reconstructParametric, recoverKernelParametric, PARAM_BOUNDS,
 } from './deconvolve-parametric.js';
+// Shape-regularized recovery (ADR-0021 method 3): free-vector taps under lag-localized
+// penalties (smoothness + baseline-flatness + acausal-energy) PLUS a joint low-order
+// drift nuisance basis — the ADR-0023 fork combined and oracle-validated. PARALLEL to
+// methods 1 & 2 (never replaces them); the three-method spread is the §3/§4 diagnostic.
+export {
+  recoverKernelShaped, makeDriftBasis, SHAPED_DIALS, DRIFT_BASIS_DEGREE,
+} from './deconvolve-shaped.js';
 export { kernelDiagnostics, compareKernels, preZeroBaselineMean } from './kernel-diagnostics.js';
 // Tab 2 readout display helpers (ADR-0024 normalization, ADR-0025 indicator facts) —
 // pure, framework-free, so the Svelte readout stays wiring and the logic is test-covered.
