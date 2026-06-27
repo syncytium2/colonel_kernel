@@ -28,6 +28,7 @@
     spikeTriggeredAverage,
     recoverKernelParametric,
     reconstructParametric,
+    recoverKernelShaped,
     recoverRegion,
     tauRailed,
     peakAtBoundary,
@@ -90,7 +91,7 @@
 
   // --- slice-viewer state ---
   let selectedCol = $state(0); // which ROI column (0 = the expected target, §4)
-  let method = $state('free'); // 'free' (ADR-0004) | 'parametric' (ADR-0021 method 2)
+  let method = $state('free'); // 'free' (ADR-0004) | 'parametric' (ADR-0021 m2) | 'shaped' (ADR-0021 m3 / ADR-0023)
   let overlayMode = $state('shared'); // 'shared' (default) | 'normalized' (ADR-0024)
   let showRailed = $state(false); // ADR-0025: reveal default-hidden railed-parametric output
   let histWinS = $state(HIST_WIN_DEFAULT); // spike-histogram review window (s), display only
@@ -436,6 +437,52 @@
     };
   });
 
+  // ---- METHOD 3: shape-regularized + drift basis (ADR-0021 m3 / ADR-0023) ----
+  // Computed LAZILY and SEPARATELY from `analysis` — only when shaped is the selected
+  // method, and gated on the SAME non-λ primitives `analysis` uses (NOT `analysis` itself,
+  // which depends on λ). Shaped uses its own fixed dials (SHAPED_DIALS), so it does not
+  // depend on the λ slider; keeping it out of the λ-reactive path keeps that slider
+  // responsive even while shaped is shown. Free-vector-family taps → same readout fields as
+  // method 1 (peak lag, peak amp vs base, decay τ, acausal), plus the recovered drift folded
+  // into the reconstruction (ADR-0023: a kernel-protection device, NOT a drift measurement).
+  const shapedAnalysis = $derived.by(() => {
+    if (method !== 'shaped' || !analyzable || !density || !noisyTrace) return null;
+    const dt = recoveryRegion.grid.dt;
+    const { n, N, sdPad } = density;
+    const ws = Math.round(WIN / dt);
+    const { recReal } = noisyTrace;
+    const m3 = recoverKernelShaped(recReal, sdPad, { windowSamples: ws, dt, fitLength: n });
+    const m3Diag = kernelDiagnostics(m3);
+    const m3PreBaseline = preZeroBaselineMean(m3, STABASE);
+    const m3KPad = embedKernel(m3, N, ws);
+    const m3ReconArr = circularConvolve(sdPad, m3KPad);
+    let ssRes = 0, ssTot = 0, mean = 0;
+    for (let k = 0; k < n; k++) mean += recReal[k];
+    mean /= n;
+    const recon = new Array(n);
+    for (let k = 0; k < n; k++) {
+      const pred = m3ReconArr[k] + m3.fit.drift[k]; // density ⊛ kernel + recovered drift
+      recon[k] = pred;
+      const r = recReal[k] - pred;
+      ssRes += r * r;
+      const d = recReal[k] - mean;
+      ssTot += d * d;
+    }
+    return {
+      kernelV: Array.from(m3.samples),
+      reconTrace: recon,
+      peakLagS: m3Diag.peakLagS,
+      peakAmp: m3Diag.peakAmp,
+      peakAmpAdj: m3Diag.peakAmp - m3PreBaseline,
+      tauDecayS: m3Diag.tauDecayS,
+      acausalRatio: m3Diag.acausalRatio,
+      r2: ssTot > 0 ? 1 - ssRes / ssTot : NaN,
+      rmse: Math.sqrt(ssRes / n),
+      boundary: peakAtBoundary(m3), // ADR-0025 neutral fact (free-vector-family, no fail flag)
+      driftDegree: m3.fit.driftDegree,
+    };
+  });
+
   // CHECK 3 — free-vector stability across the log-λ sweep (a property of the FV
   // recovery; the parametric method has no λ knob, so this stays the FV diagnostic).
   const stability = $derived.by(() => {
@@ -471,10 +518,24 @@
   });
 
   // --- the active method's view, applying the ADR-0025 railed default-hide ---
-  const active = $derived(analysis ? (method === 'free' ? analysis.fv : analysis.pm) : null);
+  const active = $derived(
+    method === 'shaped'
+      ? shapedAnalysis
+      : analysis
+        ? method === 'free'
+          ? analysis.fv
+          : analysis.pm
+        : null,
+  );
   // Parametric output is default-HIDDEN when its fit railed — but always reversible (ADR-0025).
+  // Shaped is a free-vector-family method (taps under penalties), NOT parametric — it never
+  // receives an automated failure flag and is never railed-hidden (task / ADR-0025).
   const railedHidden = $derived(
     method === 'parametric' && analysis && analysis.pm.railed.railed && !showRailed,
+  );
+  // Display label for the active method (tags / band captions).
+  const methodLabel = $derived(
+    method === 'free' ? 'free-vector' : method === 'shaped' ? 'shaped' : 'parametric',
   );
 
   function rangeOf(arrays) {
@@ -510,11 +571,37 @@
       if (!v.analyzable) return null;
       const rr = recoverRegion(v, { col: selectedCol, lambda, stability: false });
       if (!rr.analyzable) return null;
-      const kSamples = method === 'free' ? rr.fv.kernel.samples : rr.pm.kernel.samples;
+      // recoverRegion (core, untouched) computes fv + pm; method 3 is recovered region-local
+      // here in the UI from the SAME windowed view, so the all-regions overlay follows the
+      // selected method for shaped too (one method at a time — no multi-trace overlay).
+      const kSamples =
+        method === 'free'
+          ? rr.fv.kernel.samples
+          : method === 'shaped'
+            ? shapedKernelForView(v)
+            : rr.pm.kernel.samples;
       const staWs = Math.round(STAWIN / rr.dt);
       return { kernelV: Array.from(kSamples), staV: staOntoKernel(rr.sta, kSamples.length, rr.ws, staWs) };
     });
   });
+
+  // Region-local method-3 kernel from an already-windowed view — mirrors recoverRegion's
+  // density/trace prep (binned-count §13, NaN→0, zero-pad to a power of two) so the shaped
+  // all-regions overlay is computed identically to fv/pm. UI-only (core stays untouched).
+  function shapedKernelForView(v) {
+    const grid = v.grid;
+    const n = grid.n;
+    const N = nextPow2(n);
+    const dt = grid.dt;
+    const ws = Math.round(WIN / dt);
+    const sd = rasterize(v.spikeTimes, grid, { amplitudeMode: 'binned-count', preFirstBin: 'keep' });
+    const sdPad = new Float64Array(N);
+    sdPad.set(sd.samples);
+    const traceRaw = v.rois[selectedCol].samples;
+    const tracePad = new Float64Array(N);
+    for (let k = 0; k < n; k++) tracePad[k] = Number.isFinite(traceRaw[k]) ? traceRaw[k] : 0;
+    return recoverKernelShaped(tracePad, sdPad, { windowSamples: ws, dt, fitLength: n }).samples;
+  }
 
   // The kernel-band series list. all-regions → every region's kernel (solid) + STA (dashed)
   // in its Okabe-Ito hue, the CURRENT region highlighted by a NON-color channel (full
@@ -607,6 +694,15 @@
         method: 'parametric',
         text: `τ at bound (${analysis.pm.railed.which.join(', ')})`,
         detail: 'a fitted τ is pinned to its solver bound — the fit is at a wall, not an interior optimum',
+      });
+    }
+    // Shaped: only the neutral peak-at-boundary FACT (free-vector-family — no failure flag,
+    // ADR-0025). Surfaced only when shaped is the computed method.
+    if (shapedAnalysis && shapedAnalysis.boundary.atBoundary) {
+      out.push({
+        method: 'shaped',
+        text: 'peak at boundary',
+        detail: 'max sample sits at the window edge — the peak-lag readout is not a transient peak',
       });
     }
     return out;
@@ -704,6 +800,7 @@
               <div class="seg" role="group" aria-label="Recovery method">
                 <button class:on={method === 'free'} onclick={() => (method = 'free')}>Free-vector</button>
                 <button class:on={method === 'parametric'} onclick={() => (method = 'parametric')}>Parametric</button>
+                <button class:on={method === 'shaped'} onclick={() => (method = 'shaped')}>Shaped</button>
               </div>
             </div>
             <label class="field">
@@ -745,7 +842,8 @@
                 <input type="range" min="0" max="10" step="0.5" bind:value={noiseLevel} />
                 <output>{noiseLevel.toFixed(1)}×</output>
               </label>
-              {#if method === 'parametric'}<p class="ctl-note">λ drives the free-vector recovery; the parametric fit has no λ.</p>{/if}
+              {#if method === 'parametric'}<p class="ctl-note">λ drives the free-vector recovery; the parametric fit has no λ.</p>
+              {:else if method === 'shaped'}<p class="ctl-note">λ drives the free-vector recovery + the stability check; shaped uses its own fixed smoothness + drift dials.</p>{/if}
             </div>
           {/if}
         </div>
@@ -779,10 +877,10 @@
             <p class="ctl-note">{#if multiRegion}Double-click a shaded region to read its kernel & §3 checks.{:else}No analyzable region.{/if}</p>
             {:else}
             <div class="cgrp">
-              <div class="cgh">1 · Plausibility <span class="tag">{method === 'free' ? 'free-vector' : 'parametric'}</span></div>
+              <div class="cgh">1 · Plausibility <span class="tag">{methodLabel}</span></div>
               {#if railedHidden}
                 <div class="crow note">railed — hidden (<button class="linkbtn" onclick={() => (showRailed = true)}>show anyways</button>)</div>
-              {:else if method === 'free'}
+              {:else if method === 'free' || method === 'shaped'}
                 <div class="crow"><span>peak lag</span><span class="v">{f(active.peakLagS, 2)} s</span></div>
                 <div class="crow"><span>peak amp (vs base)</span><span class="v">{f(active.peakAmpAdj)}</span></div>
                 <div class="crow"><span>decay τ</span><span class="v">{Number.isFinite(active.tauDecayS) ? `${f(active.tauDecayS, 2)} s` : 'n/a (tilt)'}</span></div>
@@ -805,6 +903,10 @@
                 <div class="crow"><span>retained-kernel R²</span><span class="v">{f(active.r2)}</span></div>
                 <div class="crow"><span>RMSE</span><span class="v">{e(active.rmse)}</span></div>
                 <div class="crow note">full-latent ≈1 = path sane; low retained = §3 decoupling</div>
+              {:else if method === 'shaped'}
+                <div class="crow"><span>reconstruction R²</span><span class="v">{f(active.r2)}</span></div>
+                <div class="crow"><span>RMSE</span><span class="v">{e(active.rmse)}</span></div>
+                <div class="crow note">density ⊛ kernel + degree-{active.driftDegree} drift basis (kernel-protection, not a drift readout); low R² = §3 decoupling</div>
               {:else}
                 <div class="crow"><span>full-kernel R²</span><span class="v">{f(active.r2)}</span></div>
                 <div class="crow note">Option B forward path; low R² = §3 decoupling, reported not gated</div>
@@ -821,7 +923,7 @@
             </div>
 
             <div class="cgrp">
-              <div class="cgh">4 · STA agreement <span class="tag">vs {method === 'free' ? 'free-vector' : 'parametric'}</span></div>
+              <div class="cgh">4 · STA agreement <span class="tag">vs {methodLabel}</span></div>
               {#if analysis.sta.empty}
                 <div class="crow note">STA empty — no accepted events</div>
               {:else}
@@ -844,7 +946,7 @@
            gutter ⇒ the axes lock, not merely coincide). -->
       <div class="band">
         <div class="band-head">
-          <span class="plot-label">reconstruction — actual dF/F₀ vs predicted (density ⊛ {method === 'free' ? 'free-vector' : 'parametric'} kernel), {colLabel(selectedCol)}</span>
+          <span class="plot-label">reconstruction — actual dF/F₀ vs predicted (density ⊛ {methodLabel} kernel), {colLabel(selectedCol)}</span>
           <div class="head-right">
             {#if zoomRange}
               <span class="zoomnote zoomed">zoomed {zoomRange[0].toFixed(0)}–{zoomRange[1].toFixed(0)} s · click plot to reset</span>
@@ -989,7 +1091,7 @@
             {/if}
             {#if !railedHidden && !analysis.staEmpty}
               <span class="agree">
-                kernel peak {f(active.peakLagS, 2)} s · amp {f(method === 'free' ? active.peakAmpAdj : active.peakAmp)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
+                kernel peak {f(active.peakLagS, 2)} s · amp {f(method === 'parametric' ? active.peakAmp : active.peakAmpAdj)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
               </span>
             {/if}
           {/if}
