@@ -162,9 +162,14 @@ recorded here:
 
 1. **The foil is linear**, so a column that *departs* from it may be **nonlinearly coupled rather
    than decoupled** — deviation from the foil is **not by itself evidence of decoupling.**
-2. The field's state of the art treats **baseline drift as something to *model*, not zero** — a
-   standing caution for ADR-0021's shape-regularized **baseline-flatness** term, and a possible
-   argument for a future **baseline-nuisance variant.**
+2. The field's state of the art treats **baseline drift as something to *model*, not zero** — the
+   standing caution behind ADR-0021's shape-regularized **baseline-flatness** term. **Resolved by
+   [ADR-0023](docs/adr/0023-method3-baseline-strategy.md) (Accepted):** method 3 adopts **both** a
+   baseline-flatness penalty **and** a minimal low-order **drift nuisance basis**, combined in one
+   objective — figure-gated to recover a known τ_decay without the basis stealing decay, with the
+   basis held deliberately minimal (the load-bearing conservative dial). The basis is a
+   kernel-protection device, **not** a trustworthy drift measurement (its recovered drift over-claims
+   ~3.9×); a baseline-nuisance variant that needs a real drift estimate stays a future item.
 
 ---
 
