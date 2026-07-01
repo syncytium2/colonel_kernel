@@ -12,9 +12,13 @@ dist
 dist-ssr
 *.local
 
-# Reference .mat data — researchers' data must never be committed (FOUNDATIONS §6).
+# Reference data — researchers' data must never be committed (FOUNDATIONS §6).
+# Ignore ALL of data/ (not just *.mat): CSV/JSON derived from recordings are
+# raw-adjacent and must not leak either. Only a README may be tracked, so the
+# directory's purpose is documented without shipping any data.
 # Promote a file to a golden test asset deliberately, never by accident.
-data/*.mat
+data/*
+!data/README.md
 
 # darkroom/ — local-only figures developed from reference data (never committed).
 darkroom/
