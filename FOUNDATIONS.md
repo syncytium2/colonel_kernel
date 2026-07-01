@@ -644,6 +644,31 @@ break a signal as it moves between tabs.
   between Tabs 1 and 3; Tab 2's kernel is its own recovered result, optionally comparable against
   the chosen kernel as ground truth. The precise sharing remains **TBD**.
 
+### 11.5 Axis co-registration (shared timebase → aligned axes)
+
+A durable **plotting invariant**, settled in
+[ADR-0030](docs/adr/0030-shared-timebase-axis-co-registration-invariant.md) (generalizing the Tab 2
+case from [ADR-0026](docs/adr/0026-tab2-layout-left-rail-three-plot-bands.md)):
+
+- **x-axes for related time-base data MUST align.** Plots that share a timebase — Tab 1's spike
+  train + `input ⊗ kernel` output, Tab 2's reconstruction + spike raster — must co-register
+  *pixel-for-pixel*, not merely share an x-*range*. That means an identical x-range **and** identical
+  plot-area geometry (equal left gutter, equal right padding), so a feature at time *t* sits at the
+  same x in every band and the eye drops straight down from a spike to its response. Stacked/adjacent
+  shared-time bands also carry a **shared hover crosshair**: one dashed time-line linked across bands
+  by data-x, with per-series value-dots (line = *where in time*, dot = *the value there*).
+- **A different timebase deliberately does NOT co-register.** The kernel/STA band is an operator on
+  **lag**, not a signal on recording-time (§2), so it keeps its own symmetric ±win lag axis
+  ([ADR-0009](docs/adr/0009-centered-symmetric-lag-explicit-zero-index.md)) and shares no cursor with
+  the recording-time bands. Aligning axes of different meaning would mislead.
+- **y-axes SHOULD be identical whenever possible/reasonable — the human decides.** Prefer a shared
+  y-range across related plots when it makes magnitudes comparable *by construction* (e.g. kernels/STA
+  across regions, [ADR-0024](docs/adr/0024-kernel-sta-overlay-display-mode.md),
+  [ADR-0029](docs/adr/0029-overlay-scale-kernel-sta-targets.md)). This is a **preference, not an
+  absolute**: where a shared scale would flatten detail, a per-plot scale is right. The call is the
+  human's per the figure-gate ([ADR-0018](docs/adr/0018-figure-gate-policy.md)), never an enforced
+  rule.
+
 ---
 
 ## 12. How to use this file with Claude / Claude Code
