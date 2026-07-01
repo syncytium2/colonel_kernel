@@ -16,7 +16,8 @@
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "playwright": "^1.61.0",
     "svelte": "^5.55.5",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "wrangler": "^4.106.0"
   },
   "dependencies": {
     "fft.js": "^4.0.4",
