@@ -49,6 +49,13 @@
 
   // --- presentation transforms (core untouched) ---
 
+  // Equal right-edge padding on BOTH recording-time bands. uPlot only auto-reserves
+  // right-edge space when an x-axis is shown (for the last tick label); the spike band
+  // hides its x-axis and the output band shows it, so without this their plot areas
+  // shear and a spike no longer drops straight onto its response. Pinning an identical
+  // padRight forces identical right edges (same co-registration Tab 2 uses, ADR-0026).
+  const PLOT_PAD_R = 32;
+
   // Spike train and output share ONE recording-time x-axis so the eye drops
   // straight down from a spike to where its response begins. Use the union of
   // both ranges so the kernel tail past the window isn't clipped.
@@ -162,6 +169,9 @@
         color="var(--text-h)"
         xRange={leftXRange}
         yAxisSize={48}
+        padRight={PLOT_PAD_R}
+        syncKey="tab1-rec-x"
+        cursorPoints={true}
         showXAxis={false}
         height={150}
       />
@@ -174,6 +184,9 @@
         color="#2a9d8f"
         xRange={leftXRange}
         yAxisSize={48}
+        padRight={PLOT_PAD_R}
+        syncKey="tab1-rec-x"
+        cursorPoints={true}
         xLabel="time (s)"
         height={170}
       />
