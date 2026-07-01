@@ -15,10 +15,28 @@ import {
   extractSymmetric,
   recoverKernel,
 } from './deconvolve.js';
+import {
+  doubleExpCausal,
+  doubleExpCausalFull,
+  forwardConvolveCausal,
+  reconstructParametric,
+  recoverKernelParametric,
+  PARAM_BOUNDS,
+} from './deconvolve-parametric.js';
+import {
+  recoverKernelShaped,
+  makeDriftBasis,
+  SHAPED_DIALS,
+  DRIFT_BASIS_DEGREE,
+} from './deconvolve-shaped.js';
+import { tauRailed, peakAtBoundary, normalizeUnitPeak, rebinCounts } from './readout.js';
 import { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
 import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './noise.js';
 import { loadCsv } from './load-csv.js';
 import { spikeTriggeredAverage } from './sta.js';
+import * as XLSX from 'xlsx';
+import { loadWorkbook, windowRegion, regionsOf, regionViewToLoadedRegion } from './load-xlsx.js';
+import { recoverRegion, spikeSufficiency } from './region-recovery.js';
 
 let passed = 0;
 let failed = 0;
@@ -233,6 +251,228 @@ ok('oracle(mini): peak lag recovered within ½ sample', Math.abs(recDg.peakLagS 
 ok('oracle(mini): peak amp within 5%', Math.abs(recDg.peakAmp / plDg.peakAmp - 1) <= 0.05, `ratio=${recDg.peakAmp / plDg.peakAmp}`);
 ok('oracle(mini): acausal ratio < 0.02', recDg.acausalRatio < 0.02, `ratio=${recDg.acausalRatio}`);
 
+// --- constrained-parametric recovery (ADR-0021 method 2) --------------------
+// doubleExpCausal: anchored t=0 (lag-0 value is exactly 0), rises then decays.
+const decK = doubleExpCausal({ tauRise: 0.1, tauDecay: 1.0, amp: 1 }, 50, 0.1);
+ok('doubleExp k[0]=0 (zero baseline, anchored t=0)', decK[0] === 0);
+ok('doubleExp rises off zero then is positive', decK[1] > 0 && decK[5] > 0);
+{
+  // analytic peak lag t* = ln(τd/τr)·(τr·τd)/(τd−τr) ≈ 0.2558 s for (0.1, 1.0)
+  let bi = 0;
+  for (let i = 1; i < decK.length; i++) if (decK[i] > decK[bi]) bi = i;
+  ok('doubleExp peak near analytic t* (~0.26 s)', Math.abs(bi * 0.1 - 0.2558) <= 0.1, `peak=${bi * 0.1}`);
+}
+
+// forwardConvolveCausal: a single unit spike stamps the kernel at the spike index.
+{
+  const d = new Float64Array(8); d[2] = 1;
+  const kk = Float64Array.from([0, 0.5, 0.25]);
+  const y = forwardConvolveCausal(d, kk, 8);
+  ok('forwardConvolveCausal stamps causal kernel at spike',
+    y[2] === 0 && y[3] === 0.5 && y[4] === 0.25 && y[0] === 0,
+    `[${Array.from(y)}]`);
+}
+
+// Recover a KNOWN planted double-exponential from a synthetic trace. Plant θ,
+// forward-convolve a binned-count density with it, then fit and confirm θ + the
+// kernel contract come back within tolerance.
+{
+  const dtP = 0.1;
+  const wsP = 50;                       // ±5 s window → kernel length 101
+  const Mp = 1024;
+  const gP = makeGrid({ sampleRate: 10, duration: Mp / 10, t0: 0 });
+  const densP = rasterize([12, 12, 27, 41, 63, 78, 95], gP, { amplitudeMode: 'binned-count' }).samples;
+  const truth = { tauRise: 0.18, tauDecay: 1.4, amp: 0.22 };
+  const truthK = doubleExpCausal(truth, wsP, dtP);
+  const tracePlanted = forwardConvolveCausal(densP, truthK, Mp);
+  const fitRes = recoverKernelParametric(tracePlanted, densP, { windowSamples: wsP, dt: dtP });
+
+  // (1) ADR-0009 contract shape.
+  ok('parametric: contract length 2·ws+1', fitRes.samples.length === 2 * wsP + 1);
+  ok('parametric: zeroIndex = ws, dt carried', fitRes.zeroIndex === wsP && approx(fitRes.dt, dtP));
+  ok('parametric: times centered at zeroIndex', approx(fitRes.times[wsP], 0) && approx(fitRes.times[wsP + 1], dtP) && approx(fitRes.times[wsP - 1], -dtP));
+  // (2) zero baseline by construction (lag-0 sample is exactly 0).
+  ok('parametric: zero baseline at lag 0', fitRes.samples[wsP] === 0);
+  // (3) causal — every negative-lag sample is identically zero.
+  let negAllZero = true;
+  for (let i = 0; i < wsP; i++) if (fitRes.samples[i] !== 0) negAllZero = false;
+  ok('parametric: causal (negative lags all zero)', negAllZero);
+  const pDg = kernelDiagnostics(fitRes);
+  ok('parametric: acausalRatio exactly 0 (causal by construction)', pDg.acausalRatio === 0, `ratio=${pDg.acausalRatio}`);
+  // (4) recovers the planted θ within tolerance.
+  ok('parametric: recovers τ_rise within 10%', Math.abs(fitRes.fit.theta.tauRise / truth.tauRise - 1) <= 0.1, `τr=${fitRes.fit.theta.tauRise}`);
+  ok('parametric: recovers τ_decay within 10%', Math.abs(fitRes.fit.theta.tauDecay / truth.tauDecay - 1) <= 0.1, `τd=${fitRes.fit.theta.tauDecay}`);
+  ok('parametric: recovers amp within 10%', Math.abs(fitRes.fit.theta.amp / truth.amp - 1) <= 0.1, `amp=${fitRes.fit.theta.amp}`);
+  ok('parametric: τ_decay reported as a real number (no n/a tilt)', Number.isFinite(fitRes.fit.theta.tauDecay));
+  ok('parametric: near-perfect reconstruction on noise-free plant (R²>0.99)', fitRes.fit.r2 > 0.99, `r2=${fitRes.fit.r2}`);
+  // peak lag matches the planted transient's analytic peak.
+  const tStar = (Math.log(truth.tauDecay / truth.tauRise) * (truth.tauRise * truth.tauDecay)) / (truth.tauDecay - truth.tauRise);
+  ok('parametric: peak lag matches planted (within ½ sample)', Math.abs(fitRes.fit.peakLagS - tStar) <= dtP / 2 + 1e-9, `peak=${fitRes.fit.peakLagS} t*=${tStar}`);
+}
+
+// --- Option B: full-analytic-kernel reconstruction (no ±window tail clipping) ---
+// When τ_decay is LONG relative to the display window, the ±ws slice clips the
+// decay tail. The reconstruction must use the FULL analytic kernel (~5·τdecay), not
+// the truncated array, so the residual is honest — not decoupling-plus-clipping.
+{
+  const dtB = 0.1;
+  const wsB = 10;                      // display window ±1.0 s — DELIBERATELY short
+  const Mb = 512;
+  const gB = makeGrid({ sampleRate: 10, duration: Mb / 10, t0: 0 });
+  const densB = rasterize([8, 8, 19, 33, 47], gB, { amplitudeMode: 'binned-count' }).samples;
+  const thetaB = { tauRise: 0.15, tauDecay: 1.0, amp: 0.3 }; // 5·τ = 5.0 s = 50 samples ≫ ws
+
+  // doubleExpCausalFull extends well past the display window; the floor keeps it ≥ ws.
+  const full = doubleExpCausalFull(thetaB, dtB, wsB);
+  ok('doubleExpCausalFull extends past the ±window (tail not clipped)', full.length > wsB + 1, `len=${full.length}`);
+  ok('doubleExpCausalFull reaches ~5·τdecay', Math.abs(full.length - 1 - Math.ceil(5 * thetaB.tauDecay / dtB)) <= 1, `len=${full.length}`);
+  ok('doubleExpCausalFull floor honored (≥ minSamples)', doubleExpCausalFull({ ...thetaB, tauDecay: 0.05 }, dtB, wsB).length === wsB + 1);
+
+  // Truth trace generated with the FULL kernel (real tails present).
+  const truthFull = doubleExpCausalFull(thetaB, dtB, wsB);
+  const truth = forwardConvolveCausal(densB, truthFull, Mb);
+
+  // Truncated reconstruction (±ws kernel) CLIPS the tail; full reconstruction is exact.
+  const reconTrunc = forwardConvolveCausal(densB, doubleExpCausal(thetaB, wsB, dtB), Mb);
+  const reconFull = reconstructParametric(densB, thetaB, dtB, Mb, wsB);
+  let maxTrunc = 0, maxFull = 0;
+  for (let i = 0; i < Mb; i++) {
+    maxTrunc = Math.max(maxTrunc, Math.abs(truth[i] - reconTrunc[i]));
+    maxFull = Math.max(maxFull, Math.abs(truth[i] - reconFull[i]));
+  }
+  ok('Option B: full reconstruction matches the full-kernel truth (exact)', maxFull < 1e-12, `maxFull=${maxFull}`);
+  ok('Option B: truncated reconstruction visibly clips the tail', maxTrunc > 1e-3, `maxTrunc=${maxTrunc}`);
+  ok('Option B: full reconstruction is strictly better than truncated', maxFull < maxTrunc);
+
+  // recoverKernelParametric reports the FULL-kernel R² (not the clipped one). With the
+  // truth made from the full kernel, the reported R² is near-perfect.
+  const recB = recoverKernelParametric(truth, densB, { windowSamples: wsB, dt: dtB });
+  ok('Option B: recoverKernelParametric reports full-kernel R² (>0.99 on full-kernel truth)', recB.fit.r2 > 0.99, `r2=${recB.fit.r2}`);
+  // The returned display contract is still the ±ws slice (unchanged ADR-0009 object).
+  ok('Option B: returned contract is still the ±ws slice', recB.samples.length === 2 * wsB + 1 && recB.zeroIndex === wsB);
+}
+
+// --- ADR-0021 method 3: shape-regularized recovery + joint drift basis ------
+// Plant a KNOWN calcium kernel AND a KNOWN low-order drift, forward-convolve a
+// binned-count density (circular, as method 1), add the drift, then recover and
+// confirm: the ADR-0009 contract, the kernel stays causal/physiological under the
+// flatness+acausal penalties, and — the headline (ADR-0023) — τ_decay comes back
+// near planted, i.e. the drift basis does NOT steal decay.
+{
+  const dtS = 0.1, wsS = 50;           // ±5 s → kernel length 101
+  const Ns = 2048;                     // power of two (circular forward model)
+  const gS = makeGrid({ sampleRate: 10, duration: Ns / 10, t0: 0 });
+  const plantP = { tauRise: 0.2, tauDecay: 1.5 };
+  const pk = buildKernel('calcium', plantP, dtS);
+  const plantedFull = new Float64Array(Ns);
+  for (let i = 0; i < pk.samples.length && i < Ns; i++) plantedFull[i] = pk.samples[i] * 0.2;
+  const plantedDiag = kernelDiagnostics(extractSymmetric(plantedFull, wsS, dtS));
+  // Dense spiking (~80 events) — the regime the method is for (real recordings, the
+  // oracle's 328-spike plant): the data term dominates the flatness penalty, so τ is
+  // preserved. (A SPARSE plant lets the far-lag flatness penalty over-crush the tail.)
+  const spikesS = [];
+  for (let k = 0; k < 80; k++) spikesS.push(10 + k * 2.3);
+  const densS = rasterize(spikesS, gS, { amplitudeMode: 'binned-count' }).samples;
+  const conv = circularConvolve(densS, plantedFull);
+  // planted drift in the SAME low-order family as the nuisance basis (degree 2).
+  const { cols: pb } = makeDriftBasis(Ns, 2, Ns);
+  const traceS = new Float64Array(Ns);
+  for (let i = 0; i < Ns; i++) traceS[i] = conv[i] + (0.03 * pb[0][i] + 0.015 * pb[1][i]);
+
+  const rec = recoverKernelShaped(traceS, densS, { windowSamples: wsS, dt: dtS });
+  const dg = kernelDiagnostics(rec);
+
+  // (1) ADR-0009 contract shape (same as methods 1 & 2).
+  ok('shaped: contract length 2·ws+1', rec.samples.length === 2 * wsS + 1);
+  ok('shaped: zeroIndex = ws, dt carried', rec.zeroIndex === wsS && approx(rec.dt, dtS));
+  ok('shaped: times centered at zeroIndex',
+    approx(rec.times[wsS], 0) && approx(rec.times[wsS + 1], dtS) && approx(rec.times[wsS - 1], -dtS));
+  // (2) negative-lag content is RETAINED (free-vector taps, unlike causal method 2) but
+  // the acausal-energy penalty keeps it small on a clean causal plant.
+  ok('shaped: acausal energy small under the acausal penalty', dg.acausalRatio < 0.05, `ratio=${dg.acausalRatio}`);
+  // (3) peak lag matches the planted transient within ½ sample.
+  ok('shaped: peak lag matches planted (within 1 sample)',
+    Math.abs(dg.peakLagS - plantedDiag.peakLagS) <= dtS + 1e-9, `peak=${dg.peakLagS} planted=${plantedDiag.peakLagS}`);
+  // (4) THE headline (ADR-0023): τ_decay is a real number near planted — the basis does
+  // NOT steal decay (the oracle showed a slight smoothing-induced LENGTHENING, not theft).
+  ok('shaped: τ_decay is finite (no n/a tilt)', Number.isFinite(dg.tauDecayS), `τ=${dg.tauDecayS}`);
+  ok('shaped: τ_decay near planted (within 30%, basis does not steal decay)',
+    Math.abs(dg.tauDecayS / plantedDiag.tauDecayS - 1) <= 0.3, `τ=${dg.tauDecayS} planted=${plantedDiag.tauDecayS}`);
+  // (5) the combined model (kernel + drift) explains the noise-free plant well.
+  ok('shaped: high reconstruction R² on the noise-free combined plant', rec.fit.r2 > 0.9, `r2=${rec.fit.r2}`);
+
+  // (6) the fit object carries the recovered drift + dials (FOUNDATIONS §7 visibility).
+  ok('shaped: drift recovered over the real region', rec.fit.drift.length === Ns);
+  ok('shaped: driftCoeffs has DRIFT_BASIS_DEGREE entries', rec.fit.driftCoeffs.length === DRIFT_BASIS_DEGREE);
+  ok('shaped: fit reports the oracle-validated dials',
+    rec.fit.lambdas.lambdaSmooth === SHAPED_DIALS.lambdaSmooth &&
+    rec.fit.lambdas.lambdaFlat === SHAPED_DIALS.lambdaFlat &&
+    rec.fit.lambdas.lambdaAcausal === SHAPED_DIALS.lambdaAcausal);
+
+  // (7) deterministic (no RNG): identical inputs → identical taps.
+  const rec2 = recoverKernelShaped(traceS, densS, { windowSamples: wsS, dt: dtS });
+  ok('shaped: deterministic', rec2.samples[wsS + 6] === rec.samples[wsS + 6]);
+
+  // (8) input guards.
+  ok('shaped: throws on length mismatch',
+    throws(() => recoverKernelShaped(traceS, densS.slice(0, Ns - 1), { windowSamples: wsS, dt: dtS })));
+  ok('shaped: throws on non-positive windowSamples',
+    throws(() => recoverKernelShaped(traceS, densS, { windowSamples: 0, dt: dtS })));
+
+  // makeDriftBasis: degree-2 columns, mean-zero over the real region, zero in padding.
+  const mb = makeDriftBasis(100, 2, 128);
+  let m0 = 0, m1 = 0;
+  for (let i = 0; i < 100; i++) { m0 += mb.cols[0][i]; m1 += mb.cols[1][i]; }
+  ok('makeDriftBasis: degree columns', mb.cols.length === 2 && mb.labels.length === 2);
+  ok('makeDriftBasis: columns mean-zero over the real region', Math.abs(m0) < 1e-9 && Math.abs(m1) < 1e-9);
+  ok('makeDriftBasis: zero in the padded tail', mb.cols[0][120] === 0 && mb.cols[1][127] === 0);
+}
+
+// --- readout display helpers: ADR-0025 facts + ADR-0024 normalization -------
+{
+  // tauRailed — interior θ is NOT railed; θ pinned to a bound IS (neutral fact).
+  ok('tauRailed: interior θ not railed', tauRailed({ tauRise: 0.227, tauDecay: 2.89 }).railed === false);
+  const rMin = tauRailed({ tauRise: PARAM_BOUNDS.tauRiseMin, tauDecay: 12 });
+  ok('tauRailed: τ_rise at min flagged', rMin.railed === true && rMin.which.includes('τ_rise at min'));
+  const rMax = tauRailed({ tauRise: PARAM_BOUNDS.tauRiseMax, tauDecay: 5 });
+  ok('tauRailed: τ_rise at max flagged', rMax.railed === true && rMax.which.includes('τ_rise at max'));
+  const dMax = tauRailed({ tauRise: 0.05, tauDecay: PARAM_BOUNDS.tauDecayMax });
+  ok('tauRailed: τ_decay at max flagged', dMax.railed === true && dMax.which.includes('τ_decay at max'));
+
+  // peakAtBoundary — interior transient is NOT at boundary; an edge-rising bowl IS.
+  // ws=10 → +lag half = 10 samples. Peak at lag 6 (interior) vs lag 10 (right edge).
+  const interior = { samples: new Float64Array(21), zeroIndex: 10 };
+  interior.samples[16] = 1; // lag +6 of +10
+  ok('peakAtBoundary: interior peak not flagged', peakAtBoundary(interior).atBoundary === false);
+  const bowl = { samples: new Float64Array(21), zeroIndex: 10 };
+  for (let i = 10; i <= 20; i++) bowl.samples[i] = (i - 10); // monotonic rise to the +edge
+  const pab = peakAtBoundary(bowl);
+  ok('peakAtBoundary: edge-rising bowl flagged at +lag boundary', pab.atBoundary === true && pab.lagSamples === 10);
+
+  // normalizeUnitPeak — scales to unit peak, preserves null/NaN, never mutates input.
+  const src = [0, 0.5, -1, 2, null, NaN];
+  const nrm = normalizeUnitPeak(src);
+  ok('normalizeUnitPeak: peak magnitude → 1', Math.max(...nrm.filter((v) => v != null).map(Math.abs)) === 1);
+  ok('normalizeUnitPeak: scales proportionally (2→1, -1→-0.5)', nrm[3] === 1 && nrm[2] === -0.5);
+  ok('normalizeUnitPeak: null/NaN preserved as null', nrm[4] === null && nrm[5] === null);
+  ok('normalizeUnitPeak: input not mutated', src[3] === 2);
+  ok('normalizeUnitPeak: all-zero input returned unscaled (no divide-by-zero)', normalizeUnitPeak([0, 0, 0]).every((v) => v === 0));
+
+  // rebinCounts — display-only spike re-binning. The hard constraint (display re-bin must
+  // not touch recovery) shows up here as PURITY: a fresh array, input never mutated, and
+  // the finest window reproduces the recovery input exactly.
+  const frameCounts = [0, 1, 2, 0, 1, 0, 0, 3, 0, 1];
+  const fine = rebinCounts(frameCounts, 0.1, 0.1); // group 1 → IS the §13 recovery input
+  ok('rebinCounts: at windowS=dt reproduces the frame counts exactly', eq(fine.values, frameCounts) && fine.group === 1, `[${fine.values}]`);
+  ok('rebinCounts: windowS snapped to dt at the finest setting', Math.abs(fine.windowS - 0.1) < 1e-12);
+  ok('rebinCounts: returns a FRESH array (not the input — cannot alias the density)', fine.values !== frameCounts);
+  ok('rebinCounts: does NOT mutate the input counts', eq(frameCounts, [0, 1, 2, 0, 1, 0, 0, 3, 0, 1]));
+  const wide = rebinCounts(frameCounts, 0.1, 0.3); // group 3 → sums consecutive frames
+  ok('rebinCounts: 0.3 s window sums groups of 3 frames', eq(wide.values, [3, 1, 3, 1]) && wide.group === 3, `[${wide.values}]`);
+  ok('rebinCounts: effective window = group·dt', Math.abs(wide.windowS - 0.3) < 1e-12);
+  ok('rebinCounts: total count is conserved across windows', wide.values.reduce((a, b) => a + b, 0) === frameCounts.reduce((a, b) => a + b, 0));
+}
+
 // --- CSV loader (ADR-0016) --------------------------------------------------
 // Canonical small region: dense time + roi1/roi2, ragged spikes (blank below the
 // last spike), one NaN trace sample. Headers carry stray whitespace to prove the
@@ -348,6 +588,179 @@ ok('STA cross-method: 3 interior events accepted', caSTA.nAccepted === 3, `acc=$
 ok('STA cross-method: peak lag agrees with planted kernel (≤ ½ sample)', Math.abs(caSTAdg.peakLagS - plantedPeakLag) <= staDt / 2 + 1e-9, `sta=${caSTAdg.peakLagS} planted=${plantedPeakLag}`);
 ok('STA cross-method: peak amp within 5 % of planted', Math.abs(caSTAdg.peakAmp / (caKsta.samples[pkArg] * PEAK_AMP) - 1) <= 0.05, `ratio=${caSTAdg.peakAmp / (caKsta.samples[pkArg] * PEAK_AMP)}`);
 ok('STA cross-method: causal shape, acausal energy small', caSTAdg.acausalRatio < 0.05, `ratio=${caSTAdg.acausalRatio}`);
+
+// --- xlsx ingest spine (ADR-0019) -------------------------------------------
+// Synthetic, data-safe workbooks built in-memory (the real goldens are
+// unpublished-data-derived and stay out of the repo, §6 — they are exercised by
+// the separate `npm run xlsx-acceptance` script).
+function makeXlsx({ trace, spikes, metadata, names = {} }) {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trace), names.trace ?? 'trace');
+  if (spikes !== undefined) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(spikes), names.spikes ?? 'spikes');
+  if (metadata !== undefined) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(metadata), names.metadata ?? 'metadata');
+  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+}
+// a 0..5.0 s @ dt=0.1 recording (51 frames), 2 roi cols (roi2 carries one NaN)
+const xtTrace = [['time', 'cellA', 'cellB']];
+for (let i = 0; i < 51; i++) xtTrace.push([i * 0.1, i, i === 3 ? '' : 100 + i]);
+const xtSpikes = [['spikes'], [2.0], [1.0], [3.0]]; // unsorted on purpose
+const xtMeta = [
+  ['region', 'start_s', 'end_s'],
+  ['A', 0, 2.5],
+  ['B', 2.6, 10], // end_s 10 > tEnd 5.0 (ADR-0020 overhang)
+];
+const wbBuf = makeXlsx({ trace: xtTrace, spikes: xtSpikes, metadata: xtMeta });
+const REC = loadWorkbook(wbBuf, { source: 'synthetic.xlsx' });
+
+ok('xlsx: dt derived from time column (ADR-0012)', approx(REC.meta.dt, 0.1), `dt=${REC.meta.dt}`);
+ok('xlsx: nFrames / nROIs / nSpikes', REC.meta.nFrames === 51 && REC.meta.nROIs === 2 && REC.meta.nSpikes === 3);
+ok('xlsx: t0 / tEnd', approx(REC.meta.t0, 0) && approx(REC.meta.tEnd, 5.0));
+ok('xlsx: first roi column positionally = targeted (header name kept)', REC.rois[0].id === 'cellA' && REC.rois[1].id === 'cellB');
+ok('xlsx: spikes nan-stripped + sorted ascending', REC.spikeTimes.length === 3 && approx(REC.spikeTimes[0], 1.0) && approx(REC.spikeTimes[2], 3.0));
+ok('xlsx: NaN roi cell preserved as non-finite', !Number.isFinite(REC.rois[1].samples[3]));
+ok('xlsx: NaN roi warning present', REC.warnings.some((w) => w.includes('non-finite')));
+ok('xlsx: 2 metadata regions, sorted', REC.regions.length === 2 && REC.regions[0].name === 'A' && REC.regions[1].name === 'B');
+ok('xlsx: end_s > tEnd read RAW, not clamped (ADR-0020)', REC.regions[1].endS === 10);
+
+// windowing — region A [0,2.5] selects spikes 1.0,2.0; default buffer 1.0 s → 10 samples
+const wA = windowRegion(REC, REC.regions[0]);
+ok('xlsx win A: analyzable', wA.analyzable === true);
+ok('xlsx win A: spikeCount 2', wA.spikeCount === 2);
+ok('xlsx win A: bufferSamples = round(1.0/dt) = 10', wA.window.bufferSamples === 10);
+ok('xlsx win A: bracket [firstIdx-10, lastIdx+10] = [0,30]', wA.window.startIdx === 0 && wA.window.endIdx === 30, `[${wA.window.startIdx},${wA.window.endIdx}]`);
+ok('xlsx win A: windowed grid length 31, rois sliced to match', wA.grid.n === 31 && wA.rois[0].samples.length === 31);
+ok('xlsx win A: start clamp warned (firstIdx-10 = 0 boundary, no clamp)', wA.warnings.length === 0, `[${wA.warnings}]`);
+
+// region B [2.6,10] selects only spike 3.0 → single-spike degenerate (ADR-0019 §7)
+const wB = windowRegion(REC, REC.regions[1]);
+ok('xlsx win B: single spike → non-analyzable, no throw', wB.analyzable === false && wB.spikeCount === 1);
+ok('xlsx win B: reason distinguishes 1 spike', wB.reason.includes('(1 spike)'));
+ok('xlsx win B: non-analyzable carries null grid/rois', wB.grid === null && wB.rois === null);
+
+// buffer_s override + non-clamped interior window
+const wbBuf2 = makeXlsx({
+  trace: xtTrace,
+  spikes: [['spikes'], [1.0], [2.0]],
+  metadata: [['region', 'start_s', 'end_s', 'buffer_s'], ['C', 0, 5, 0.2]],
+});
+const REC2 = loadWorkbook(wbBuf2);
+const wC = windowRegion(REC2, REC2.regions[0]);
+ok('xlsx: buffer_s override honored (0.2 s → 2 samples)', wC.window.bufferSamples === 2);
+ok('xlsx win C: interior bracket [10-2, 20+2] = [8,22]', wC.window.startIdx === 8 && wC.window.endIdx === 22, `[${wC.window.startIdx},${wC.window.endIdx}]`);
+
+// no metadata → one default region over the full trace, bracketed to all spikes
+const wbBuf3 = makeXlsx({ trace: xtTrace, spikes: [['spikes'], [1.0], [3.0]] });
+const REC3 = loadWorkbook(wbBuf3);
+const regs3 = regionsOf(REC3);
+ok('xlsx: no metadata → 1 default region spanning full trace', regs3.length === 1 && approx(regs3[0].startS, 0) && approx(regs3[0].endS, 5.0));
+ok('xlsx: no-metadata warning present', REC3.warnings.some((w) => w.includes('default region')));
+const wD = windowRegion(REC3, regs3[0]);
+ok('xlsx: default region brackets to spikes (analyzable)', wD.analyzable === true && wD.spikeCount === 2);
+
+// empty-spikes whole recording → reads fine; every region non-analyzable, no throw
+const wbEmpty = makeXlsx({ trace: xtTrace, spikes: [['spikes']], metadata: xtMeta });
+const RECe = loadWorkbook(wbEmpty);
+ok('xlsx: empty spikes sheet → nSpikes 0, no throw', RECe.meta.nSpikes === 0);
+const wEmpty = windowRegion(RECe, RECe.regions[0]);
+ok('xlsx: empty-spikes region → non-analyzable, reason distinguishes 0', wEmpty.analyzable === false && wEmpty.reason.includes('(0 spikes)'));
+
+// sheet-name match is case-insensitive (ADR-0019)
+const wbCase = makeXlsx({ trace: xtTrace, spikes: xtSpikes, names: { trace: 'TRACE', spikes: 'Spikes' } });
+ok('xlsx: sheet names matched case-insensitively', loadWorkbook(wbCase).meta.nROIs === 2);
+
+// adapter: RegionView → loadCsv shape (so the xlsx path feeds the existing readout)
+const adapted = regionViewToLoadedRegion(wA, { source: 'syn — A' });
+ok('xlsx adapter: loadCsv-shaped (grid/spikeTimes/rois/meta/warnings)', !!adapted.grid && !!adapted.spikeTimes && !!adapted.rois && !!adapted.meta);
+ok('xlsx adapter: meta.t0/tEnd from windowed grid edges', approx(adapted.meta.t0, wA.grid.times[0]) && approx(adapted.meta.tEnd, wA.grid.times[wA.grid.n - 1]));
+ok('xlsx adapter: meta counts + dt match the window', adapted.meta.nFrames === wA.grid.n && adapted.meta.nROIs === wA.rois.length && approx(adapted.meta.dt, wA.grid.dt));
+ok('xlsx adapter: rois[0] preserved as targeted', adapted.rois[0].id === wA.rois[0].id);
+ok('xlsx adapter: throws on a non-analyzable region', throws(() => regionViewToLoadedRegion(wB)));
+
+// machinery gates — hard errors
+ok('xlsx: missing trace sheet throws', throws(() => {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(xtSpikes), 'spikes');
+  loadWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+}));
+ok('xlsx: missing spikes sheet throws', throws(() => {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(xtTrace), 'trace');
+  loadWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+}));
+ok('xlsx: non-increasing time throws', throws(() => loadWorkbook(makeXlsx({
+  trace: [['time', 'r1'], [0, 1], [0, 2], [0.2, 3]],
+  spikes: [['spikes'], [0.1]],
+}))));
+ok('xlsx: overlapping regions throw', throws(() => loadWorkbook(makeXlsx({
+  trace: xtTrace,
+  spikes: xtSpikes,
+  metadata: [['region', 'start_s', 'end_s'], ['A', 0, 2.5], ['B', 2.0, 4]],
+}))));
+ok('xlsx: metadata missing required column throws', throws(() => loadWorkbook(makeXlsx({
+  trace: xtTrace,
+  spikes: xtSpikes,
+  metadata: [['region', 'start_s'], ['A', 0]],
+}))));
+
+// --- windowed (sub-window) recovery: recoverRegion (ADR-0027) ----------------
+// Synthetic recording with TWO disjoint epochs over one shared spike train: epoch
+// A is COUPLED (calcium = density ⊗ a known causal kernel), epoch B is DECOUPLED
+// (spikes present, trace flat). The whole-recording kernel is then the contaminated
+// AVERAGE of the two — exactly the ADR-0027 §2 setup. dt=0.1, 0..120 s (1201 frames).
+const RR_DT = 0.1, RR_NF = 1201;
+const rrTrace = [['time', 'cell']];
+const rrK = (t) => (t >= 0 ? Math.exp(-t / 1.0) - Math.exp(-t / 0.1) : 0); // peak ≈ 0.256 s
+const aSpikes = []; for (let t = 11; t < 49; t += 1.3) aSpikes.push(Number(t.toFixed(3))); // ~30 in [10,50]
+const bSpikes = []; for (let t = 71; t < 109; t += 1.3) bSpikes.push(Number(t.toFixed(3))); // ~30 in [70,110]
+const rrSamp = new Float64Array(RR_NF);
+for (const ts of aSpikes) {
+  for (let i = 0; i < RR_NF; i++) { const lag = i * RR_DT - ts; if (lag >= 0 && lag < 8) rrSamp[i] += 0.3 * rrK(lag); }
+} // epoch B contributes NO calcium (decoupled)
+for (let i = 0; i < RR_NF; i++) rrTrace.push([Number((i * RR_DT).toFixed(4)), rrSamp[i]]);
+const rrSpikesAoA = [['spikes'], ...[...aSpikes, ...bSpikes].map((t) => [t])];
+const rrMeta = [['region', 'start_s', 'end_s'], ['A', 10, 50], ['B', 70, 110]];
+const RR = loadWorkbook(makeXlsx({ trace: rrTrace, spikes: rrSpikesAoA, metadata: rrMeta }), { source: 'rr.xlsx' });
+
+const rrWA = windowRegion(RR, RR.regions[0]);
+const rrWB = windowRegion(RR, RR.regions[1]);
+const recA = recoverRegion(rrWA, { col: 0 });
+const recB = recoverRegion(rrWB, { col: 0 });
+const recWhole = recoverRegion(windowRegion(RR, { name: 'whole', startS: 0, endS: 120 }), { col: 0 });
+
+// bracketing / subset correctness (the windowRegion §4 bracket, seen through recoverRegion)
+ok('recoverRegion: epoch A selects exactly its spikes (subset)', rrWA.spikeCount === aSpikes.length, `got ${rrWA.spikeCount} vs ${aSpikes.length}`);
+ok('recoverRegion: ws = round(WIN/dt) = 50', recA.ws === 50, `ws=${recA.ws}`);
+ok('recoverRegion: n = window slice length (endIdx-startIdx+1)', recA.n === recA.window.endIdx - recA.window.startIdx + 1);
+ok('recoverRegion: buffer = round(1.0/dt) = 10 samples (ADR-0019 §4)', recA.window.bufferSamples === 10);
+
+// recovery returns valid ADR-0009 contracts for BOTH methods
+ok('recoverRegion: free-vector kernel is symmetric 2·ws+1, zeroIndex=ws', recA.fv.kernel.samples.length === 2 * recA.ws + 1 && recA.fv.kernel.zeroIndex === recA.ws);
+ok('recoverRegion: parametric kernel is symmetric 2·ws+1, zeroIndex=ws', recA.pm.kernel.samples.length === 2 * recA.ws + 1 && recA.pm.kernel.zeroIndex === recA.ws);
+ok('recoverRegion: parametric negative-lag half is identically zero (causal)', recA.pm.kernel.samples.slice(0, recA.ws).every((v) => v === 0));
+
+// the four §3 numbers are present and finite on the coupled epoch
+ok('recoverRegion §3-1 plausibility: fv peak lag + amp finite', Number.isFinite(recA.fv.peakLagS) && Number.isFinite(recA.fv.peakAmpAdj));
+ok('recoverRegion §3-2 reconstruction: fv R² + full-latent R² finite', Number.isFinite(recA.fv.r2) && Number.isFinite(recA.fv.r2Full));
+ok('recoverRegion §3-2: full-latent R² ≈ 1 (forward path inverts — machinery sane)', Math.abs(recA.fv.r2Full - 1) < 1e-3, `r2Full=${recA.fv.r2Full}`);
+ok('recoverRegion §3-3 stability: λ-sweep present (13 points)', recA.stability && recA.stability.sweep.length === 13);
+ok('recoverRegion §3-4 agreement: STA peak + Δlag fields present', 'staPeakLagS' in recA.agreement && 'dLagFvS' in recA.agreement);
+
+// the COUPLED epoch recovers the planted transient; the DECOUPLED one does not
+ok('recoverRegion: coupled epoch A parametric peak lag ≈ planted 0.256 s', Math.abs(recA.pm.peakLagS - 0.256) < 0.3, `pmPeak=${recA.pm.peakLagS}`);
+ok('recoverRegion: coupled A amplitude ≫ decoupled B (region-local distinct)', recA.fv.peakAmpAdj > 4 * Math.abs(recB.fv.peakAmpAdj), `A=${recA.fv.peakAmpAdj} B=${recB.fv.peakAmpAdj}`);
+// ADR-0027 §2: the whole-recording kernel is the CONTAMINATED AVERAGE — its amplitude
+// sits below the clean-window A kernel (B's spikes dilute the average). The GAP is signal.
+ok('recoverRegion: clean-window A amplitude > whole-recording average (ADR-0027 §2 contamination)', recA.fv.peakAmpAdj > recWhole.fv.peakAmpAdj, `A=${recA.fv.peakAmpAdj} whole=${recWhole.fv.peakAmpAdj}`);
+
+// spike sufficiency is REPORTED, never gated (ADR-0027 §4)
+ok('recoverRegion: ~30-spike epoch reported sufficient (default min 20)', recA.sufficiency.sufficient === true && recA.sufficiency.count === aSpikes.length);
+ok('recoverRegion: sufficiency flag is advisory (high minSpikes → not sufficient, still recovered)', recoverRegion(rrWA, { minSpikes: 1000 }).sufficiency.sufficient === false);
+ok('recoverRegion: a 0-spike span is reported non-analyzable, NOT thrown (ADR-0027 §4)', (() => {
+  const r = recoverRegion(windowRegion(RR, { name: 'gap', startS: 55, endS: 58 }), {});
+  return r.analyzable === false && r.sufficiency.count === 0 && r.reason.includes('0 spikes');
+})());
+ok('spikeSufficiency: below floor → not sufficient', spikeSufficiency(5, 0.1, 20).sufficient === false);
+ok('spikeSufficiency: at/above floor → sufficient', spikeSufficiency(25, 0.2, 20).sufficient === true);
 
 // --- summary ----------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

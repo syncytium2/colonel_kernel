@@ -7,8 +7,28 @@ export { convolveLinear, convolveOnGrid } from './convolve.js';
 // kernel diagnostics that judge a recovered kernel (ADR-0014).
 export { SIGMA_COHORT_TYPICAL, NOISE_LEVEL_MAX, sigmaForLevel, addAWGN, mulberry32, gaussian } from './noise.js';
 export { nextPow2, circularConvolve, deconvolveCircular, extractSymmetric, recoverKernel } from './deconvolve.js';
-export { kernelDiagnostics, compareKernels } from './kernel-diagnostics.js';
+// Constrained-parametric recovery (ADR-0021 method 2): causal double-exponential fit,
+// a PARALLEL method to the free-vector recoverKernel above (never replaces it).
+export {
+  doubleExpCausal, doubleExpCausalFull, forwardConvolveCausal,
+  reconstructParametric, recoverKernelParametric, PARAM_BOUNDS,
+} from './deconvolve-parametric.js';
+// Shape-regularized recovery (ADR-0021 method 3): free-vector taps under lag-localized
+// penalties (smoothness + baseline-flatness + acausal-energy) PLUS a joint low-order
+// drift nuisance basis — the ADR-0023 fork combined and oracle-validated. PARALLEL to
+// methods 1 & 2 (never replaces them); the three-method spread is the §3/§4 diagnostic.
+export {
+  recoverKernelShaped, makeDriftBasis, SHAPED_DIALS, DRIFT_BASIS_DEGREE,
+} from './deconvolve-shaped.js';
+export { kernelDiagnostics, compareKernels, preZeroBaselineMean } from './kernel-diagnostics.js';
+// Tab 2 readout display helpers (ADR-0024 normalization, ADR-0025 indicator facts) —
+// pure, framework-free, so the Svelte readout stays wiring and the logic is test-covered.
+export { tauRailed, peakAtBoundary, normalizeUnitPeak, rebinCounts } from './readout.js';
 // STA (ADR-0005): the model-free cross-method validation partner for the kernel.
 export { spikeTriggeredAverage } from './sta.js';
 // CSV ingestion (ADR-0016): one region's exported CSV → the signal contract.
 export { loadCsv } from './load-csv.js';
+// Windowed (sub-window) recovery (ADR-0027): region-local kernel/STA over a windowed
+// region view. SheetJS-free (takes the already-windowed view; the bracket stays in
+// load-xlsx) so it is barrel-safe (FOUNDATIONS §6 code-split preserved).
+export { recoverRegion, spikeSufficiency } from './region-recovery.js';

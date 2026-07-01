@@ -1,5 +1,6 @@
 <script>
   import Plot from './lib/Plot.svelte';
+  import Tab2 from './lib/Tab2.svelte';
   import {
     makeGrid,
     rasterize,
@@ -8,6 +9,11 @@
     convolveOnGrid,
     KERNEL_LIBRARY,
   } from './lib/core/index.js';
+
+  // --- tab selection (initial tab honors #tab2 for direct/screenshot links) ---
+  let tab = $state(
+    typeof location !== 'undefined' && location.hash.replace('#', '') === 'tab2' ? 2 : 1,
+  );
 
   // --- controls (FOUNDATIONS §11) ---
   // Surfaced by default: place spikes, shape the kernel, see the output.
@@ -75,12 +81,24 @@
   const kernelXRange = $derived([-kernelDisplay.winSeconds, kernelDisplay.winSeconds]);
 </script>
 
-<main>
-  <header>
-    <h1>colonel_kernel</h1>
-    <p class="sub">Tab 1 — forward convolution: <code>output = input ⊗ kernel</code></p>
-  </header>
+<main class:wide={tab === 2}>
+  <!-- ADR-0028: on Tab 2 the title folds into the left rail so the top row is tab nav only,
+       maximizing vertical space for the three plot bands. Tab 1 keeps its header. -->
+  {#if tab === 1}
+    <header>
+      <h1>colonel_kernel</h1>
+      <p class="sub">Tab 1 — forward convolution: <code>output = input ⊗ kernel</code></p>
+    </header>
+  {/if}
 
+  <nav class="tabs">
+    <button class:active={tab === 1} onclick={() => (tab = 1)}>1 · Convolution</button>
+    <button class:active={tab === 2} onclick={() => (tab = 2)}>2 · Kernel recovery</button>
+  </nav>
+
+  {#if tab === 2}
+    <Tab2 />
+  {:else}
   <section class="controls">
     <div class="field">
       <label for="spikes">Spike times (seconds)</label>
@@ -175,6 +193,7 @@
       />
     </div>
   </section>
+  {/if}
 </main>
 
 <style>
@@ -183,6 +202,41 @@
     margin: 0 auto;
     padding: 24px 20px 64px;
     text-align: left;
+  }
+  /* Tab 2 (ADR-0026): a full-height app shell so the rail + co-equal plot bands
+     own the viewport. Gated on tab===2 via class:wide, so Tab 1 is unaffected. */
+  main.wide {
+    max-width: 1600px;
+    height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 20px;
+  }
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 24px;
+  }
+  /* Tab 2 (ADR-0028): tighten the nav row (no header above it) to give the bands height. */
+  main.wide .tabs {
+    margin-bottom: 12px;
+  }
+  .tabs button {
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .tabs button.active {
+    border-color: var(--accent);
+    color: var(--text-h);
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg));
   }
   header {
     margin-bottom: 20px;
