@@ -5,6 +5,11 @@
   // Cloudflare only serves the files, the app still makes zero third-party requests.
   "name": "colonel-kernel",
   "compatibility_date": "2026-07-01",
+  // Explicit (were defaulting on): live workers.dev URL + preview URLs for
+  // non-production branch deploys. Set explicitly so behavior can't drift and
+  // the deploy stops warning about implicit defaults.
+  "workers_dev": true,
+  "preview_urls": true,
   "assets": {
     "directory": "./dist"
   }
