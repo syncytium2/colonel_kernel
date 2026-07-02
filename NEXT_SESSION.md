@@ -7,6 +7,29 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ✅ DONE — custom domain live; deploy docs corrected (2026-07-02)
+`kernel.tonydefazio.com` is **wired and live** and the deploy doc now matches reality.
+
+### 2026-07-02 session summary
+- **Custom domain LIVE.** Added `kernel.tonydefazio.com` as a Custom Domain on the `colonel-kernel`
+  Worker (Cloudflare dashboard). `tonydefazio.com`'s DNS is already a Cloudflare zone (nameservers
+  `arya`/`clyde.ns.cloudflare.com`), so the Worker custom-domain feature created the proxied record +
+  cert itself — **no Porkbun edit needed** (Workers custom domains require the zone on Cloudflare;
+  unlike Pages you can't CNAME `workers.dev` from an external host — that requirement was already met).
+- **Privacy ritual PASSED on the custom domain.** `kernel.tonydefazio.com` serves 200 over HTTPS with
+  `connect-src 'none'; default-src 'self'` shipped in the HTML. DevTools Network reload: all app
+  requests same-origin (document + `index-*.js` + `index-*.css` + `load-xlsx-*.js`). The lone
+  non-same-origin entry (`credentials-library.js` / "LastPass for Safari") is the **browser extension**
+  injecting a content script — not app egress. Re-run in a private window w/ extensions off for a
+  spotless log; posture already confirmed.
+- **`DEPLOY_CLOUDFLARE.md` rewritten to reality (`919b0a2`, `26a9dda`).** It described a Cloudflare
+  **Pages** connect-to-Git auto-deploy; reality is a **Workers** assets-only deploy via `wrangler.jsonc`,
+  run **manually** (`npm run build` + `npx wrangler deploy`). Fixed: real live URL, manual steps, the
+  Porkbun-CNAME step removed (wrong for a Cloudflare-managed zone), handoff-file cruft dropped.
+- **`.wrangler/` gitignored (`919b0a2`).** Wrangler local state/temp — was untracked + unignored.
+
+---
+
 ## ✅ RESOLVED — canon↔code drift closed; method 3 merged to master (2026-07-01)
 The ~36-commit drift is CLOSED. `method3-shaped` (method 3, cut from tab2-regions) was
 reconciled and **`--no-ff` merged into master** (db65a11): 0 conflicts, `test:core` 202/202,
@@ -37,11 +60,11 @@ and origin/master is deployed live.
 
 ## ▶ NEXT ACTIONS
 
-- **Deploy model — decide.** Deploys are MANUAL right now (`npm run build` + `npx wrangler deploy`).
-  Optional: connect the repo in Cloudflare (Workers & Pages → `colonel-kernel` → **Builds → Connect
-  to Git**) so every push to `master` auto-builds + deploys. Weigh against the fact that WIP lands on
-  `master` often — auto-deploy would want a `deploy` branch or a build gate first. **No custom domain
-  yet**: `kernel.tonydefazio.com` remains to be wired (`DEPLOY_CLOUDFLARE.md` §3–4).
+- **Deploy model — decide (auto-deploy only; custom domain now DONE).** Deploys are still MANUAL
+  (`npm run build` + `npx wrangler deploy`). Optional: connect the repo in Cloudflare (Workers & Pages
+  → `colonel-kernel` → **Builds → Connect to Git**) so every push to `master` auto-builds + deploys.
+  Weigh against the fact that WIP lands on `master` often — auto-deploy would want a `deploy` branch or
+  a build gate first. (`kernel.tonydefazio.com` is now live — see the 2026-07-02 block above.)
 - **xlsx / SheetJS advisory — needs a call.** `npm audit` flags a HIGH in `xlsx` (prototype pollution
   + ReDoS; **no upstream fix**). Only triggers on a maliciously-crafted spreadsheet, and researchers
   open their own files — but it deserves a deliberate decision: accept-and-document (its own ADR),
