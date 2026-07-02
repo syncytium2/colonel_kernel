@@ -656,7 +656,9 @@ case from [ADR-0026](docs/adr/0026-tab2-layout-left-rail-three-plot-bands.md)):
   plot-area geometry (equal left gutter, equal right padding), so a feature at time *t* sits at the
   same x in every band and the eye drops straight down from a spike to its response. Stacked/adjacent
   shared-time bands also carry a **shared hover crosshair**: one dashed time-line linked across bands
-  by data-x, with per-series value-dots (line = *where in time*, dot = *the value there*).
+  by data-x, with per-series value-dots (line = *where in time*, dot = *the value there*). Any **zoom
+  that reframes them must reframe all of them together** — zoom is parent-owned (one shared window fed
+  back to every band), never per-plot, or a single-band zoom shears the pair apart.
 - **A different timebase deliberately does NOT co-register.** The kernel/STA band is an operator on
   **lag**, not a signal on recording-time (§2), so it keeps its own symmetric ±win lag axis
   ([ADR-0009](docs/adr/0009-centered-symmetric-lag-explicit-zero-index.md)) and shares no cursor with

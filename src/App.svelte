@@ -49,6 +49,16 @@
 
   // --- presentation transforms (core untouched) ---
 
+  // View-only x-zoom (ADR-0030), mirroring Tab 2's coupled zoom. A drag on EITHER
+  // recording-time band emits onZoom(min,max); the parent holds ONE shared window and
+  // feeds it back to BOTH bands so they zoom together. uPlot's per-plot native zoom is
+  // disabled (Plot.svelte) — it would zoom only the dragged band and shear the pair.
+  // Double-click restores full view. Zoom never recomputes anything; it only reframes x.
+  let zoomRange = $state(null); // [min,max] recording-time s, or null = full
+  function handleZoom(min, max) {
+    zoomRange = min == null ? null : [min, max];
+  }
+
   // Equal right-edge padding on BOTH recording-time bands. uPlot only auto-reserves
   // right-edge space when an x-axis is shown (for the last tick label); the spike band
   // hides its x-axis and the output band shows it, so without this their plot areas
@@ -64,6 +74,8 @@
     const max = Math.max(gridTimes[gridTimes.length - 1] ?? 1, outTimes[outTimes.length - 1] ?? 1);
     return [min, max];
   });
+  // Effective x-window fed to both bands: the zoom window when set, else the full union.
+  const xView = $derived(zoomRange ?? leftXRange);
 
   // The kernel is an operator on LAG, not a signal on the recording timebase.
   // Display it on its own symmetric ±win axis centered on lag 0, matching how
@@ -167,11 +179,14 @@
         ys={rasterSamples}
         kind="stems"
         color="var(--text-h)"
-        xRange={leftXRange}
+        xRange={xView}
         yAxisSize={48}
         padRight={PLOT_PAD_R}
         syncKey="tab1-rec-x"
         cursorPoints={true}
+        zoomable
+        onZoom={handleZoom}
+        dblClickReset
         showXAxis={false}
         height={150}
       />
@@ -182,11 +197,14 @@
         xs={outTimes}
         ys={outValues}
         color="#2a9d8f"
-        xRange={leftXRange}
+        xRange={xView}
         yAxisSize={48}
         padRight={PLOT_PAD_R}
         syncKey="tab1-rec-x"
         cursorPoints={true}
+        zoomable
+        onZoom={handleZoom}
+        dblClickReset
         xLabel="time (s)"
         height={170}
       />

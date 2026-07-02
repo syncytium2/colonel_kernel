@@ -52,6 +52,15 @@ component; Tab 1 simply never opted in. Verified against a Tony-confirmed screen
 5. **Tab 1 adopts the mechanism now.** Its spike and output bands take equal `padRight`, a shared
    `syncKey`, and `cursorPoints`, matching Tab 2. (Implemented in `src/App.svelte`; the props already
    existed in `src/lib/Plot.svelte`.)
+6. **Zoom on co-registered bands MUST be parent-owned, never per-plot.** uPlot's built-in drag-zoom
+   and dblclick-autorange act on a **single** plot — using them on a co-registered pair zooms one
+   band and shears it off the other (the reported Tab 1 bug). So: co-registered bands are `zoomable`
+   with the parent holding one shared zoom window and feeding it back to **both** as `xRange` (a drag
+   emits `onZoom(min,max)`; the parent re-pins both); and **non-zoomable plots disable uPlot's native
+   drag/dblclick** so an interaction can't knock their parent-pinned scale loose. Tab 1 uses
+   double-click-to-restore + single-click-inert (`dblClickReset`, no regions to select); Tab 2 keeps
+   its single-click reset (ADR-0026). Verified in WebKit: a drag zooms both recording bands to the
+   same window, double-click restores both, the lag band is untouched.
 
 ## Consequences
 

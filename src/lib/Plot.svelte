@@ -71,6 +71,11 @@
     // Off by default — Tab 1 and the kernel band pass nothing.
     zoomable = false,
     onZoom = null,
+    // ADR-0030: reset gesture for a zoomable plot with NO regions (Tab 1). When true,
+    // DOUBLE-click restores full view (onZoom(null)) and a single click does nothing —
+    // matching the familiar drag-zoom / double-click-restore idiom. Default false keeps
+    // Tab 2's single-click reset (ADR-0026) untouched.
+    dblClickReset = false,
     // ADR-0027: metadata-region background shading on the recording-time bands. Array of
     // { x0, x1, color } in DATA-x (recording-time s); `color` is a low-alpha rgba in the
     // region's Okabe-Ito hue. Drawn BEHIND the data (drawClear hook). Off by default — Tab 1
@@ -230,7 +235,10 @@
         // parent (ADR-0026).
         ...(zoomable
           ? { drag: { x: true, y: false, setScale: false, dist: ZOOM_DRAG_MIN }, bind: { dblclick: () => null } }
-          : {}),
+          // Non-zoomable plots are parent-scale-controlled: kill uPlot's native drag-zoom
+          // and dblclick-autorange so an interaction can't knock the pinned range loose and
+          // desync co-registered bands (ADR-0030 — the Tab 1 uncoupling bug).
+          : { drag: { x: false, y: false }, bind: { dblclick: () => null } }),
         // link the cursor by DATA-x across same-syncKey plots (scales: ['x', null]
         // syncs only the x scale, by value); match on the x-scale key so only the
         // recording-time bands link (ADR-0026).
@@ -310,6 +318,13 @@
         if (!armed) return;
         armed = false;
         if (Math.hypot(e.clientX - dx0, e.clientY - dy0) >= ZOOM_DRAG_MIN) return; // a drag, not a click
+        // ADR-0030 (Tab 1): DOUBLE-click restores full view; a lone click does nothing (no regions
+        // to select). Coupled drag-zoom still flows through setSelect → onZoom → parent xRange.
+        if (dblClickReset) {
+          if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; onZoom(null); }
+          else { clickTimer = setTimeout(() => { clickTimer = null; }, DBLCLICK_MS); }
+          return;
+        }
         // No double-click-to-region armed (no regions): immediate single-click reset (ADR-0026).
         if (!onRegionDblClick) { onZoom(null); return; }
         // Discriminate single vs double by DBLCLICK_MS (ADR-0027): a second click inside the
