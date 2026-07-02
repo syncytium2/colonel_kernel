@@ -2,7 +2,9 @@
 
 Static Vite app, no backend. Deployed as a **Cloudflare Worker serving `dist/`
 as static assets** (no server script) via `wrangler.jsonc`. **Deploys are
-manual** — there is no Git integration wired. Porkbun stays as registrar/DNS.
+manual** — there is no Git integration wired. Porkbun is the registrar, but DNS
+for `tonydefazio.com` is managed by **Cloudflare** (nameservers already point
+there), which is what lets the Worker custom domain work directly (§3).
 
 - **Config:** `wrangler.jsonc` (Worker name `colonel-kernel`, `assets.directory = ./dist`,
   `workers_dev` + `preview_urls` explicit).
@@ -28,20 +30,18 @@ recording, confirm both tabs work and there are no console errors.
 
 ## 3. Add the custom subdomain (TODO — not yet done)
 
+`tonydefazio.com` is **already a Cloudflare-managed zone** (nameservers
+`arya`/`clyde.ns.cloudflare.com`), so the Worker's Custom Domain feature handles
+everything — **no Porkbun DNS edit needed.** (Workers custom domains *require*
+the zone to be on Cloudflare; unlike Pages you cannot CNAME `workers.dev` from an
+external DNS host. That requirement is already satisfied here.)
+
 Cloudflare dashboard → **Workers & Pages** → `colonel-kernel` → **Settings** →
 **Domains & Routes** → **Add** → **Custom domain** → enter
-`kernel.tonydefazio.com`. Cloudflare shows a CNAME target. **This step is
-required** — a hostname not registered here won't route to the Worker.
+`kernel.tonydefazio.com` → **Add**.
 
-## 4. Add the DNS record at Porkbun
-
-Porkbun → domain → **DNS** → add:
-
-```
-Type: CNAME   Host: kernel   Answer: <target Cloudflare showed in step 3>
-```
-
-SSL is issued automatically; allow a few minutes to an hour for DNS + certificate.
+Cloudflare auto-creates the proxied DNS record in the `tonydefazio.com` zone and
+provisions the TLS certificate (a few minutes). Nothing to do at Porkbun.
 
 ## 5. Verify live (privacy ritual — FOUNDATIONS §6)
 
