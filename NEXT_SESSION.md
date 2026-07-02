@@ -7,36 +7,53 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
-## ⚠ CANON↔CODE DRIFT — master is behind tab2-regions; reconciliation is its own session
-master (canon-only) is ~36 commits BEHIND origin/tab2-regions, which carries the real
-implementation: the regions feature, parametric (method 2) graduated to src/, the xlsx
-loader, and now method 3 on method3-shaped (cut from tab2-regions, pushed to origin).
-This is BACKWARDS from the workflow (code rebases onto canon; canon shouldn't trail
-code). CC flagged possible history-rewrite signs (duplicated commit messages) — so
-canon and code may genuinely DISAGREE, not just lag. Folding tab2-regions back into
-master is a DEDICATED reconciliation session: reconcile 36 commits of code against what
-FOUNDATIONS/ADRs actually say, resolve any rewrite divergence, then --no-ff. NOT a
-tail-end merge. Until then, origin is the truth; the work is safe (pushed, multiple
-places), just unblessed.
+## ✅ RESOLVED — canon↔code drift closed; method 3 merged to master (2026-07-01)
+The ~36-commit drift is CLOSED. `method3-shaped` (method 3, cut from tab2-regions) was
+reconciled and **`--no-ff` merged into master** (db65a11): 0 conflicts, `test:core` 202/202,
+clean build. The merged code carries Tab 2 (regions, xlsx loader, methods 2/3, region-recovery)
+and already reflects **ADR-0028** — regional-only kernels, zoom-driven region selection, **no
+Mode toggle / no prev-next** (verified in `src/lib/Tab2.svelte:103`). master is the truth again
+and origin/master is deployed live.
+
+### 2026-07-01 session summary
+- **Merge + deploy.** Merged `method3-shaped`; shipped to Cloudflare Workers (assets-only Worker
+  serving `dist/`) live at **https://colonel-kernel.tonydefazio.workers.dev**. Privacy ritual
+  passed — only same-origin requests, `connect-src 'none'` confirmed on the live site (incl. a
+  WebKit check).
+- **Deploy scaffolding.** `.nvmrc` (Node 22); `wrangler.jsonc` (Worker name `colonel-kernel`,
+  `workers_dev`/`preview_urls` explicit); `wrangler` devDependency; MIT `LICENSE`; tightened
+  `.gitignore` (all of `data/` except README — closed a raw-data leak gap where a CSV/JSON in
+  `data/` was committable).
+- **Tab 1 plotting.** (a) Co-registered the spike↔output bands (equal `padRight` + `syncKey` +
+  `cursorPoints`) so a spike drops straight onto its response, with a shared hover crosshair;
+  (b) fixed zoom uncoupling — zoom is now **parent-owned** (drag zooms both bands together,
+  double-click restores, single-click inert), and uPlot's native per-plot zoom is disabled on
+  non-zoomable plots so the lag band can't be knocked loose either. Verified in WebKit.
+- **Canon.** **ADR-0030** + **FOUNDATIONS §11.5** — axis co-registration as a durable cross-tab
+  invariant (x aligned pixel-for-pixel; a different timebase deliberately is not; y identical when
+  reasonable, human-decided; zoom parent-owned, never per-plot).
 
 ---
 
-## ▶ NEXT CODE ACTION — ADR-0028 Mode-removal + layout pass (on `tab2-regions`)
+## ▶ NEXT ACTIONS
 
-**ADR-0028 landed (canon, master): regional-only kernels; Mode toggle removed; zoom-driven region
-selection** (supersedes ADR-0027 §3; §1/§2 intact). FOUNDATIONS §3 (whole-signal kernel across
-regions is not informative) + §11.4 (zoom-driven, no Mode toggle) reconciled in the same pass.
-
-The **stage-2 region UI is built on `tab2-regions`** (7 commits: spine + view-mode/coloring/
-double-click/kernel-band), but it predates ADR-0028 — it still has the **Whole/Region Mode toggle,
-prev/next nav, and a whole-recording kernel**. The next CODE action (on `tab2-regions`):
-- **remove the Mode toggle + prev/next nav**; region selection is double-click-to-region zoom only;
-- **never render the whole-signal kernel when >1 region** (single-region = boundary, shown normally);
-- default view = full recording, all regions shaded+labeled, kernel band = all regions none
-  highlighted; double-click zooms + makes a region current; keep the **Current/All band toggle**;
-- layout follow-ons (in-band region labels; collapsible Settings/§3 folds; tab title into the rail).
-
-`test:core` stays green; figure-gate the file-98 3-region case after.
+- **Deploy model — decide.** Deploys are MANUAL right now (`npm run build` + `npx wrangler deploy`).
+  Optional: connect the repo in Cloudflare (Workers & Pages → `colonel-kernel` → **Builds → Connect
+  to Git**) so every push to `master` auto-builds + deploys. Weigh against the fact that WIP lands on
+  `master` often — auto-deploy would want a `deploy` branch or a build gate first. **No custom domain
+  yet**: `kernel.tonydefazio.com` remains to be wired (`DEPLOY_CLOUDFLARE.md` §3–4).
+- **xlsx / SheetJS advisory — needs a call.** `npm audit` flags a HIGH in `xlsx` (prototype pollution
+  + ReDoS; **no upstream fix**). Only triggers on a maliciously-crafted spreadsheet, and researchers
+  open their own files — but it deserves a deliberate decision: accept-and-document (its own ADR),
+  sandbox/replace the parse, or pin/patch. Not yet recorded anywhere.
+- **Before making the repo public:** `LICENSE` is in (MIT); do a final `git ls-files data/ darkroom/`
+  (must be empty) per the repo-hygiene rule.
+- **QA — figure-gate the file-98 3-region case.** ADR-0028 mode-removal is merged, but the
+  3-region rendering still needs Tony's eyeball (figure gate, ADR-0018) — confirm regions shade/
+  label correctly, kernel band shows regional-only, double-click zoom + current-region behave.
+  **Not tonight; needs a look.**
+- **Repo tidy (optional).** `darkroom/` accumulated scratch probe scripts + figures from the Tab 1
+  debugging — all gitignored, nothing tracked. Clear anytime.
 
 ---
 
