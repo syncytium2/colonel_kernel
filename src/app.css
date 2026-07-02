@@ -5,6 +5,11 @@
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
   --accent: #aa3bff;
+  /* Faint noisy-realization overlay on Tab 1's output band (ADR-0031). A muted
+     slate-teal = 40% clean teal (#2a9d8f) + 60% --text, precomputed to a concrete
+     rgb so it is canvas-safe (uPlot draws it via ctx.strokeStyle; color-mix() in a
+     CSS custom property is not guaranteed to resolve to rgb through getComputedStyle). */
+  --noise-trace: rgb(81, 122, 127);
   --accent-bg: rgba(170, 59, 255, 0.1);
   --accent-border: rgba(170, 59, 255, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
@@ -38,6 +43,8 @@
     --border: #2e303a;
     --code-bg: #1f2028;
     --accent: #c084fc;
+    /* Lighter slate-teal for dark bg legibility: 40% #2a9d8f + 60% --text (#9ca3af). */
+    --noise-trace: rgb(110, 161, 162);
     --accent-bg: rgba(192, 132, 252, 0.15);
     --accent-border: rgba(192, 132, 252, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);

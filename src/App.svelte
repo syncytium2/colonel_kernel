@@ -8,6 +8,10 @@
     defaultParams,
     convolveOnGrid,
     KERNEL_LIBRARY,
+    NOISE_LEVEL_MAX,
+    sigmaForLevel,
+    addAWGN,
+    mulberry32,
   } from './lib/core/index.js';
 
   // --- tab selection (initial tab honors #tab2 for direct/screenshot links) ---
@@ -23,6 +27,12 @@
   let duration = $state(2);
   let kernelId = $state('calcium');
   let params = $state(defaultParams('calcium'));
+
+  // Measurement-noise tool (ADR-0031): AWGN injected on the convolution OUTPUT
+  // (measurement noise on the synthesized dF/F₀ trace), calibrated in cohort-typical
+  // σ units per ADR-0015. Default 0/off so a learner sees the clean case first (§11.2).
+  let noiseLevel = $state(0); // 0 … NOISE_LEVEL_MAX, cohort-typical σ multiples
+  let noiseSeed = $state(1); // reseed → new realization; stable across unrelated re-renders
 
   function selectKernel(id) {
     kernelId = id;
@@ -46,6 +56,29 @@
   const rasterSamples = $derived(Array.from(raster.samples));
   const outTimes = $derived(Array.from(output.times));
   const outValues = $derived(Array.from(output.samples));
+
+  // --- measurement noise (ADR-0031) ---
+  const sigma = $derived(sigmaForLevel(noiseLevel));
+
+  // Noisy realization of the OUTPUT. Null when off, so the overlay disappears at
+  // level 0 and the output band is byte-for-byte what it is today. Seeded, so moving
+  // an unrelated control never reshuffles the noise — only a reseed or level change
+  // draws a new realization. Recomputes on output.samples / noiseLevel / noiseSeed.
+  const noisyOut = $derived.by(() =>
+    sigma > 0 ? Array.from(addAWGN(output.samples, sigma, mulberry32(noiseSeed))) : null,
+  );
+
+  // SNR = peak of the CLEAN output / σ. Loop over samples (don't spread a big array
+  // into Math.max). Honest & teachable: a taller kernel raises the peak → raises SNR.
+  const signalPeak = $derived.by(() => {
+    let m = 0;
+    for (const v of output.samples) {
+      const a = Math.abs(v);
+      if (a > m) m = a;
+    }
+    return m;
+  });
+  const snr = $derived(sigma > 0 && signalPeak > 0 ? signalPeak / sigma : Infinity);
 
   // --- presentation transforms (core untouched) ---
 
@@ -152,6 +185,41 @@
       </div>
     </div>
 
+    <div class="field">
+      <label for="noise">Measurement noise</label>
+      <div class="params">
+        <label class="slider">
+          <span>Level</span>
+          <input
+            id="noise"
+            type="range"
+            min="0"
+            max={NOISE_LEVEL_MAX}
+            step="0.1"
+            bind:value={noiseLevel}
+          />
+          <output>{noiseLevel.toFixed(1)}×</output>
+        </label>
+      </div>
+      <div class="noise-readout">
+        <span class="mono">σ = {sigma.toFixed(4)} dF/F₀</span>
+        <span class="mono">SNR ≈ {noiseLevel === 0 ? 'clean' : Number.isFinite(snr) ? Math.round(snr) : '—'}</span>
+        <button
+          type="button"
+          class="reseed"
+          onclick={() => (noiseSeed = (noiseSeed + 1) | 0)}
+          disabled={noiseLevel === 0}
+        >
+          Reseed
+        </button>
+      </div>
+      <p class="hint">
+        1× = cohort-typical baseline σ ≈ 0.0024 dF/F₀, measured across 39 recordings
+        (ADR-0015). Faint trace = one noise realization added to the output; teal = clean
+        input ⊗ kernel.
+      </p>
+    </div>
+
     <details class="advanced">
       <summary>Advanced — timebase (global)</summary>
       <div class="adv-grid">
@@ -192,22 +260,35 @@
       />
     </div>
     <div class="panel output">
-      <div class="panel-label">Output — input ⊗ kernel</div>
-      <Plot
-        xs={outTimes}
-        ys={outValues}
-        color="#2a9d8f"
-        xRange={xView}
-        yAxisSize={48}
-        padRight={PLOT_PAD_R}
-        syncKey="tab1-rec-x"
-        cursorPoints={true}
-        zoomable
-        onZoom={handleZoom}
-        dblClickReset
-        xLabel="time (s)"
-        height={170}
-      />
+      <div class="panel-label">
+        Output — input ⊗ kernel
+        {#if noiseLevel > 0}<span class="caption">· teal = clean, faint = noisy ({noiseLevel.toFixed(1)}× σ)</span>{/if}
+      </div>
+      <!-- uPlot fixes its series count at init (Plot.svelte), so the noisy overlay must
+           be present at mount to render. Remount via {#key} when the overlay toggles on/off
+           (crossing level 0). Reseeds / level changes within level>0 keep noisyOut non-null,
+           so the key is stable and updates flow through setData without churn. The clean line,
+           xRange, padRight, syncKey and coupled zoom are all prop-driven → co-registration
+           with the spike band survives the remount (ADR-0030). -->
+      {#key noisyOut != null}
+        <Plot
+          xs={outTimes}
+          ys={outValues}
+          ys2={noisyOut}
+          color="#2a9d8f"
+          color2="var(--noise-trace)"
+          xRange={xView}
+          yAxisSize={48}
+          padRight={PLOT_PAD_R}
+          syncKey="tab1-rec-x"
+          cursorPoints={true}
+          zoomable
+          onZoom={handleZoom}
+          dblClickReset
+          xLabel="time (s)"
+          height={170}
+        />
+      {/key}
     </div>
 
     <!-- Upper-right: the kernel as an operator on lag — its own square ±win axis. -->
@@ -330,6 +411,35 @@
     font-family: var(--mono);
     font-size: 13px;
     text-align: right;
+  }
+  .noise-readout {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 2px;
+  }
+  .noise-readout .mono {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-h);
+  }
+  .reseed {
+    font: inherit;
+    font-size: 13px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text-h);
+    cursor: pointer;
+  }
+  .reseed:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .caption {
+    font-weight: 400;
+    color: var(--text);
   }
   .advanced summary {
     cursor: pointer;
