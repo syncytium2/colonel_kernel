@@ -486,7 +486,9 @@ Deconvolution methods to expose (pedagogically + practically):
 - **Iterative (Richardson–Lucy / Landweber)** — show convergence.
 
 Cross-cutting: optional **noise injection** (so deconvolution isn't deceptively easy; AWGN on a
-user slider 0–10× cohort-typical σ, calibrated in [ADR-0015](docs/adr/0015-harness-noise-model.md)),
+user slider 0–10× cohort-typical σ, calibrated in [ADR-0015](docs/adr/0015-harness-noise-model.md);
+first realized in Tab 1 as measurement noise on the convolution output —
+[ADR-0031](docs/adr/0031-tab1-forward-noise-injection.md)),
 explicit **edge handling** (linear vs circular convolution — pick a default, make it visible), and
 **ground-truth overlay** (recovered vs true, with an error metric).
 
@@ -611,7 +613,9 @@ here?" or "does it affect the other tab?":
   **"show anyways" toggle** that reverses the default-hide of railed-parametric output
   ([ADR-0025](docs/adr/0025-tab2-indicator-column-railed-fit-display.md)).
 - **Global-but-default-off** — noise injection (AWGN, slider 0–10× cohort-typical σ, default 0/off;
-  [ADR-0015](docs/adr/0015-harness-noise-model.md)).
+  [ADR-0015](docs/adr/0015-harness-noise-model.md)). Its first user-facing realization is the Tab 1
+  measurement-noise tool — AWGN on the convolution output, clean + noisy overlaid, with a peak/σ SNR
+  readout and a seeded reseed ([ADR-0031](docs/adr/0031-tab1-forward-noise-injection.md)).
 
 ### 11.3 Cross-tab flow
 

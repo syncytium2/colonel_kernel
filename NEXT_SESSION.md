@@ -7,6 +7,44 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ✅ DONE — Tab 1 measurement-noise tool (ADR-0031, 2026-07-02)
+Built the Tab 1 measurement-noise tool on branch **`tab1-noise`**. AWGN is injected on the
+forward-convolution **output** (measurement noise on the synthesized dF/F₀ trace, σ in dF/F₀ per
+ADR-0015), and the clean teal output + a faint noisy realization are **overlaid** in the existing
+output band. Consumes the already-calibrated `noise.js` model unchanged — `noise.js` NOT touched.
+
+### What landed
+- **`src/App.svelte`** — `noiseLevel`/`noiseSeed` state; `sigma`/`noisyOut`/`signalPeak`/`snr`
+  derived; a surfaced **"Measurement noise"** control (0–10× σ slider default 0/off, live
+  `σ = _ dF/F₀`, `SNR ≈ _` = peak-of-clean/σ, seeded **Reseed** disabled at level 0); output band
+  gains `ys2={noisyOut}` + `color2="var(--noise-trace)"` and a `{#key noisyOut != null}` remount
+  (uPlot fixes series count at init, so the overlay must be present at mount — remounts only when
+  crossing level 0; reseeds/in-range changes flow through `setData`). Caption on the output label
+  when noise on.
+- **`src/app.css`** — `--noise-trace` (muted slate-teal, precomputed 40% teal / 60% `--text` per
+  theme, concrete rgb so it's canvas-safe; light `rgb(81,122,127)` / dark `rgb(110,161,162)`).
+- **Canon** — **ADR-0031** (Accepted); ADR index row; FOUNDATIONS §7 + §11.2 one-line cross-refs.
+
+### Verified (Playwright, figures in gitignored `darkroom/`)
+- Level 0 = byte-for-byte today (no overlay, reseed disabled, SNR "clean"); Level 1 → σ 0.0024,
+  overlay appears, SNR ≈ 803; reseed draws a different realization, same (level,seed) reproduces
+  (deterministic); coupled drag-zoom from **either** band + double-click reset stay co-registered
+  with the overlay on (ADR-0030); no console/page errors. `npm run build` clean, `test:core` 202/202.
+- **Detour worth noting:** an early "output-band drag doesn't zoom" scare was a **test-harness
+  artifact** — the new control field pushed the output band below the 900px Playwright viewport, so
+  the synthetic drag landed off-screen. Confirmed identical on master; with a taller viewport the
+  output-band drag fires `ZOOM` normally. Mobile horizontal plot-overflow at ≤720px is likewise
+  **pre-existing on master** (uPlot plot sizing), not introduced here; the single-column layout
+  itself collapses correctly.
+
+### ▶ NEXT — figure-gate by Tony (ADR-0018)
+The eyeball read is owed: confirm the faint overlay is legible in both themes and that the SNR
+framing reads right (at 1× on the unit-amplitude teaching kernel the noise is honestly tiny — peak
+≈ 2, so SNR ≈ 800; it becomes visible as the slider climbs). Screenshots in `darkroom/`
+(`tab1_noise_level1.png`, `tab1_noise_level10_output.png`). Then merge `tab1-noise` → master.
+
+---
+
 ## ✅ DONE — custom domain live; deploy docs corrected (2026-07-02)
 `kernel.tonydefazio.com` is **wired and live** and the deploy doc now matches reality.
 
