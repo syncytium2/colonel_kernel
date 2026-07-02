@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Wrangler local state/temp (Cloudflare Workers deploy) — never committed.
+.wrangler/
+
 # Reference data — researchers' data must never be committed (FOUNDATIONS §6).
 # Ignore ALL of data/ (not just *.mat): CSV/JSON derived from recordings are
 # raw-adjacent and must not leak either. Only a README may be tracked, so the
