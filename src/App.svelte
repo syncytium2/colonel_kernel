@@ -61,6 +61,11 @@
   // measurement noise (σ ≈ 0.0024 dF/F₀, ADR-0015) actually bites. Universal to
   // all shapes, so it lives here — not per-kernel — and survives a shape switch.
   let kernelAmp = $state(0.1);
+  // Kernel display half-window (s), user-settable. Was derived from the kernel's own support
+  // (~2 s for the calcium default → looked "cropped at 2 s"); now an explicit ±window, default
+  // ±5 s, zero-padded past the kernel's support. Also sets the extent of the source-kernel
+  // overlay carried into Tab 2 (ADR-0034).
+  let kernelWinS = $state(5);
 
   // Measurement-noise tool (ADR-0031): AWGN injected on the convolution OUTPUT
   // (measurement noise on the synthesized dF/F₀ trace), calibrated in cohort-typical
@@ -133,10 +138,19 @@
     return rows.join('\n');
   }
   // Entering Tab 2 loads the CURRENT Tab 1 signal by default (FOUNDATIONS §11.3): rebuild the
-  // synthetic recording and switch. A file dropped in Tab 2 overrides it until Tab 2 is re-entered.
-  // Loaded through loadCsv, one-shot via handoff/onConsumed.
+  // synthetic recording and switch. Each entry carries a fresh monotonic id so Tab 2 reliably
+  // reloads it exactly once; a file dropped in Tab 2 overrides it until Tab 2 is re-entered.
+  // The known (ground-truth) kernel rides along on its lag axis for the source-vs-recovered
+  // overlay (ADR-0034).
+  let handoffSeq = 0;
   function goToTab2() {
-    handoff = { csv: buildHandoffCsv(), label: 'Tab 1 (synthetic)', noisy: noiseLevel > 0 };
+    handoff = {
+      id: ++handoffSeq,
+      csv: buildHandoffCsv(),
+      label: 'Tab 1 (synthetic)',
+      noisy: noiseLevel > 0,
+      sourceKernel: { lag: kernelDisplay.t, samples: kernelDisplay.v },
+    };
     tab = 2;
   }
 
@@ -178,7 +192,7 @@
   const kernelDisplay = $derived.by(() => {
     const L = kernel.samples.length;
     const origin = kernel.zeroIndex;
-    const win = Math.max(origin, L - 1 - origin); // half-window in samples
+    const win = Math.max(1, Math.round(kernelWinS / grid.dt)); // half-window in samples (user-set ±window)
     const len = 2 * win + 1;
     const t = new Array(len);
     const v = new Array(len);
@@ -204,7 +218,7 @@
   </nav>
 
   {#if tab === 2}
-    <Tab2 {wide} {handoff} onConsumed={() => (handoff = null)} />
+    <Tab2 {wide} {handoff} />
   {:else}
     <Shell {wide}>
       <!-- LEFT RAIL — tools (was the top controls card; folded into the 20% rail). -->
@@ -245,6 +259,11 @@
               <span>peak (dF/F₀)</span>
               <input type="range" min="0.01" max="1" step="0.01" bind:value={kernelAmp} />
               <output>{kernelAmp.toFixed(2)}</output>
+            </label>
+            <label class="slider">
+              <span>window ±(s)</span>
+              <input type="range" min="1" max="10" step="0.5" bind:value={kernelWinS} />
+              <output>{kernelWinS.toFixed(1)}</output>
             </label>
           </div>
         </div>

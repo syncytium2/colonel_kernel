@@ -45,14 +45,18 @@
   // the shared nav-row toggle so both tabs obey one control.
   //
   // `handoff` = a synthetic recording pushed from Tab 1 (FOUNDATIONS §11.3 cross-tab
-  // flow): { csv, label }. When present we load it through the SAME loadCsv path a
-  // file uses, then call onConsumed so the parent clears it (one-shot — a plain tab
-  // switch must not re-clobber a recording the user loaded from a file).
-  let { wide = false, handoff = null, onConsumed } = $props();
+  // flow): { id, csv, label, sourceKernel }. Each distinct `id` is loaded through the
+  // SAME loadCsv path a file uses, exactly once (see the guarded $effect below). A file
+  // the user drops does NOT change the id, so it is never re-clobbered; a fresh Tab 2
+  // entry carries a new id and reloads the current Tab 1 signal.
+  let { wide = false, handoff = null } = $props();
 
   // Pipeline constants — match the validated lab driver / machinery check.
-  const WIN = 5; // kernel half-window (s); windowSamples = round(WIN/dt) (ADR-0004)
-  const STAWIN = 2; // STA half-window (s)
+  // User-settable kernel + STA windows (2026-07-03). Were consts WIN=5 / staWinS=2; now state so
+  // the recovered-kernel and STA extents can be dialed. Kernel default ±5 s, STA default ±1 s.
+  let winS = $state(5); // kernel half-window (s); windowSamples = round(winS/dt) (ADR-0004)
+  let staWinS = $state(1); // STA half-window (s)
+  let rasterMode = $state('binned'); // spike raster display: 'binned' counts | 'raw' spike times
   const STABASE = 0.5; // STA per-event pre-spike baseline window (s)
   const NOISE_SEED = 20240; // reproducible noise realization for the selected ROI
 
@@ -129,6 +133,7 @@
         const rec = mod.loadWorkbook(await file.arrayBuffer(), { source: file.name });
         xlsxApi = mod;
         recording = rec;
+        clearSourceKernel();
         resetSlice();
         // ADR-0022: a fully silent recording (no APs) is surfaced by the displayAnalyzable
         // guard below as the single-file no-AP message — not fit, not an error.
@@ -138,6 +143,7 @@
       const text = await file.text();
       xlsxApi = null;
       recording = loadCsv(text, { source: file.name });
+      clearSourceKernel();
       resetSlice();
       error = null;
     } catch (e) {
@@ -155,23 +161,33 @@
     currentRegionIdx = null;
   }
 
-  // Tab 1 → Tab 2 handoff (FOUNDATIONS §11.3). Load the pushed synthetic recording through the
-  // same CSV path a file uses, then signal the parent to clear it (one-shot). Cleared → this
-  // effect re-runs, hits the null guard, and does nothing; a later plain tab switch won't reload.
+  // Tab 1 → Tab 2 handoff (FOUNDATIONS §11.3). Load each distinct handoff (by monotonic id)
+  // exactly once, through the same CSV path a file uses. Guarding on the id — not clearing the
+  // prop — means a recording the user then drops (which does NOT bump the id) is never reloaded
+  // over, and a fresh Tab 2 entry (new id) reliably reloads the current Tab 1 signal.
+  let lastHandoffId = -1;
+  // The ground-truth kernel that generated the handoff (Tab 1's kernel on the lag axis), for the
+  // source-vs-recovered overlay. null for a real file load (no ground truth). ADR-0034.
+  let sourceKernel = $state(null);
   $effect(() => {
-    if (!handoff) return;
+    if (!handoff || handoff.id === lastHandoffId) return;
+    lastHandoffId = handoff.id;
     try {
       xlsxApi = null;
       recording = loadCsv(handoff.csv, { source: handoff.label });
       fileName = handoff.label;
+      sourceKernel = handoff.sourceKernel ?? null;
       resetSlice();
       error = null;
     } catch (e) {
       error = String(e && e.message ? e.message : e);
       recording = null;
     }
-    onConsumed?.();
   });
+  // A dropped file has no ground truth — clear any stale source overlay from a prior handoff.
+  function clearSourceKernel() {
+    sourceKernel = null;
+  }
 
   // View-only x-zoom (ADR-0026). The parent owns the displayed range and feeds it to BOTH
   // recording-time bands (xView). A DRAG (min/max) is a manual zoom and leaves the current
@@ -263,7 +279,7 @@
   const gridTimes = $derived(displayAnalyzable ? Array.from(displayRegion.grid.times) : []);
   const xRange = $derived(displayAnalyzable ? [displayRegion.meta.t0, displayRegion.meta.tEnd] : null);
   const xView = $derived(zoomRange ?? xRange);
-  const kernelXRange = [-WIN, WIN]; // the overlay axis; STA (±STAWIN) sits inside it.
+  const kernelXRange = [-winS, winS]; // the overlay axis; STA (±staWinS) sits inside it.
 
   // Metadata regions as low-alpha Okabe-Ito background shading on the recording-time bands —
   // always shown (zoom-driven model: regions are visible at every zoom; ADR-0028).
@@ -332,6 +348,14 @@
   // Pin the count axis at [0, maxCount] (small headroom) so zero regions read clearly.
   const histYRange = $derived(histo ? [0, histo.maxCount + 0.3] : null);
 
+  // Raw spike times as unit-height stems (the 'raw' raster mode) — the actual event times,
+  // not binned counts. Co-registered with band A like the binned view.
+  const rawStems = $derived.by(() => {
+    if (!displayRegion || !displayRegion.spikeTimes) return null;
+    const xs = Array.from(displayRegion.spikeTimes);
+    return { xs, ys: xs.map(() => 1), n: xs.length };
+  });
+
   // One noise realization for the selected ROI (region + column + noise level).
   const noisyTrace = $derived.by(() => {
     if (!analyzable || !density || !selected) return null;
@@ -373,13 +397,25 @@
     return out;
   }
 
+  /** Source (ground-truth) kernel resampled onto the kernel lag grid (ADR-0034). Both share the
+   *  handoff dt, so map by lag rounded to a sample; 0 outside the source support (causal padding). */
+  function sourceOntoKernel(src, lagAxis, dt) {
+    if (!src || !lagAxis) return null;
+    const map = new Map();
+    for (let k = 0; k < src.lag.length; k++) map.set(Math.round(src.lag[k] / dt), src.samples[k]);
+    return lagAxis.map((L) => {
+      const v = map.get(Math.round(L / dt));
+      return v == null ? 0 : v;
+    });
+  }
+
   // --- the live readout for the selected ROI: BOTH methods + STA + ADR-0025 facts ---
   const analysis = $derived.by(() => {
     if (!analyzable || !density || !noisyTrace) return null;
     const dt = recoveryRegion.grid.dt;
     const { n, N, sdPad } = density;
-    const ws = Math.round(WIN / dt);
-    const staWs = Math.round(STAWIN / dt);
+    const ws = Math.round(winS / dt);
+    const staWs = Math.round(staWinS / dt);
     const { recReal, staTrace } = noisyTrace;
 
     // ---- METHOD 1: free-vector (ADR-0004) ----
@@ -416,7 +452,7 @@
 
     // ---- STA (method-independent) ----
     const sta = spikeTriggeredAverage(recoveryRegion.spikeTimes, staTrace, recoveryRegion.grid.times, {
-      window: STAWIN,
+      window: staWinS,
       baseline: STABASE,
     });
     let staPeakLagS = NaN, staPeakAmp = NaN;
@@ -477,7 +513,7 @@
     if (method !== 'shaped' || !analyzable || !density || !noisyTrace) return null;
     const dt = recoveryRegion.grid.dt;
     const { n, N, sdPad } = density;
-    const ws = Math.round(WIN / dt);
+    const ws = Math.round(winS / dt);
     const { recReal } = noisyTrace;
     const m3 = recoverKernelShaped(recReal, sdPad, { windowSamples: ws, dt, fitLength: n });
     const m3Diag = kernelDiagnostics(m3);
@@ -517,7 +553,7 @@
     if (!analyzable || !density || !noisyTrace) return null;
     const dt = recoveryRegion.grid.dt;
     const { N, sdPad } = density;
-    const ws = Math.round(WIN / dt);
+    const ws = Math.round(winS / dt);
     const { recReal } = noisyTrace;
     const sweep = [];
     for (let s = 0; s < NSWEEP; s++) {
@@ -583,7 +619,7 @@
   const kernelLag = $derived.by(() => {
     if (!recording) return null;
     const dt = recording.meta.dt;
-    const ws = Math.round(WIN / dt);
+    const ws = Math.round(winS / dt);
     const lag = new Array(2 * ws + 1);
     for (let j = -ws; j <= ws; j++) lag[ws + j] = j * dt;
     return lag;
@@ -608,7 +644,7 @@
           : method === 'shaped'
             ? shapedKernelForView(v)
             : rr.pm.kernel.samples;
-      const staWs = Math.round(STAWIN / rr.dt);
+      const staWs = Math.round(staWinS / rr.dt);
       return { kernelV: Array.from(kSamples), staV: staOntoKernel(rr.sta, kSamples.length, rr.ws, staWs) };
     });
   });
@@ -621,7 +657,7 @@
     const n = grid.n;
     const N = nextPow2(n);
     const dt = grid.dt;
-    const ws = Math.round(WIN / dt);
+    const ws = Math.round(winS / dt);
     const sd = rasterize(v.spikeTimes, grid, { amplitudeMode: 'binned-count', preFirstBin: 'keep' });
     const sdPad = new Float64Array(N);
     sdPad.set(sd.samples);
@@ -665,6 +701,13 @@
       const sColor = hue ?? '#e76f51';
       if (kv) series.push({ ys: nv(kv), stroke: kColor, width: 2.4, dash: null, type: 'kernel' });
       series.push({ ys: nv(sv), stroke: sColor, width: hue ? 1.8 : 2, dash: hue ? [6, 4] : null, type: 'sta' });
+    }
+    // Source (ground-truth) kernel from the Tab 1 handoff (ADR-0034): a dashed reference so the
+    // eye can read recovered vs. the kernel that GENERATED the data. Only present for a handoff
+    // (null for a real file). Pooled as a 'kernel' curve so scale-to-kernels includes it.
+    if (sourceKernel) {
+      const srcYs = sourceOntoKernel(sourceKernel, kernelLag, recording.meta.dt);
+      if (srcYs) series.push({ ys: nv(srcYs), stroke: 'var(--text)', width: 1.8, dash: [2, 3], type: 'kernel', source: true });
     }
     // ADR-0029 scale targets — ONE shared axis; the mode only chooses whose range sets it.
     // kernels/sta pool by curve TYPE across regions; shared/normalized pool all curves. A
@@ -838,6 +881,23 @@
                 <option value="sta">Scale to STA</option>
               </select>
             </label>
+            <label class="ctl">
+              <span>Kernel window ±(s)</span>
+              <input type="range" min="1" max="10" step="0.5" bind:value={winS} />
+              <output>{winS.toFixed(1)}</output>
+            </label>
+            <label class="ctl">
+              <span>STA window ±(s)</span>
+              <input type="range" min="0.25" max="3" step="0.25" bind:value={staWinS} />
+              <output>{staWinS.toFixed(2)}</output>
+            </label>
+            <div class="field">
+              <span>Spike raster</span>
+              <div class="seg" role="group" aria-label="Spike raster display">
+                <button class:on={rasterMode === 'binned'} onclick={() => (rasterMode = 'binned')}>Binned</button>
+                <button class:on={rasterMode === 'raw'} onclick={() => (rasterMode = 'raw')}>Raw spikes</button>
+              </div>
+            </div>
             {#if hasRegions}
               <div class="field">
                 <span>Kernel band</span>
@@ -1020,11 +1080,39 @@
       <div class="band">
         <div class="band-head">
           <span class="plot-label">
-            spike raster — binned count per {(histo ? histo.windowS : histWinS).toFixed(2)} s bin · pinned [0, {histo ? histo.maxCount : 1}] (decoupling visibility){#if histo} · {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {displayRegion.grid.dt.toFixed(2)} s for the §13 recovery input{/if}{/if}
+            {#if rasterMode === 'raw'}
+              spike raster — raw spike times{#if rawStems} ({rawStems.n} spikes){/if} · the §13 recovery input, un-binned
+            {:else}
+              spike raster — binned count per {(histo ? histo.windowS : histWinS).toFixed(2)} s bin · pinned [0, {histo ? histo.maxCount : 1}] (decoupling visibility){#if histo} · {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {displayRegion.grid.dt.toFixed(2)} s for the §13 recovery input{/if}{/if}
+            {/if}
           </span>
         </div>
         <div class="band-body">
-          {#if histo}
+          {#if rasterMode === 'raw'}
+            {#if rawStems}
+              <Plot
+                fill
+                xs={rawStems.xs}
+                ys={rawStems.ys}
+                kind="stems"
+                barSize={[0.9, 2]}
+                color="var(--text-h)"
+                xRange={xView}
+                yRange={[0, 1.25]}
+                yAxisSize={44}
+                padRight={PLOT_PAD_R}
+                syncKey="tab2-rec-x"
+                cursorPoints={true}
+                zoomable
+                onZoom={handleZoom}
+                onRegionDblClick={hasRegions ? handleRegionDblClick : null}
+                regions={bandRegions}
+                yLabel=" "
+                xLabel="recording time (s)"
+                height={104}
+              />
+            {/if}
+          {:else if histo}
             <Plot
               fill
               xs={histo.centers}
@@ -1098,6 +1186,7 @@
             {@const hue = hasRegions && effectiveCurrentIdx != null ? regionColor(effectiveCurrentIdx) : null}
             {#if !railedHidden}<span class="key"><i style="background:{hue ?? '#7b2ff7'}"></i>recovered kernel</span>{/if}
             <span class="key"><i style="background:{hue ?? '#e76f51'}"></i>STA{#if hue} (dashed){/if}</span>
+            {#if sourceKernel}<span class="key"><i style="background:var(--text)"></i>source kernel (Tab 1, dashed)</span>{/if}
             {#if showRailed && method === 'parametric' && analysis.pm.railed.railed}
               <button class="linkbtn" onclick={() => (showRailed = false)}>Hide railed output</button>
             {/if}
