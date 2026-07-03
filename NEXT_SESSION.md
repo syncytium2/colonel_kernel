@@ -7,6 +7,29 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ✅ DONE — shared 20/80 plot shell (both tabs) + Tab 1→Tab 2 handoff (ADR-0033/0034, 2026-07-03)
+Unified both tabs onto one layout and closed the ground-truth loop. On branch **`tab-shared-layout`**
+(not yet merged to master).
+
+- **Shared shell (`Shell.svelte`, ADR-0033):** 20% tools rail + 80% plots; top row = summary panel
+  beside a **square top-right kernel** (`aspect-ratio:1`); full-width co-registered time-course bands
+  below. Content per-tab via rail/summary/kernelPanel/bands snippets. Readouts (not a time band) sit
+  beside the kernel — a narrower band there would break §11.5 co-registration. Tab 1 gained the rail
+  + went full-height; Tab 2 re-slotted (§3 checks rail→summary, kernel+STA Band C→square, recon+raster
+  stay full-width). Shared nav-row width toggle (capped 1600px ↔ full-bleed). **Supersedes band
+  arrangement of ADR-0026 + §3 placement of ADR-0028** (region model intact).
+- **Tab 1 defaults:** 300 s / 10 Hz / seeded random 0.1 Hz Poisson spikes (+ "↻ random 0.1 Hz").
+- **Tab 1→Tab 2 handoff (ADR-0034, realizes §11.3):** "Recover this in Tab 2 →" builds a CSV in memory
+  (output.times + known spikes + measurement fluorescence) and loads it through Tab 2's existing
+  `loadCsv` — one-shot (`handoff`/`onConsumed`). Verified headless: 0.0 fluorescence error, exact
+  spikes, no warnings. Build clean, no unused selectors, `test:core` 202/202.
+- **Design tool kept:** `docs/design/shared-layout-prototype.html` (+ artifact) for revisiting.
+
+**Next:** merge `tab-shared-layout` → master when eyeballed; Tab 2 not yet visually confirmed with a
+real recording (the handoff makes it testable from Tab 1). Open: Tab 3, chosen-kernel sharing (§11.4).
+
+---
+
 ## ✅ DONE — Tab 1 kernel amplitude control (ADR-0032, 2026-07-03)
 Added the **peak-height (dF/F₀) axis** the noise tool needed to matter. `buildKernel` gained a 4th
 arg `amplitude` (default 1 → existing callers + peak-1 core tests byte-identical); it scales the
