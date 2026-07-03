@@ -762,8 +762,11 @@
   // at the region's offset, null elsewhere — so it aligns with the full recon trace. Null while
   // railed-hidden or when no region is current.
   const reconTrace = $derived.by(() => {
-    if (!active || railedHidden || !analysis || !recoveryRegion || !displayAnalyzable) return null;
+    if (!displayAnalyzable) return [];
+    // Always a full-length array (nulls where there's no prediction) so it can be the main `ys`
+    // series with the actual drawn ON TOP — a good fit otherwise hides the actual behind it.
     const out = new Array(displayRegion.grid.n).fill(null);
+    if (!active || railedHidden || !analysis || !recoveryRegion) return out;
     const dt = displayRegion.grid.dt;
     const off = Math.round((recoveryRegion.grid.times[0] - displayRegion.grid.times[0]) / dt);
     const rt = active.reconTrace;
@@ -1124,13 +1127,15 @@
               <span class="sta-still">spike raster still shown below.</span>
             </div>
           {:else}
+            <!-- predicted drawn UNDER, actual dF/F₀ drawn ON TOP (ys2) so a good fit never hides
+                 the real calcium trace. -->
             <Plot
               fill
               xs={gridTimes}
-              ys={traceYs}
-              color="#2a9d8f"
-              ys2={reconTrace}
-              color2="#c0392b"
+              ys={reconTrace}
+              color="#c0392b"
+              ys2={traceYs}
+              color2="#2a9d8f"
               xRange={xView}
               yAxisSize={44}
               padRight={PLOT_PAD_R}
