@@ -1,6 +1,7 @@
 <script>
   import Plot from './lib/Plot.svelte';
   import Tab2 from './lib/Tab2.svelte';
+  import Shell from './lib/Shell.svelte';
   import {
     makeGrid,
     rasterize,
@@ -22,11 +23,39 @@
   // --- controls (FOUNDATIONS §11) ---
   // Surfaced by default: place spikes, shape the kernel, see the output.
   // Advanced (collapsed): the global timebase.
-  let spikesText = $state('0.5, 1.0, 1.2');
-  let sampleRate = $state(100);
-  let duration = $state(2);
+  const SPIKE_RATE_HZ = 0.1; // default input: a random Poisson spike train at 0.1 Hz
+  const DEFAULT_DURATION = 300; // s — a realistic recording-length window
+  const DEFAULT_RATE = 10; // Hz — a typical calcium-imaging frame rate
+
+  // Random Poisson spike train (exponential inter-spike intervals, mean 1/rate),
+  // formatted for the spikes text box. Seeded so the default is reproducible and the
+  // "randomize" button draws a fresh-but-stable train (same idiom as the noise reseed).
+  function randomSpikeText(rateHz, durationS, seed) {
+    const rand = mulberry32(seed);
+    const out = [];
+    let t = 0;
+    for (let guard = 0; guard < 100000; guard++) {
+      t += -Math.log(1 - rand()) / rateHz;
+      if (t >= durationS) break;
+      out.push(t.toFixed(1));
+    }
+    return out.join(', ');
+  }
+
+  let spikeSeed = $state(7);
+  let spikesText = $state(randomSpikeText(SPIKE_RATE_HZ, DEFAULT_DURATION, 7));
+  let sampleRate = $state(DEFAULT_RATE);
+  let duration = $state(DEFAULT_DURATION);
+
+  function randomizeSpikes() {
+    spikeSeed = (spikeSeed + 1) | 0;
+    spikesText = randomSpikeText(SPIKE_RATE_HZ, duration, spikeSeed);
+  }
   let kernelId = $state('calcium');
   let params = $state(defaultParams('calcium'));
+  // Shared width preference for the plot shell (both tabs). false = capped (1600px),
+  // true = full-bleed. A view pref only; lives here so Tab 1 and Tab 2 obey one toggle.
+  let wide = $state(false);
   // Kernel peak height in dF/F₀ (ADR-0031 follow-up). Builders emit a peak-1
   // shape; this scales it to a realistic transient height so the imported
   // measurement noise (σ ≈ 0.0024 dF/F₀, ADR-0015) actually bites. Universal to
@@ -138,211 +167,213 @@
   const kernelXRange = $derived([-kernelDisplay.winSeconds, kernelDisplay.winSeconds]);
 </script>
 
-<main class:wide={tab === 2}>
-  <!-- ADR-0028: on Tab 2 the title folds into the left rail so the top row is tab nav only,
-       maximizing vertical space for the three plot bands. Tab 1 keeps its header. -->
-  {#if tab === 1}
-    <header>
-      <h1>colonel_kernel</h1>
-      <p class="sub">Tab 1 — forward convolution: <code>output = input ⊗ kernel</code></p>
-    </header>
-  {/if}
-
+<main class="appmain">
   <nav class="tabs">
     <button class:active={tab === 1} onclick={() => (tab = 1)}>1 · Convolution</button>
     <button class:active={tab === 2} onclick={() => (tab = 2)}>2 · Kernel recovery</button>
+    <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
+    <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
+      {wide ? '▥ Fit width' : '▤ Full width'}
+    </button>
   </nav>
 
   {#if tab === 2}
-    <Tab2 />
+    <Tab2 {wide} />
   {:else}
-  <section class="controls">
-    <div class="field">
-      <label for="spikes">Spike times (seconds)</label>
-      <input id="spikes" type="text" bind:value={spikesText} spellcheck="false" />
-      <p class="hint">
-        {raster.placed} placed{#if raster.dropped}, {raster.dropped} outside window{/if}{#if raster.collisions}, {raster.collisions}
-          collision{raster.collisions > 1 ? 's' : ''} clamped (unit amplitude){/if}
-      </p>
-    </div>
+    <Shell {wide}>
+      <!-- LEFT RAIL — tools (was the top controls card; folded into the 20% rail). -->
+      {#snippet rail()}
+        <div class="rail-title">
+          <strong>Tab 1 · Forward convolution</strong>
+          <span>output = input ⊗ kernel</span>
+        </div>
 
-    <div class="field">
-      <label for="kernel">Kernel</label>
-      <select id="kernel" value={kernelId} onchange={(e) => selectKernel(e.currentTarget.value)}>
-        {#each KERNEL_LIBRARY as k}
-          <option value={k.id}>{k.label}</option>
-        {/each}
-      </select>
-      <div class="params">
-        {#each kernelEntry.params as p}
-          <label class="slider">
-            <span>{p.label}</span>
-            <input
-              type="range"
-              min={p.min}
-              max={p.max}
-              step={p.step}
-              bind:value={params[p.key]}
-            />
-            <output>{params[p.key]}</output>
-          </label>
-        {/each}
-        <label class="slider">
-          <span>peak (dF/F₀)</span>
-          <input type="range" min="0.01" max="1" step="0.01" bind:value={kernelAmp} />
-          <output>{kernelAmp.toFixed(2)}</output>
-        </label>
-      </div>
-    </div>
+        <div class="field">
+          <div class="field-h">
+            <label for="spikes">Spike times (seconds)</label>
+            <button type="button" class="minibtn" onclick={randomizeSpikes}>↻ random 0.1 Hz</button>
+          </div>
+          <input id="spikes" type="text" bind:value={spikesText} spellcheck="false" />
+          <p class="hint">
+            {raster.placed} placed{#if raster.dropped}, {raster.dropped} outside window{/if}{#if raster.collisions}, {raster.collisions}
+              collision{raster.collisions > 1 ? 's' : ''} clamped (unit amplitude){/if}
+          </p>
+        </div>
 
-    <div class="field">
-      <label for="noise">Measurement noise</label>
-      <div class="params">
-        <label class="slider">
-          <span>Level</span>
-          <input
-            id="noise"
-            type="range"
-            min="0"
-            max={NOISE_LEVEL_MAX}
-            step="0.1"
-            bind:value={noiseLevel}
+        <div class="field">
+          <label for="kernel">Kernel</label>
+          <select id="kernel" value={kernelId} onchange={(e) => selectKernel(e.currentTarget.value)}>
+            {#each KERNEL_LIBRARY as k}
+              <option value={k.id}>{k.label}</option>
+            {/each}
+          </select>
+          <div class="params">
+            {#each kernelEntry.params as p}
+              <label class="slider">
+                <span>{p.label}</span>
+                <input type="range" min={p.min} max={p.max} step={p.step} bind:value={params[p.key]} />
+                <output>{params[p.key]}</output>
+              </label>
+            {/each}
+            <label class="slider">
+              <span>peak (dF/F₀)</span>
+              <input type="range" min="0.01" max="1" step="0.01" bind:value={kernelAmp} />
+              <output>{kernelAmp.toFixed(2)}</output>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="noise">Measurement noise</label>
+          <div class="params">
+            <label class="slider">
+              <span>Level</span>
+              <input id="noise" type="range" min="0" max={NOISE_LEVEL_MAX} step="0.1" bind:value={noiseLevel} />
+              <output>{noiseLevel.toFixed(1)}×</output>
+            </label>
+          </div>
+          <div class="noise-readout">
+            <button
+              type="button"
+              class="reseed"
+              onclick={() => (noiseSeed = (noiseSeed + 1) | 0)}
+              disabled={noiseLevel === 0}
+            >
+              Reseed
+            </button>
+          </div>
+          <p class="hint">
+            1× = cohort-typical baseline σ ≈ 0.0024 dF/F₀, measured across 39 recordings
+            (ADR-0015). Faint trace = one noise realization added to the output; teal = clean
+            input ⊗ kernel.
+          </p>
+        </div>
+
+        <details class="advanced">
+          <summary>Advanced — timebase (global)</summary>
+          <div class="adv-grid">
+            <label>
+              <span>Sample rate (Hz)</span>
+              <input type="number" min="1" max="2000" step="1" bind:value={sampleRate} />
+            </label>
+            <label>
+              <span>Window length (s)</span>
+              <input type="number" min="0.1" max="60" step="0.1" bind:value={duration} />
+            </label>
+          </div>
+          <p class="hint">
+            grid: {grid.n} samples · dt = {grid.dt.toFixed(4)} s · {grid.duration.toFixed(2)} s window
+          </p>
+        </details>
+      {/snippet}
+
+      <!-- SUMMARY — readouts beside the kernel (a time band here would break ADR-0030). -->
+      {#snippet summary()}
+        <div class="sum-eq">output = input ⊗ kernel</div>
+        <div class="sum-sub">
+          Synthesized dF/F₀ trace{#if noiseLevel > 0} with measurement noise (ADR-0031){/if}.
+        </div>
+        <div class="readouts">
+          <div class="ro"><div class="k">Kernel peak</div><div class="v">{kernelAmp.toFixed(2)} <small>dF/F₀</small></div></div>
+          <div class="ro"><div class="k">Noise σ</div><div class="v">{sigma.toFixed(4)} <small>dF/F₀</small></div></div>
+          <div class="ro"><div class="k">SNR</div><div class="v">{noiseLevel === 0 ? 'clean' : Number.isFinite(snr) ? '≈ ' + Math.round(snr) : '—'}</div></div>
+          <div class="ro"><div class="k">Spikes</div><div class="v">{raster.placed}</div></div>
+        </div>
+      {/snippet}
+
+      <!-- SQUARE KERNEL — the operator on its own ±lag axis (ADR-0004/0009). -->
+      {#snippet kernelPanel()}
+        <div class="sq-label">Kernel — lag (s)</div>
+        <div class="sq-body">
+          <Plot
+            fill
+            xs={kernelDisplay.t}
+            ys={kernelDisplay.v}
+            color="var(--accent)"
+            xRange={kernelXRange}
+            xLabel="lag (s)"
+            zeroLine
           />
-          <output>{noiseLevel.toFixed(1)}×</output>
-        </label>
-      </div>
-      <div class="noise-readout">
-        <span class="mono">σ = {sigma.toFixed(4)} dF/F₀</span>
-        <span class="mono">SNR ≈ {noiseLevel === 0 ? 'clean' : Number.isFinite(snr) ? Math.round(snr) : '—'}</span>
-        <button
-          type="button"
-          class="reseed"
-          onclick={() => (noiseSeed = (noiseSeed + 1) | 0)}
-          disabled={noiseLevel === 0}
-        >
-          Reseed
-        </button>
-      </div>
-      <p class="hint">
-        1× = cohort-typical baseline σ ≈ 0.0024 dF/F₀, measured across 39 recordings
-        (ADR-0015). Faint trace = one noise realization added to the output; teal = clean
-        input ⊗ kernel.
-      </p>
-    </div>
+        </div>
+      {/snippet}
 
-    <details class="advanced">
-      <summary>Advanced — timebase (global)</summary>
-      <div class="adv-grid">
-        <label>
-          <span>Sample rate (Hz)</span>
-          <input type="number" min="1" max="2000" step="1" bind:value={sampleRate} />
-        </label>
-        <label>
-          <span>Window length (s)</span>
-          <input type="number" min="0.1" max="60" step="0.1" bind:value={duration} />
-        </label>
-      </div>
-      <p class="hint">
-        grid: {grid.n} samples · dt = {grid.dt.toFixed(4)} s · {grid.duration.toFixed(2)} s window
-      </p>
-    </details>
-  </section>
+      <!-- FULL-WIDTH TIME-COURSE BANDS — spike train + output, co-registered (ADR-0030). -->
+      {#snippet bands()}
+        <div class="band">
+          <div class="band-head"><span class="plot-label">Input — spike train</span></div>
+          <div class="band-body">
+            <Plot
+              fill
+              xs={gridTimes}
+              ys={rasterSamples}
+              kind="stems"
+              color="var(--text-h)"
+              xRange={xView}
+              yAxisSize={48}
+              padRight={PLOT_PAD_R}
+              syncKey="tab1-rec-x"
+              cursorPoints={true}
+              zoomable
+              onZoom={handleZoom}
+              dblClickReset
+              showXAxis={false}
+            />
+          </div>
+        </div>
 
-  <section class="workspace">
-    <!-- Left column: spikes (top) + output (bottom), one locked recording-time axis. -->
-    <div class="panel spikes">
-      <div class="panel-label">Input — spike train</div>
-      <Plot
-        xs={gridTimes}
-        ys={rasterSamples}
-        kind="stems"
-        color="var(--text-h)"
-        xRange={xView}
-        yAxisSize={48}
-        padRight={PLOT_PAD_R}
-        syncKey="tab1-rec-x"
-        cursorPoints={true}
-        zoomable
-        onZoom={handleZoom}
-        dblClickReset
-        showXAxis={false}
-        height={150}
-      />
-    </div>
-    <div class="panel output">
-      <div class="panel-label">
-        Output — input ⊗ kernel
-        {#if noiseLevel > 0}<span class="caption">· teal = clean, faint = noisy ({noiseLevel.toFixed(1)}× σ)</span>{/if}
-      </div>
-      <!-- uPlot fixes its series count at init (Plot.svelte), so the noisy overlay must
-           be present at mount to render. Remount via {#key} when the overlay toggles on/off
-           (crossing level 0). Reseeds / level changes within level>0 keep noisyOut non-null,
-           so the key is stable and updates flow through setData without churn. The clean line,
-           xRange, padRight, syncKey and coupled zoom are all prop-driven → co-registration
-           with the spike band survives the remount (ADR-0030). -->
-      {#key noisyOut != null}
-        <Plot
-          xs={outTimes}
-          ys={outValues}
-          ys2={noisyOut}
-          color="#2a9d8f"
-          color2="var(--noise-trace)"
-          xRange={xView}
-          yAxisSize={48}
-          padRight={PLOT_PAD_R}
-          syncKey="tab1-rec-x"
-          cursorPoints={true}
-          zoomable
-          onZoom={handleZoom}
-          dblClickReset
-          xLabel="time (s)"
-          height={170}
-        />
-      {/key}
-    </div>
-
-    <!-- Upper-right: the kernel as an operator on lag — its own square ±win axis. -->
-    <div class="panel kernel">
-      <div class="panel-label">Kernel — lag (s)</div>
-      <Plot
-        xs={kernelDisplay.t}
-        ys={kernelDisplay.v}
-        color="var(--accent)"
-        xRange={kernelXRange}
-        xLabel="lag (s)"
-        zeroLine
-        height={260}
-      />
-    </div>
-  </section>
+        <div class="band">
+          <div class="band-head">
+            <span class="plot-label">Output — input ⊗ kernel</span>
+            {#if noiseLevel > 0}<span class="caption">teal = clean · faint = noisy ({noiseLevel.toFixed(1)}× σ)</span>{/if}
+          </div>
+          <!-- uPlot fixes its series count at init (Plot.svelte): remount via {#key} only when
+               the noisy overlay toggles across level 0. Reseeds / in-range level changes flow
+               through setData. Co-registration with the spike band is prop-driven → survives the
+               remount (ADR-0030). -->
+          <div class="band-body">
+            {#key noisyOut != null}
+              <Plot
+                fill
+                xs={outTimes}
+                ys={outValues}
+                ys2={noisyOut}
+                color="#2a9d8f"
+                color2="var(--noise-trace)"
+                xRange={xView}
+                yAxisSize={48}
+                padRight={PLOT_PAD_R}
+                syncKey="tab1-rec-x"
+                cursorPoints={true}
+                zoomable
+                onZoom={handleZoom}
+                dblClickReset
+                xLabel="time (s)"
+              />
+            {/key}
+          </div>
+        </div>
+      {/snippet}
+    </Shell>
   {/if}
 </main>
 
 <style>
-  main {
-    max-width: 920px;
-    margin: 0 auto;
-    padding: 24px 20px 64px;
-    text-align: left;
-  }
-  /* Tab 2 (ADR-0026): a full-height app shell so the rail + co-equal plot bands
-     own the viewport. Gated on tab===2 via class:wide, so Tab 1 is unaffected. */
-  main.wide {
-    max-width: 1600px;
+  .appmain {
     height: 100vh;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    padding-bottom: 20px;
+    gap: 12px;
+    padding: 16px 20px;
+    text-align: left;
   }
+
+  /* tab nav + width toggle */
   .tabs {
     display: flex;
     gap: 6px;
-    margin-bottom: 24px;
-  }
-  /* Tab 2 (ADR-0028): tighten the nav row (no header above it) to give the bands height. */
-  main.wide .tabs {
-    margin-bottom: 12px;
+    align-items: center;
+    flex: none;
   }
   .tabs button {
     font: inherit;
@@ -360,30 +391,45 @@
     color: var(--text-h);
     background: color-mix(in srgb, var(--accent) 10%, var(--bg));
   }
-  header {
-    margin-bottom: 20px;
+  .widthbtn {
+    margin-left: auto; /* push the width toggle to the right edge of the nav */
+    font-family: var(--mono) !important;
+    font-size: 13px !important;
   }
-  h1 {
-    font-size: 32px;
-    margin: 0 0 4px;
-  }
-  .sub {
-    color: var(--text);
-  }
-  .controls {
+
+  /* --- rail (tools) --- */
+  .rail-title {
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    padding: 18px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    margin-bottom: 24px;
+    gap: 1px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
   }
+  .rail-title strong { font-size: 15px; color: var(--text-h); }
+  .rail-title span { font-size: 11px; color: var(--text); font-family: var(--mono); }
+
   .field {
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
+  .field-h {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .minibtn {
+    font: inherit;
+    font-size: 12px;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .minibtn:hover { text-decoration: underline; }
   label {
     font-size: 14px;
     color: var(--text-h);
@@ -399,40 +445,22 @@
     border-radius: 6px;
     background: var(--bg);
     color: var(--text-h);
+    width: 100%;
   }
-  .hint {
-    font-size: 13px;
-    color: var(--text);
-  }
-  .params {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 4px;
-  }
+  .hint { font-size: 13px; color: var(--text); }
+  .params { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
   .slider {
     display: grid;
-    grid-template-columns: 130px 1fr 56px;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'lab out' 'rng rng';
+    gap: 4px 8px;
     align-items: center;
-    gap: 10px;
     font-weight: 400;
   }
-  .slider output {
-    font-family: var(--mono);
-    font-size: 13px;
-    text-align: right;
-  }
-  .noise-readout {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-top: 2px;
-  }
-  .noise-readout .mono {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--text-h);
-  }
+  .slider > span { grid-area: lab; font-size: 12.5px; }
+  .slider > output { grid-area: out; font-family: var(--mono); font-size: 12px; text-align: right; }
+  .slider > input { grid-area: rng; width: 100%; }
+  .noise-readout { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
   .reseed {
     font: inherit;
     font-size: 13px;
@@ -443,73 +471,55 @@
     color: var(--text-h);
     cursor: pointer;
   }
-  .reseed:disabled {
-    opacity: 0.45;
-    cursor: default;
+  .reseed:disabled { opacity: 0.45; cursor: default; }
+  .advanced summary { cursor: pointer; font-size: 14px; color: var(--text-h); }
+  .adv-grid { display: flex; gap: 16px; margin: 12px 0 6px; flex-wrap: wrap; }
+  .adv-grid label { display: flex; flex-direction: column; gap: 4px; font-weight: 400; }
+
+  /* --- summary panel (beside the square kernel) --- */
+  .sum-eq { font-family: var(--mono); font-size: 15px; color: var(--text-h); }
+  .sum-sub { font-size: 12.5px; color: var(--text); margin-top: 3px; }
+  .readouts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-top: 14px;
   }
-  .caption {
-    font-weight: 400;
-    color: var(--text);
-  }
-  .advanced summary {
-    cursor: pointer;
-    font-size: 14px;
+  .ro { border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; }
+  .ro .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text); }
+  .ro .v {
+    font-family: var(--mono);
+    font-size: 19px;
     color: var(--text-h);
+    margin-top: 3px;
+    font-variant-numeric: tabular-nums;
   }
-  .adv-grid {
-    display: flex;
-    gap: 16px;
-    margin: 12px 0 6px;
-  }
-  .adv-grid label {
+  .ro .v small { font-size: 11px; color: var(--text); }
+
+  /* --- square kernel inner --- */
+  .sq-label { font-size: 12px; font-weight: 500; color: var(--text-h); margin-bottom: 4px; flex: none; }
+  .sq-body { flex: 1; min-height: 0; }
+
+  /* --- time-course bands --- */
+  .band {
+    flex: 1 1 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    font-weight: 400;
-  }
-  .workspace {
-    display: grid;
-    grid-template-columns: 1fr 300px;
-    grid-template-areas:
-      'spikes kernel'
-      'output kernel';
-    column-gap: 28px;
-    row-gap: 16px;
-    align-items: start;
-  }
-  .spikes {
-    grid-area: spikes;
-  }
-  .output {
-    grid-area: output;
-  }
-  .kernel {
-    grid-area: kernel;
-    align-self: start;
-    width: 300px;
-  }
-  .panel {
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: 8px 12px;
+    background: var(--bg);
   }
-  .panel-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-h);
-    margin-bottom: 6px;
+  .band-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    flex: none;
   }
-
-  @media (max-width: 720px) {
-    .workspace {
-      grid-template-columns: 1fr;
-      grid-template-areas:
-        'spikes'
-        'output'
-        'kernel';
-    }
-    .kernel {
-      width: 100%;
-    }
-  }
+  .plot-label { font-size: 12px; font-weight: 500; color: var(--text-h); }
+  .caption { font-weight: 400; color: var(--text); font-size: 11px; }
+  .band-body { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 4px; }
 </style>

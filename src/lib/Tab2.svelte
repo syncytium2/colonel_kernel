@@ -39,6 +39,11 @@
     mulberry32,
   } from './core/index.js';
 
+  // Shared plot-width preference from App (2026-07-03 layout unification): false =
+  // capped (1600px), true = full-bleed. Was the old `main.wide` cap; now driven by
+  // the shared nav-row toggle so both tabs obey one control.
+  let { wide = false } = $props();
+
   // Pipeline constants — match the validated lab driver / machinery check.
   const WIN = 5; // kernel half-window (s); windowSamples = round(WIN/dt) (ADR-0004)
   const STAWIN = 2; // STA half-window (s)
@@ -716,6 +721,7 @@
 <!-- drop is sensitive across the whole tab; the affordance shrinks once a file loads. -->
 <section
   class="tab2"
+  class:capped={!wide}
   class:dragging
   aria-label="Tab 2 — drop a recording file to load"
   ondragover={(e) => {
@@ -1108,10 +1114,16 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    /* fill the full-height app shell (App.svelte main.wide) so the rail + bands
+    /* fill the full-height app shell (App.svelte .appmain) so the rail + bands
        own the viewport (ADR-0026); harmless when the parent isn't height-bound. */
     flex: 1;
     min-height: 0;
+  }
+  /* shared width preference (was the old main.wide cap; now the nav-row toggle) */
+  .tab2.capped {
+    max-width: 1600px;
+    width: 100%;
+    margin: 0 auto;
   }
   .tab2.dragging {
     outline: 2px dashed var(--accent);
