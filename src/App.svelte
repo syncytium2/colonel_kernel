@@ -114,6 +114,29 @@
   });
   const snr = $derived(sigma > 0 && signalPeak > 0 ? signalPeak / sigma : Infinity);
 
+  // --- Tab 1 → Tab 2 handoff (FOUNDATIONS §11.3: one signal flowing through the tabs) ---
+  // The whole reason this is a "ground-truth kernel-verification instrument": author a known
+  // kernel + spikes here, hand the synthesized fluorescence (noisy if noise is on) + the known
+  // spike times to Tab 2, and see whether recovery gets the kernel back. We build a CSV in
+  // memory and feed Tab 2's *existing* loadCsv path — identical to a real file load, no new
+  // ingestion code. output.times (not grid.times) carries the fluorescence: the convolution
+  // tail can extend past the window, and time + trace must share one length.
+  let handoff = $state(null);
+  function buildHandoffCsv() {
+    const t = outTimes;
+    const y = noisyOut ?? outValues; // measurement fluorescence = noisy realization when noise is on
+    const sp = spikeTimes;
+    const rows = ['time,spikes,dFF0'];
+    for (let i = 0; i < t.length; i++) {
+      rows.push(`${t[i]},${i < sp.length ? sp[i] : ''},${y[i]}`);
+    }
+    return rows.join('\n');
+  }
+  function sendToTab2() {
+    handoff = { csv: buildHandoffCsv(), label: 'Tab 1 (synthetic)', noisy: noiseLevel > 0 };
+    tab = 2;
+  }
+
   // --- presentation transforms (core untouched) ---
 
   // View-only x-zoom (ADR-0030), mirroring Tab 2's coupled zoom. A drag on EITHER
@@ -178,7 +201,7 @@
   </nav>
 
   {#if tab === 2}
-    <Tab2 {wide} />
+    <Tab2 {wide} {handoff} onConsumed={() => (handoff = null)} />
   {:else}
     <Shell {wide}>
       <!-- LEFT RAIL — tools (was the top controls card; folded into the 20% rail). -->
@@ -278,6 +301,14 @@
           <div class="ro"><div class="k">Noise σ</div><div class="v">{sigma.toFixed(4)} <small>dF/F₀</small></div></div>
           <div class="ro"><div class="k">SNR</div><div class="v">{noiseLevel === 0 ? 'clean' : Number.isFinite(snr) ? '≈ ' + Math.round(snr) : '—'}</div></div>
           <div class="ro"><div class="k">Spikes</div><div class="v">{raster.placed}</div></div>
+        </div>
+        <!-- FOUNDATIONS §11.3: carry this synthesized signal into Tab 2's recovery. Ground-truth
+             loop — the kernel is known, so recovery can be scored against it. -->
+        <div class="handoff">
+          <button type="button" class="handoff-btn" onclick={sendToTab2}>Recover this in Tab 2 →</button>
+          <span class="handoff-hint">
+            sends the {noiseLevel > 0 ? 'noisy' : 'clean'} trace + known spikes — recover the kernel and compare
+          </span>
         </div>
       {/snippet}
 
@@ -495,6 +526,26 @@
     font-variant-numeric: tabular-nums;
   }
   .ro .v small { font-size: 11px; color: var(--text); }
+  .handoff {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .handoff-btn {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 14px;
+    border: 1px solid var(--accent-border);
+    border-radius: 7px;
+    background: var(--accent-bg);
+    color: var(--text-h);
+    cursor: pointer;
+  }
+  .handoff-btn:hover { border-color: var(--accent); }
+  .handoff-hint { font-size: 12px; color: var(--text); }
 
   /* --- square kernel inner --- */
   .sq-label { font-size: 12px; font-weight: 500; color: var(--text-h); margin-bottom: 4px; flex: none; }

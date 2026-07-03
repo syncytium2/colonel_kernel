@@ -43,7 +43,12 @@
   // Shared plot-width preference from App (2026-07-03 layout unification): false =
   // capped (1600px), true = full-bleed. Was the old `main.wide` cap; now driven by
   // the shared nav-row toggle so both tabs obey one control.
-  let { wide = false } = $props();
+  //
+  // `handoff` = a synthetic recording pushed from Tab 1 (FOUNDATIONS §11.3 cross-tab
+  // flow): { csv, label }. When present we load it through the SAME loadCsv path a
+  // file uses, then call onConsumed so the parent clears it (one-shot — a plain tab
+  // switch must not re-clobber a recording the user loaded from a file).
+  let { wide = false, handoff = null, onConsumed } = $props();
 
   // Pipeline constants — match the validated lab driver / machinery check.
   const WIN = 5; // kernel half-window (s); windowSamples = round(WIN/dt) (ADR-0004)
@@ -149,6 +154,24 @@
     zoomRange = null;
     currentRegionIdx = null;
   }
+
+  // Tab 1 → Tab 2 handoff (FOUNDATIONS §11.3). Load the pushed synthetic recording through the
+  // same CSV path a file uses, then signal the parent to clear it (one-shot). Cleared → this
+  // effect re-runs, hits the null guard, and does nothing; a later plain tab switch won't reload.
+  $effect(() => {
+    if (!handoff) return;
+    try {
+      xlsxApi = null;
+      recording = loadCsv(handoff.csv, { source: handoff.label });
+      fileName = handoff.label;
+      resetSlice();
+      error = null;
+    } catch (e) {
+      error = String(e && e.message ? e.message : e);
+      recording = null;
+    }
+    onConsumed?.();
+  });
 
   // View-only x-zoom (ADR-0026). The parent owns the displayed range and feeds it to BOTH
   // recording-time bands (xView). A DRAG (min/max) is a manual zoom and leaves the current
