@@ -615,7 +615,10 @@ here?" or "does it affect the other tab?":
 - **Global-but-default-off** — noise injection (AWGN, slider 0–10× cohort-typical σ, default 0/off;
   [ADR-0015](docs/adr/0015-harness-noise-model.md)). Its first user-facing realization is the Tab 1
   measurement-noise tool — AWGN on the convolution output, clean + noisy overlaid, with a peak/σ SNR
-  readout and a seeded reseed ([ADR-0031](docs/adr/0031-tab1-forward-noise-injection.md)).
+  readout and a seeded reseed ([ADR-0031](docs/adr/0031-tab1-forward-noise-injection.md)). The
+  teaching kernel's **peak height (dF/F₀)** is a separate, user-set axis — a `buildKernel` amplitude
+  factor surfaced as a Tab 1 slider (UI default 0.1) so physiological σ is not dwarfed by a peak-1
+  kernel ([ADR-0032](docs/adr/0032-tab1-kernel-amplitude-control.md)).
 
 ### 11.3 Cross-tab flow
 

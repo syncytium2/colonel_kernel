@@ -64,15 +64,24 @@ export function defaultParams(id) {
 
 /**
  * Build a kernel's samples on a given dt.
+ *
+ * Builders emit the canonical peak-1 shape; `amplitude` scales that peak to a
+ * literal dF/F₀ height. This is the ONE place kernel height is set, so the
+ * teaching identity still holds — a unit spike ⊗ kernel reproduces these
+ * (now scaled) samples — and the convolution output, the kernel plot, and the
+ * SNR readout all inherit the same scale. Default 1 keeps every existing caller
+ * (and the peak-1 core tests) byte-identical.
  * @param {string} id
  * @param {Object} params
  * @param {number} dt sample interval (seconds)
+ * @param {number} [amplitude=1] peak height (dF/F₀); scales the peak-1 shape
  * @returns {Kernel}
  */
-export function buildKernel(id, params, dt) {
+export function buildKernel(id, params, dt, amplitude = 1) {
   const builder = BUILDERS[id];
   if (!builder) throw new Error(`unknown kernel id: ${id}`);
   const { samples, zeroIndex } = builder(params, dt);
+  if (amplitude !== 1) for (let i = 0; i < samples.length; i++) samples[i] *= amplitude;
   const entry = KERNEL_LIBRARY.find((k) => k.id === id);
   const times = new Float64Array(samples.length);
   for (let i = 0; i < samples.length; i++) times[i] = (i - zeroIndex) * dt;

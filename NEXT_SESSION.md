@@ -7,6 +7,19 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ✅ DONE — Tab 1 kernel amplitude control (ADR-0032, 2026-07-03)
+Added the **peak-height (dF/F₀) axis** the noise tool needed to matter. `buildKernel` gained a 4th
+arg `amplitude` (default 1 → existing callers + peak-1 core tests byte-identical); it scales the
+builders' peak-1 shape in the one place kernel height is set, so output / kernel plot / SNR all
+inherit it. A single universal `kernelAmp` control (0.01–1 slider beside the shape params, **UI
+default 0.1**) — not a per-kernel param, so it survives a shape switch. Opens Tab 1 where physiological
+σ bites: peak 0.1 → 10× noise gives SNR ≈ 4 (visibly degraded) vs. SNR ≈ 42 at the old peak 1
+(invisible). Realizes the "separate, user-set amplitude axis" ADR-0031 already named — no canon
+change. `test:core` 202/202. **`tab1-noise` fast-forward merged to `master` and pushed** (carries
+the ADR-0031 noise tool + this ADR-0032 amplitude control together).
+
+---
+
 ## ✅ DONE — Tab 1 measurement-noise tool (ADR-0031, 2026-07-02)
 Built the Tab 1 measurement-noise tool on branch **`tab1-noise`**. AWGN is injected on the
 forward-convolution **output** (measurement noise on the synthesized dF/F₀ trace, σ in dF/F₀ per

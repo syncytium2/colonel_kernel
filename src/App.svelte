@@ -27,6 +27,11 @@
   let duration = $state(2);
   let kernelId = $state('calcium');
   let params = $state(defaultParams('calcium'));
+  // Kernel peak height in dF/F₀ (ADR-0031 follow-up). Builders emit a peak-1
+  // shape; this scales it to a realistic transient height so the imported
+  // measurement noise (σ ≈ 0.0024 dF/F₀, ADR-0015) actually bites. Universal to
+  // all shapes, so it lives here — not per-kernel — and survives a shape switch.
+  let kernelAmp = $state(0.1);
 
   // Measurement-noise tool (ADR-0031): AWGN injected on the convolution OUTPUT
   // (measurement noise on the synthesized dF/F₀ trace), calibrated in cohort-typical
@@ -48,7 +53,7 @@
   );
   const grid = $derived(makeGrid({ sampleRate, duration }));
   const raster = $derived(rasterize(spikeTimes, grid)); // snap + unit
-  const kernel = $derived(buildKernel(kernelId, params, grid.dt));
+  const kernel = $derived(buildKernel(kernelId, params, grid.dt, kernelAmp));
   const output = $derived(convolveOnGrid(raster.samples, grid, kernel));
 
   const kernelEntry = $derived(KERNEL_LIBRARY.find((k) => k.id === kernelId));
@@ -182,6 +187,11 @@
             <output>{params[p.key]}</output>
           </label>
         {/each}
+        <label class="slider">
+          <span>peak (dF/F₀)</span>
+          <input type="range" min="0.01" max="1" step="0.01" bind:value={kernelAmp} />
+          <output>{kernelAmp.toFixed(2)}</output>
+        </label>
       </div>
     </div>
 
