@@ -245,6 +245,20 @@
     regionCount === 1 ? 0 : currentRegionIdx != null ? Math.min(currentRegionIdx, regionCount - 1) : null,
   );
 
+  // Per-region timing + AP count, surfaced so the timing can be CONFIRMED at a glance. Region
+  // markers come from the xlsx metadata sheet (name / start_s / end_s per region, ADR-0019); the
+  // AP count is the spikes falling in [startS, endS]. A treatment that blocks APs (e.g. TTX) should
+  // read ~0 APs — if it doesn't, the markers are mislabeled or misaligned.
+  const regionTimings = $derived.by(() => {
+    if (!recording || !metaRegions.length) return null;
+    const st = recording.spikeTimes;
+    return metaRegions.map((r) => {
+      let n = 0;
+      for (let i = 0; i < st.length; i++) if (st[i] >= r.startS && st[i] <= r.endS) n++;
+      return { name: r.name, startS: r.startS, endS: r.endS, nSpikes: n };
+    });
+  });
+
   // Window one region [startS,endS] to its spikes (ADR-0019 §4) → a LoadedRegion the readout
   // consumes. CSV (no xlsxApi) has only the whole recording, returned as-is.
   function regionToLR(span, label) {
@@ -263,8 +277,23 @@
   // DISPLAY region = the whole recording (all APs). The recon trace + spike raster ALWAYS show
   // the full recording; zoom is view-only (ADR-0027 §1). NO kernel is recovered from it — a
   // whole-signal kernel across >1 region is not informative (FOUNDATIONS §3 / ADR-0028 §1).
+  // DISPLAY = the ENTIRE recording, every frame — NOT spike-bracketed. The full calcium signal is
+  // always shown, even where APs stop well before the end (this is ADR-0027 §1 view-only display).
+  // The raw LoadedRecording (xlsx OR csv) already carries the whole grid/rois/spikeTimes, so use it
+  // directly — the old regionToLR({whole}) call ran windowRegion, which brackets to
+  // [firstSpike−buffer … lastSpike+buffer] and truncated the trace after the last AP. Recovery is
+  // separate and DOES bracket to spikes (recoveryRegion below).
   const displayRegion = $derived(
-    recording ? regionToLR({ name: 'whole', startS: recording.meta.t0, endS: recording.meta.tEnd }, 'whole') : null,
+    recording
+      ? {
+          analyzable: recording.spikeTimes.length >= 2,
+          regionName: 'whole',
+          grid: recording.grid,
+          spikeTimes: recording.spikeTimes,
+          rois: recording.rois,
+          meta: recording.meta,
+        }
+      : null,
   );
   const displayAnalyzable = $derived(!!displayRegion && displayRegion.analyzable !== false);
 
@@ -849,6 +878,20 @@
           {#if analysis && spikeContext}<br /><span class="muted">{recoveryRegion.regionName}: {spikeContext.placed} spikes · {f(spikeContext.rateHz, 3)} Hz</span>{/if}
         </p>
 
+        <!-- Region timing + AP count — confirm the baseline/treatment windows (ADR-0019 markers). -->
+        {#if regionTimings}
+          <div class="regions-list">
+            {#each regionTimings as rt, i}
+              <div class="region-row" class:noaps={rt.nSpikes < 2}>
+                <span class="region-dot" style="background:{regionColor(i)}"></span>
+                <span class="region-name">{rt.name}</span>
+                <span class="region-time">{rt.startS.toFixed(0)}–{rt.endS.toFixed(0)} s</span>
+                <span class="region-n">{rt.nSpikes} AP{rt.nSpikes === 1 ? '' : 's'}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
         <!-- Settings (collapsible, ADR-0028) -->
         <div class="rail-sec" class:collapsed={!settingsOpen}>
           <button class="rail-h toggle" aria-expanded={settingsOpen} onclick={() => (settingsOpen = !settingsOpen)}>
@@ -961,7 +1004,13 @@
         <div class="checks-h">§3 checks <span class="cap">numbers; figures are the instrument</span></div>
         <div class="checks-body">
             {#if !analysis}
-            <p class="ctl-note">{#if multiRegion}Double-click a shaded region to read its kernel & §3 checks.{:else}No analyzable region.{/if}</p>
+            {#if recoveryRegion && recoveryRegion.analyzable === false}
+              <p class="ctl-note">{recoveryRegion.regionName}: {recoveryRegion.reason ?? 'no APs in this region — not analyzed'}</p>
+            {:else if multiRegion}
+              <p class="ctl-note">Double-click a shaded region to read its kernel & §3 checks.</p>
+            {:else}
+              <p class="ctl-note">No analyzable region.</p>
+            {/if}
             {:else}
             <div class="cgrp">
               <div class="cgh">1 · Plausibility <span class="tag">{methodLabel}</span></div>
@@ -1295,6 +1344,45 @@
     font-size: 14px;
     color: var(--text);
     margin: 0;
+  }
+  /* region timing + AP count (confirm baseline/treatment windows) */
+  .regions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .region-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+  }
+  .region-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+  .region-name {
+    color: var(--text-h);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .region-time {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+  }
+  .region-n {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-h);
+  }
+  .region-row.noaps .region-n {
+    color: var(--text);
+    opacity: 0.55;
   }
   .summary strong {
     color: var(--text-h);
