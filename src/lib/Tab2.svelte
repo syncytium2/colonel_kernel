@@ -1127,15 +1127,15 @@
               <span class="sta-still">spike raster still shown below.</span>
             </div>
           {:else}
-            <!-- predicted drawn UNDER, actual dF/F₀ drawn ON TOP (ys2) so a good fit never hides
-                 the real calcium trace. -->
+            <!-- actual dF/F₀ (calcium) is the base; the reconstruction is drawn ON TOP (ys2) so
+                 the fit reads over the real trace. -->
             <Plot
               fill
               xs={gridTimes}
-              ys={reconTrace}
-              color="#c0392b"
-              ys2={traceYs}
-              color2="#2a9d8f"
+              ys={traceYs}
+              color="#2a9d8f"
+              ys2={reconTrace}
+              color2="#c0392b"
               xRange={xView}
               yAxisSize={44}
               padRight={PLOT_PAD_R}
