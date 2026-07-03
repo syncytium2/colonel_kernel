@@ -67,7 +67,8 @@
     display: flex;
     gap: 12px;
     flex: none;
-    height: clamp(240px, 34vh, 340px);
+    /* the kernel is primary — give the square a generous side (= this row's height) */
+    height: clamp(300px, 42vh, 480px);
   }
   .summary {
     flex: 1 1 auto;

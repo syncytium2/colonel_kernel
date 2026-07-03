@@ -898,6 +898,13 @@
                 <button class:on={rasterMode === 'raw'} onclick={() => (rasterMode = 'raw')}>Raw spikes</button>
               </div>
             </div>
+            {#if rasterMode === 'binned'}
+              <label class="ctl">
+                <span>Spike bin window (s)</span>
+                <input type="range" min={displayRegion.grid.dt} max={HIST_WIN_MAX} step={displayRegion.grid.dt} bind:value={histWinS} />
+                <output>{(histo ? histo.windowS : histWinS).toFixed(2)}</output>
+              </label>
+            {/if}
             {#if hasRegions}
               <div class="field">
                 <span>Kernel band</span>
@@ -1015,6 +1022,34 @@
             </div>
             {/if}
         </div>
+        <!-- Kernel-overlay legend + peak readout — moved out of the square so the kernel PLOT
+             fills it (kernel is primary; keep it square + big). -->
+        {#if kernelBand}
+          <div class="overlay-legend">
+            <div class="checks-h">kernel overlay</div>
+            <div class="legend">
+              {#if bandShowsAll}
+                {#each metaRegions as r, i}
+                  <span class="key"><i style="background:{regionColor(i)}"></i>{r.name}{#if effectiveCurrentIdx === i} ·current{/if}</span>
+                {/each}
+                <span class="agree">solid = kernel · dashed = STA{#if effectiveCurrentIdx != null} · current = bold{/if}</span>
+              {:else if analysis}
+                {@const hue = hasRegions && effectiveCurrentIdx != null ? regionColor(effectiveCurrentIdx) : null}
+                {#if !railedHidden}<span class="key"><i style="background:{hue ?? '#7b2ff7'}"></i>recovered kernel</span>{/if}
+                <span class="key"><i style="background:{hue ?? '#e76f51'}"></i>STA{#if hue} (dashed){/if}</span>
+                {#if sourceKernel}<span class="key"><i style="background:var(--text)"></i>source kernel (Tab 1, dashed)</span>{/if}
+                {#if showRailed && method === 'parametric' && analysis.pm.railed.railed}
+                  <button class="linkbtn" onclick={() => (showRailed = false)}>Hide railed output</button>
+                {/if}
+                {#if !railedHidden && !analysis.staEmpty}
+                  <span class="agree">
+                    kernel peak {f(active.peakLagS, 2)} s · amp {f(method === 'parametric' ? active.peakAmp : active.peakAmpAdj)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
+                  </span>
+                {/if}
+              {/if}
+            </div>
+          </div>
+        {/if}
       {/snippet}
 
       {#snippet bands()}
@@ -1030,11 +1065,6 @@
             {:else}
               <span class="zoomnote">drag to zoom · view only</span>
             {/if}
-            <label class="histctl">
-              <span>spike window</span>
-              <input type="range" min={displayRegion.grid.dt} max={HIST_WIN_MAX} step={displayRegion.grid.dt} bind:value={histWinS} />
-              <output>{(histo ? histo.windowS : histWinS).toFixed(2)} s</output>
-            </label>
           </div>
         </div>
         <div class="band-body">
@@ -1174,27 +1204,6 @@
                 height={186}
               />
             {/key}
-          {/if}
-        </div>
-        <div class="legend">
-          {#if bandShowsAll}
-            {#each metaRegions as r, i}
-              <span class="key"><i style="background:{regionColor(i)}"></i>{r.name}{#if effectiveCurrentIdx === i} ·current{/if}</span>
-            {/each}
-            <span class="agree">solid = kernel · dashed = STA{#if effectiveCurrentIdx != null} · current = bold{/if}</span>
-          {:else if analysis}
-            {@const hue = hasRegions && effectiveCurrentIdx != null ? regionColor(effectiveCurrentIdx) : null}
-            {#if !railedHidden}<span class="key"><i style="background:{hue ?? '#7b2ff7'}"></i>recovered kernel</span>{/if}
-            <span class="key"><i style="background:{hue ?? '#e76f51'}"></i>STA{#if hue} (dashed){/if}</span>
-            {#if sourceKernel}<span class="key"><i style="background:var(--text)"></i>source kernel (Tab 1, dashed)</span>{/if}
-            {#if showRailed && method === 'parametric' && analysis.pm.railed.railed}
-              <button class="linkbtn" onclick={() => (showRailed = false)}>Hide railed output</button>
-            {/if}
-            {#if !railedHidden && !analysis.staEmpty}
-              <span class="agree">
-                kernel peak {f(active.peakLagS, 2)} s · amp {f(method === 'parametric' ? active.peakAmp : active.peakAmpAdj)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
-              </span>
-            {/if}
           {/if}
         </div>
       {/snippet}
@@ -1452,23 +1461,11 @@
     border-radius: 6px;
     padding: 2px 8px;
   }
-  .histctl {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-h);
-    white-space: nowrap;
-  }
-  .histctl input {
-    width: 130px;
-  }
-  .histctl output {
-    font-family: var(--mono);
-    font-size: 12px;
-    min-width: 46px;
-    text-align: right;
+  /* kernel-overlay legend + readout, moved into the summary so the kernel plot fills its square */
+  .overlay-legend {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
   }
   .legend {
     display: flex;
