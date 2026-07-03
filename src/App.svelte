@@ -132,7 +132,10 @@
     }
     return rows.join('\n');
   }
-  function sendToTab2() {
+  // Entering Tab 2 loads the CURRENT Tab 1 signal by default (FOUNDATIONS §11.3): rebuild the
+  // synthetic recording and switch. A file dropped in Tab 2 overrides it until Tab 2 is re-entered.
+  // Loaded through loadCsv, one-shot via handoff/onConsumed.
+  function goToTab2() {
     handoff = { csv: buildHandoffCsv(), label: 'Tab 1 (synthetic)', noisy: noiseLevel > 0 };
     tab = 2;
   }
@@ -193,7 +196,7 @@
 <main class="appmain">
   <nav class="tabs">
     <button class:active={tab === 1} onclick={() => (tab = 1)}>1 · Convolution</button>
-    <button class:active={tab === 2} onclick={() => (tab = 2)}>2 · Kernel recovery</button>
+    <button class:active={tab === 2} onclick={goToTab2} title="loads the current Tab 1 signal for recovery">2 · Kernel recovery</button>
     <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
     <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
       {wide ? '▥ Fit width' : '▤ Full width'}
@@ -302,14 +305,9 @@
           <div class="ro"><div class="k">SNR</div><div class="v">{noiseLevel === 0 ? 'clean' : Number.isFinite(snr) ? '≈ ' + Math.round(snr) : '—'}</div></div>
           <div class="ro"><div class="k">Spikes</div><div class="v">{raster.placed}</div></div>
         </div>
-        <!-- FOUNDATIONS §11.3: carry this synthesized signal into Tab 2's recovery. Ground-truth
-             loop — the kernel is known, so recovery can be scored against it. -->
-        <div class="handoff">
-          <button type="button" class="handoff-btn" onclick={sendToTab2}>Recover this in Tab 2 →</button>
-          <span class="handoff-hint">
-            sends the {noiseLevel > 0 ? 'noisy' : 'clean'} trace + known spikes — recover the kernel and compare
-          </span>
-        </div>
+        <!-- FOUNDATIONS §11.3: this synthesized signal is what Tab 2 recovers by default (the
+             ground-truth loop — the kernel is known, so recovery can be scored against it). -->
+        <p class="sum-foot">Open <strong>Tab 2</strong> to recover this signal's kernel.</p>
       {/snippet}
 
       <!-- SQUARE KERNEL — the operator on its own ±lag axis (ADR-0004/0009). -->
@@ -526,26 +524,8 @@
     font-variant-numeric: tabular-nums;
   }
   .ro .v small { font-size: 11px; color: var(--text); }
-  .handoff {
-    margin-top: 14px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-  .handoff-btn {
-    font: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    padding: 8px 14px;
-    border: 1px solid var(--accent-border);
-    border-radius: 7px;
-    background: var(--accent-bg);
-    color: var(--text-h);
-    cursor: pointer;
-  }
-  .handoff-btn:hover { border-color: var(--accent); }
-  .handoff-hint { font-size: 12px; color: var(--text); }
+  .sum-foot { margin-top: 14px; font-size: 12.5px; color: var(--text); }
+  .sum-foot strong { color: var(--text-h); }
 
   /* --- square kernel inner --- */
   .sq-label { font-size: 12px; font-weight: 500; color: var(--text-h); margin-bottom: 4px; flex: none; }
