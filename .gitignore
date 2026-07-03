@@ -31,6 +31,17 @@ darkroom/
 # tracked, its output is not.
 exports/
 
+# R session byproducts
+.Rhistory
+.RData
+
+# Python bytecode (from scripts/, e.g. mat2csv.py)
+__pycache__/
+*.pyc
+
+# Local scratch working prompts (never committed)
+TAB1_NOISE_PROMPT.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
