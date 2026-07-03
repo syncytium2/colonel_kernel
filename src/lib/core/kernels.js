@@ -49,7 +49,7 @@ export const KERNEL_LIBRARY = [
     id: 'calcium',
     label: 'Calcium indicator',
     params: [
-      { key: 'tauRise', label: 'τ rise (s)', min: 0.01, max: 0.3, step: 0.01, default: 0.05 },
+      { key: 'tauRise', label: 'τ rise (s)', min: 0.01, max: 0.3, step: 0.01, default: 0.2 },
       { key: 'tauDecay', label: 'τ decay (s)', min: 0.05, max: 2, step: 0.05, default: 0.4 },
     ],
   },
