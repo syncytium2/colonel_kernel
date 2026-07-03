@@ -16,6 +16,7 @@
   // LSQ) and constrained-parametric (method 2, double-exponential). Their spread is the
   // diagnostic; the human reads it (ADR-0014 / ADR-0018).
   import Plot from './Plot.svelte';
+  import Shell from './Shell.svelte';
   import {
     loadCsv,
     rasterize,
@@ -102,7 +103,6 @@
   let histWinS = $state(HIST_WIN_DEFAULT); // spike-histogram review window (s), display only
   let advancedOpen = $state(false); // ADR-0026: λ/noise live in a default-collapsed Advanced fold (§11.1)
   let settingsOpen = $state(true); // ADR-0028: Settings is a collapsible fold (rail density)
-  let checksOpen = $state(true); // ADR-0028: §3 checks is a collapsible fold (rail density)
   let zoomRange = $state(null); // ADR-0026 view-only x-zoom: [min,max] recording-time s, or null = full
 
   // ADR-0028 — regional-only recovery, zoom-driven region selection (no Mode toggle).
@@ -757,12 +757,9 @@
     <!-- ADR-0026/0028: workflow-staged left rail (controls + §3 checks for the CURRENT
          region) + a stage of co-equal plot bands. The recon trace + raster show the WHOLE
          recording; §3/kernel are regional (current region, double-click-selected). -->
-    <div class="layout">
-      <aside class="rail">
-        <!-- ADR-0028 rail model: TOP region (title + controls) scrolls independently; the §3
-             numbers are PINNED to the bottom with their own internal scroll. Every tile folds
-             independently — controls and numbers can both be visible at once. -->
-        <div class="rail-top">
+    <!-- Shared 20/80 shell (2026-07-03): rail controls · summary(§3 checks) · square kernel · bands. -->
+    <Shell {wide}>
+      {#snippet rail()}
         <!-- ADR-0028: tab title folded into the rail (the top row is tab nav only). -->
         <div class="railtitle">
           <strong>colonel_kernel</strong>
@@ -866,19 +863,13 @@
             {/each}
           </div>
         {/if}
-        </div><!-- /.rail-top -->
+      {/snippet}
 
-        <!-- BOTTOM region: §3 checks pinned to the rail bottom, foldable, with its OWN internal
-             scroll when expanded so it never pushes the controls off-screen nor is pushed off
-             (ADR-0028 rail model). -->
-        <div class="rail-bottom" class:expanded={checksOpen}>
-        <!-- the four §3 checks — compact label:value readout (ADR-0026); collapsible (ADR-0028) -->
-        <div class="rail-sec checks-rail" class:collapsed={!checksOpen}>
-          <button class="rail-h toggle" aria-expanded={checksOpen} onclick={() => (checksOpen = !checksOpen)}>
-            <span>§3 checks <span class="cap">numbers; figures are the instrument</span></span><span class="chev">{checksOpen ? '▾' : '▸'}</span>
-          </button>
-          {#if checksOpen}
-          <div class="rail-bd">
+      <!-- SUMMARY — the four §3 checks, beside the square kernel (was pinned in the rail).
+           Readouts here, not a time band: a narrower band would break x co-registration (ADR-0030). -->
+      {#snippet summary()}
+        <div class="checks-h">§3 checks <span class="cap">numbers; figures are the instrument</span></div>
+        <div class="checks-body">
             {#if !analysis}
             <p class="ctl-note">{#if multiRegion}Double-click a shaded region to read its kernel & §3 checks.{:else}No analyzable region.{/if}</p>
             {:else}
@@ -940,13 +931,10 @@
               {/if}
             </div>
             {/if}
-          </div>
-          {/if}
         </div>
-        </div><!-- /.rail-bottom -->
-      </aside>
+      {/snippet}
 
-      <main class="stage">
+      {#snippet bands()}
       <!-- BAND A — reconstruction: actual dF/F₀ vs predicted; spike-window slider inline.
            Shares the recording-time x with the raster band below (same xRange + yAxisSize
            gutter ⇒ the axes lock, not merely coincide). -->
@@ -1039,30 +1027,25 @@
         </div>
       </div>
 
-      <!-- BAND C — recovered kernel + STA on one shared zero-lag origin (ADR-0009/0024/0027).
-           Kernel-band toggle (independent of view mode): current recovery, or every region's
-           kernel+STA in its Okabe-Ito hue (STA dashed), current region highlighted by weight. -->
-      <div class="band">
-        <div class="band-head">
-          <span class="plot-label">
-            {#if bandShowsAll}
-              all-region kernels (±{WIN}s, solid) + STA (±{STAWIN}s, dashed) — each in its region hue (ADR-0028)
-            {:else}
-              recovered kernel (±{WIN}s) + STA (±{STAWIN}s) — shared lag origin (ADR-0009)
-            {/if}
-            {#if overlayMode === 'normalized'}<span class="norm-badge">NORMALIZED — shape only, peaks scaled to 1; amplitude is in the readout</span>
-            {:else if overlayMode === 'kernels'}<span class="norm-badge">AXIS: KERNELS — STA overflows honestly (one shared axis, ADR-0029)</span>
-            {:else if overlayMode === 'sta'}<span class="norm-badge">AXIS: STA — kernels sit small on the same axis (ADR-0029)</span>{/if}
-          </span>
+      {/snippet}
+
+      <!-- SQUARE KERNEL — recovered kernel + STA on one shared zero-lag origin (ADR-0009/0024/0027).
+           Was the full-width Band C; now the top-right square. Kernel-band toggle unchanged; the
+           long descriptive label is trimmed to fit the square (full text stays in the ADRs). -->
+      {#snippet kernelPanel()}
+        <div class="sq-label">
+          <span>{#if bandShowsAll}all kernels + STA — lag (s){:else}kernel + STA — lag (s){/if}</span>
+          {#if overlayMode === 'normalized'}<span class="norm-badge" title="shape only, peaks scaled to 1; amplitude is in the readout">NORM</span>
+          {:else if overlayMode === 'kernels'}<span class="norm-badge" title="STA overflows honestly on one shared axis (ADR-0029)">AXIS: KERNELS</span>
+          {:else if overlayMode === 'sta'}<span class="norm-badge" title="kernels sit small on the same axis (ADR-0029)">AXIS: STA</span>{/if}
         </div>
         {#if railedHidden && !bandShowsAll}
           <div class="hidden-note">
             Parametric fit railed (τ at bound) — kernel hidden by default.
             <button class="linkbtn" onclick={() => (showRailed = true)}>Show anyways</button>
-            <span class="sta-still">STA still shown.</span>
           </div>
         {/if}
-        <div class="band-body">
+        <div class="sq-body">
           {#if kernelBand}
             {#key kernelBandKey}
               <Plot
@@ -1102,10 +1085,8 @@
             {/if}
           {/if}
         </div>
-      </div>
-
-      </main>
-    </div>
+      {/snippet}
+    </Shell>
   {/if}
 </section>
 
@@ -1403,55 +1384,40 @@
     color: var(--text-h);
   }
 
-  /* ===== ADR-0026 layout: workflow-staged left rail + plot stage ===== */
-  .layout {
+  /* ===== shared shell (2026-07-03): rail content · summary(§3) · square kernel · bands.
+     The layout wrappers (.layout/.rail/.rail-top/.rail-bottom/.stage) are gone — Shell.svelte
+     owns the 20/80 structure; Tab 2 supplies content via snippets. ===== */
+
+  /* §3 checks now live in the summary panel beside the square kernel */
+  .checks-h {
     display: flex;
-    gap: 16px;
-    align-items: stretch;
-    min-height: 0;
-    height: 100%;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-h);
+    margin-bottom: 10px;
   }
-  .rail {
-    width: 300px;
+  .checks-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* square kernel inner (was Band C; now Shell's top-right square) */
+  .sq-label {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-h);
+    margin-bottom: 4px;
     flex: none;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    padding-right: 14px;
-    border-right: 1px solid var(--border);
-    box-sizing: border-box;
   }
-  /* ADR-0028 rail model: TOP controls region scrolls independently; §3 numbers pinned bottom. */
-  .rail-top {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .rail-bottom {
-    flex: 0 0 auto; /* collapsed: just the §3 header height, returning space to the controls */
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border);
-  }
-  .rail-bottom.expanded {
-    flex: 0 1 46%; /* expanded: a bounded bottom region that scrolls within itself */
-  }
-  .rail-bottom .checks-rail {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    flex: 1 1 auto;
-  }
-  .rail-bottom.expanded .checks-rail .rail-bd {
-    overflow-y: auto;
-    min-height: 0;
-  }
+  .sq-body { flex: 1; min-height: 0; }
+
   .fileline {
     display: flex;
     align-items: center;
@@ -1502,7 +1468,7 @@
     opacity: 0.6;
     font-size: 10px;
   }
-  .rail-h .cap {
+  .checks-h .cap {
     font-weight: 400;
     font-size: 10px;
     color: var(--text);
@@ -1539,34 +1505,31 @@
     color: var(--text-h);
     width: 100%;
   }
-  .rail .seg {
+  .rail-bd .seg {
     display: flex;
   }
-  .rail .seg button {
+  .rail-bd .seg button {
     flex: 1;
   }
   /* compact λ/noise sliders in the narrow rail */
-  .rail .ctl {
+  .rail-bd .ctl {
     grid-template-columns: 1fr auto;
     grid-template-areas: 'lab out' 'rng rng';
     gap: 3px 8px;
   }
-  .rail .ctl > span {
+  .rail-bd .ctl > span {
     grid-area: lab;
     font-size: 12px;
   }
-  .rail .ctl > output {
+  .rail-bd .ctl > output {
     grid-area: out;
   }
-  .rail .ctl > input {
+  .rail-bd .ctl > input {
     grid-area: rng;
     width: 100%;
   }
 
-  /* §3 checks — compact label:value readout in the rail */
-  .checks-rail .rail-bd {
-    gap: 10px;
-  }
+  /* §3 checks — compact label:value readout (now in the summary panel) */
   .cgrp {
     display: flex;
     flex-direction: column;
@@ -1608,14 +1571,7 @@
     font-style: italic;
   }
 
-  .stage {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  /* three co-equal ABSOLUTE-height plot bands, full vertical extent (ADR-0026) */
+  /* full-width co-equal time-course bands (recon + raster) inside Shell's .bands */
   .band {
     flex: 1 1 0;
     min-height: 0;
