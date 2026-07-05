@@ -104,6 +104,18 @@
   let noiseLevel = $state(0); // × cohort-typical σ, 0–10, default 0/off (ADR-0015)
   const lambda = $derived(10 ** lambdaLog);
 
+  // ADR-0035 region-protocol windowing — user-adjustable (minutes); defaults mirror
+  // the bus-contract-v1.1 constants (2 / 12 / 20 min). Fed to windowRegion(protocol).
+  let solutionDelayMin = $state(2); // treatment wash-in trim (baseline: none)
+  let regionMinMin = $state(12); // duration floor → flag, never drop
+  let regionMaxMin = $state(20); // analysis-window cap (baseline + treatment)
+  const protocolOpts = $derived({
+    protocol: true,
+    solutionDelayS: solutionDelayMin * 60,
+    regionMinS: regionMinMin * 60,
+    regionMaxS: regionMaxMin * 60,
+  });
+
   // --- slice-viewer state ---
   let selectedCol = $state(0); // which ROI column (0 = the expected target, §4)
   let method = $state('free'); // 'free' (ADR-0004) | 'parametric' (ADR-0021 m2) | 'shaped' (ADR-0021 m3 / ADR-0023)
@@ -264,7 +276,7 @@
   function regionToLR(span, label) {
     if (!recording) return null;
     if (xlsxApi && recording.regions) {
-      const v = xlsxApi.windowRegion(recording, span);
+      const v = xlsxApi.windowRegion(recording, span, protocolOpts);
       if (!v.analyzable) return { analyzable: false, regionName: span.name, reason: v.reason };
       const lr = xlsxApi.regionViewToLoadedRegion(v, { source: `${fileName} — ${label ?? span.name}` });
       lr.analyzable = true;
@@ -660,7 +672,7 @@
   const regionOverlays = $derived.by(() => {
     if (!recording || !xlsxApi || !hasRegions) return null;
     return metaRegions.map((r) => {
-      const v = xlsxApi.windowRegion(recording, r);
+      const v = xlsxApi.windowRegion(recording, r, protocolOpts);
       if (!v.analyzable) return null;
       const rr = recoverRegion(v, { col: selectedCol, lambda, stability: false });
       if (!rr.analyzable) return null;
@@ -981,6 +993,24 @@
                 <input type="range" min="0" max="10" step="0.5" bind:value={noiseLevel} />
                 <output>{noiseLevel.toFixed(1)}×</output>
               </label>
+              {#if hasRegions}
+                <p class="ctl-note">Region windows (ADR-0035) — baseline uses the last <em>max</em>; treatments delay by <em>delay</em> then run to <em>max</em>; hiK uses the whole period.</p>
+                <label class="ctl">
+                  <span>Solution delay</span>
+                  <input type="number" min="0" max="20" step="0.5" bind:value={solutionDelayMin} />
+                  <output>min</output>
+                </label>
+                <label class="ctl">
+                  <span>Min duration</span>
+                  <input type="number" min="0" max="60" step="1" bind:value={regionMinMin} />
+                  <output>min</output>
+                </label>
+                <label class="ctl">
+                  <span>Max duration</span>
+                  <input type="number" min="1" max="60" step="1" bind:value={regionMaxMin} />
+                  <output>min</output>
+                </label>
+              {/if}
               {#if method === 'parametric'}<p class="ctl-note">λ drives the free-vector recovery; the parametric fit has no λ.</p>
               {:else if method === 'shaped'}<p class="ctl-note">λ drives the free-vector recovery + the stability check; shaped uses its own fixed smoothness + drift dials.</p>{/if}
             </div>

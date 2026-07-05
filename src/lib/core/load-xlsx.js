@@ -32,6 +32,91 @@ import { gridFromTimeColumn } from './timebase.js';
 
 const DEFAULT_BUFFER_S = 1.0; // ADR-0019 §4 default analysis buffer (seconds)
 
+// ── Region protocol windowing (ADR-0035; bus contract v1.1) ────────────────────
+// The recording carries RAW region markers [start_s, end_s] (bus contract: no
+// solution_delay/cap baked in). The APP derives the analysis window per region
+// TYPE, from the region NAME, before spike-bracketing:
+//   • baseline  — last REGION_MAX of the period, anchored at the END (nearest the
+//                 transition): [end − REGION_MAX, end]; ≥ REGION_MIN or flagged.
+//   • treatment — wash-in delayed start (+SOLUTION_DELAY), then up to REGION_MAX:
+//                 [start + SOLUTION_DELAY, min(end, start + SOLUTION_DELAY + REGION_MAX)];
+//                 ≥ REGION_MIN or flagged; shorter than the delay → non-analyzable.
+//   • hiK       — the ENTIRE period, raw (high-K⁺ acts fast; no delay, no cap).
+//   • full      — the synthetic "(full recording)"/"whole" default region, raw.
+// Flags never DROP a region (FOUNDATIONS no-AP/too-few-spikes posture: report,
+// don't throw). The three numbers are the cross-team-agreed DEFAULTS (bus contract
+// v1.1) but are user-adjustable in the UI — passed through to regionAnalysisWindow.
+export const SOLUTION_DELAY_S = 120; // treatment wash-in trim (2 min)
+export const REGION_MAX_S = 1200; // analysis-window cap, baseline + treatment (20 min)
+export const REGION_MIN_S = 720; // duration floor → flag, never drop (12 min)
+
+/**
+ * Classify a region into a protocol windowing type from its name.
+ * 'baseline' | 'treatment' | 'hik' | 'full'. Unrecognized names → 'treatment'
+ * (every non-baseline, non-hiK solution switch — SB222200, wash, … — washes in).
+ * @param {string} name
+ * @returns {'baseline'|'treatment'|'hik'|'full'}
+ */
+export function regionType(name) {
+  const norm = String(name ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (norm === 'fullrecording' || norm === 'whole') return 'full';
+  if (norm.includes('baseline')) return 'baseline';
+  if (norm.includes('highk') || norm.includes('hik')) return 'hik';
+  return 'treatment';
+}
+
+/**
+ * Protocol analysis window for one region (ADR-0035), from its RAW [startS,endS]
+ * markers + name. Pure; applied BEFORE spike-bracketing. Never drops a region —
+ * a duration below REGION_MIN is FLAGGED (kept); only a treatment whose period is
+ * shorter than SOLUTION_DELAY comes back non-analyzable (no window survives).
+ * @param {{name:string, startS:number, endS:number}} region
+ * @param {{solutionDelayS?:number, regionMinS?:number, regionMaxS?:number}} [opts]
+ *   user-adjustable protocol values; default to the bus-contract-v1.1 constants.
+ * @returns {{type:string, winStart:number, winEnd:number, flags:string[], analyzable:boolean, reason:(string|null)}}
+ */
+export function regionAnalysisWindow(region, opts = {}) {
+  const solutionDelayS = Number.isFinite(opts.solutionDelayS) ? Number(opts.solutionDelayS) : SOLUTION_DELAY_S;
+  const regionMinS = Number.isFinite(opts.regionMinS) ? Number(opts.regionMinS) : REGION_MIN_S;
+  const regionMaxS = Number.isFinite(opts.regionMaxS) ? Number(opts.regionMaxS) : REGION_MAX_S;
+  const type = regionType(region.name);
+  const rawStart = region.startS;
+  const rawEnd = region.endS;
+  /** @type {string[]} */
+  const flags = [];
+
+  if (type === 'full' || type === 'hik') {
+    return { type, winStart: rawStart, winEnd: rawEnd, flags, analyzable: true, reason: null };
+  }
+
+  if (type === 'baseline') {
+    const winEnd = rawEnd;
+    const winStart = Math.max(rawStart, rawEnd - regionMaxS);
+    if (winEnd - winStart < regionMinS) {
+      flags.push(`baseline shorter than ${(regionMinS / 60).toFixed(0)} min (${((winEnd - winStart) / 60).toFixed(1)} min)`);
+    }
+    return { type, winStart, winEnd, flags, analyzable: true, reason: null };
+  }
+
+  // treatment: wash-in delay, then up to regionMax from the delayed start
+  const winStart = rawStart + solutionDelayS;
+  if (winStart >= rawEnd) {
+    return {
+      type,
+      winStart,
+      winEnd: winStart,
+      flags,
+      analyzable: false,
+      reason: `region '${region.name}' is shorter than the ${(solutionDelayS / 60).toFixed(1)}-min solution delay`,
+    };
+  }
+  const winEnd = Math.min(rawEnd, winStart + regionMaxS);
+  if (winEnd - winStart < regionMinS) {
+    flags.push(`treatment shorter than ${(regionMinS / 60).toFixed(0)} min after delay (${((winEnd - winStart) / 60).toFixed(1)} min)`);
+  }
+  return { type, winStart, winEnd, flags, analyzable: true, reason: null };
+}
+
 /** Parse a numeric cell; blank / null / non-numeric → NaN. */
 function toNum(v) {
   if (v == null || v === '') return NaN;
@@ -250,13 +335,47 @@ export function regionViewToLoadedRegion(rv, { source = null } = {}) {
  *
  * @param {LoadedRecording} recording
  * @param {{name:string, startS:number, endS:number, bufferS?:(number|null)}} region
- * @param {{buffer?:number}} [opts]  default buffer (s) when the region has no override
+ * @param {{buffer?:number, protocol?:boolean}} [opts]  default buffer (s) when the
+ *   region has no override; `protocol` (default false) applies the ADR-0035 region
+ *   type-window (baseline/treatment/hiK) before spike-bracketing.
  * @returns {RegionView}
  */
-export function windowRegion(recording, region, { buffer = DEFAULT_BUFFER_S } = {}) {
+export function windowRegion(recording, region, { buffer = DEFAULT_BUFFER_S, protocol = false, solutionDelayS, regionMinS, regionMaxS } = {}) {
   const { grid, spikeTimes, rois, meta } = recording;
   const { dt, t0, tEnd } = meta;
-  const { name, startS, endS } = region;
+  const { name } = region;
+
+  // (0) ADR-0035: derive the protocol analysis window from the region TYPE (name)
+  // before selecting spikes. Off by default (raw markers); Tab 2's real named
+  // regions opt in. A treatment shorter than the solution delay yields no window.
+  let startS = region.startS;
+  let endS = region.endS;
+  let protoType = null;
+  /** @type {string[]} */
+  const protoFlags = [];
+  if (protocol) {
+    const pw = regionAnalysisWindow(region, { solutionDelayS, regionMinS, regionMaxS });
+    protoType = pw.type;
+    if (!pw.analyzable) {
+      return {
+        name,
+        startS,
+        endS,
+        analyzable: false,
+        reason: pw.reason,
+        spikeCount: 0,
+        spikeRateHz: 0,
+        spikeTimes: new Float64Array(0),
+        grid: null,
+        rois: null,
+        window: undefined,
+        warnings: [],
+      };
+    }
+    startS = pw.winStart;
+    endS = pw.winEnd;
+    protoFlags.push(...pw.flags);
+  }
 
   // (1) select region spikes
   const sel = [];
@@ -282,7 +401,8 @@ export function windowRegion(recording, region, { buffer = DEFAULT_BUFFER_S } = 
       spikeTimes: selArr,
       grid: null,
       rois: null,
-      warnings: [],
+      window: undefined,
+      warnings: [...protoFlags],
     };
   }
 
@@ -296,7 +416,7 @@ export function windowRegion(recording, region, { buffer = DEFAULT_BUFFER_S } = 
   const startIdx = Math.max(0, Math.min(grid.n - 1, rawStart));
   const endIdx = Math.max(0, Math.min(grid.n - 1, rawEnd));
 
-  const warnings = [];
+  const warnings = [...protoFlags];
   if (rawStart < 0) warnings.push(`window start clamped to recording start (region '${name}')`);
   if (rawEnd > grid.n - 1) warnings.push(`window end clamped to recording end (region '${name}')`);
 
@@ -315,7 +435,7 @@ export function windowRegion(recording, region, { buffer = DEFAULT_BUFFER_S } = 
     spikeTimes: selArr,
     grid: wGrid,
     rois: wRois,
-    window: { startIdx, endIdx, startS: wTimes[0], endS: wTimes[wTimes.length - 1], bufferS: bufS, bufferSamples },
+    window: { startIdx, endIdx, startS: wTimes[0], endS: wTimes[wTimes.length - 1], bufferS: bufS, bufferSamples, type: protoType },
     warnings,
   };
 }

@@ -35,7 +35,7 @@ import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './nois
 import { loadCsv } from './load-csv.js';
 import { spikeTriggeredAverage } from './sta.js';
 import * as XLSX from 'xlsx';
-import { loadWorkbook, windowRegion, regionsOf, regionViewToLoadedRegion } from './load-xlsx.js';
+import { loadWorkbook, windowRegion, regionsOf, regionViewToLoadedRegion, regionType, regionAnalysisWindow, SOLUTION_DELAY_S, REGION_MIN_S, REGION_MAX_S } from './load-xlsx.js';
 import { recoverRegion, spikeSufficiency } from './region-recovery.js';
 
 let passed = 0;
@@ -675,6 +675,45 @@ ok('xlsx adapter: meta.t0/tEnd from windowed grid edges', approx(adapted.meta.t0
 ok('xlsx adapter: meta counts + dt match the window', adapted.meta.nFrames === wA.grid.n && adapted.meta.nROIs === wA.rois.length && approx(adapted.meta.dt, wA.grid.dt));
 ok('xlsx adapter: rois[0] preserved as targeted', adapted.rois[0].id === wA.rois[0].id);
 ok('xlsx adapter: throws on a non-analyzable region', throws(() => regionViewToLoadedRegion(wB)));
+
+// ── ADR-0035 region protocol windowing ────────────────────────────────────────
+// classification by name (baseline / treatment / hiK / full)
+ok('proto type: baseline by name', regionType('baseline') === 'baseline' && regionType('  Baseline ') === 'baseline');
+ok('proto type: hiK variants (HiK / high K / high K+)', regionType('HiK') === 'hik' && regionType('high K') === 'hik' && regionType('high K+') === 'hik' && regionType('highK') === 'hik');
+ok('proto type: treatments (SB222200 / wash) → treatment', regionType('SB222200') === 'treatment' && regionType('wash') === 'treatment');
+ok('proto type: synthetic full/whole → full (bypasses windowing)', regionType('(full recording)') === 'full' && regionType('whole') === 'full');
+ok('proto constants: defaults 120 / 720 / 1200 s', SOLUTION_DELAY_S === 120 && REGION_MIN_S === 720 && REGION_MAX_S === 1200);
+
+// baseline: last REGION_MAX anchored at END; a long baseline is trimmed from the front
+const pbLong = regionAnalysisWindow({ name: 'baseline', startS: 0, endS: 1800 }); // 30 min
+ok('proto baseline: takes the last 20 min (anchored at end)', pbLong.winStart === 600 && pbLong.winEnd === 1800 && pbLong.flags.length === 0);
+const pbShort = regionAnalysisWindow({ name: 'baseline', startS: 0, endS: 600 }); // 10 min < 12
+ok('proto baseline: <12 min flagged but kept (winStart at raw start)', pbShort.winStart === 0 && pbShort.winEnd === 600 && pbShort.analyzable === true && pbShort.flags.length === 1);
+
+// treatment: +2 min delay, then up to 20 min from the delayed start
+const ptLong = regionAnalysisWindow({ name: 'SB222200', startS: 1000, endS: 3000 });
+ok('proto treatment: delayed start +120, capped at delayed+1200', ptLong.winStart === 1120 && ptLong.winEnd === 2320 && ptLong.flags.length === 0);
+const ptShortEnd = regionAnalysisWindow({ name: 'SB222200', startS: 1000, endS: 1500 }); // 500 s window after delay = 380 s < 720
+ok('proto treatment: post-delay <12 min flagged, end not extended past raw end', ptShortEnd.winStart === 1120 && ptShortEnd.winEnd === 1500 && ptShortEnd.flags.length === 1);
+const ptTooShort = regionAnalysisWindow({ name: 'wash', startS: 1000, endS: 1100 }); // 100 s < 120 s delay
+ok('proto treatment: region shorter than the delay → non-analyzable', ptTooShort.analyzable === false && ptTooShort.reason.includes('solution delay'));
+
+// hiK + full: entire period, raw (no delay/cap)
+const phik = regionAnalysisWindow({ name: 'high K', startS: 2000, endS: 5000 });
+ok('proto hiK: entire period raw (no delay, no cap)', phik.winStart === 2000 && phik.winEnd === 5000 && phik.flags.length === 0);
+const pfull = regionAnalysisWindow({ name: '(full recording)', startS: 0, endS: 9999 });
+ok('proto full: raw passthrough', pfull.winStart === 0 && pfull.winEnd === 9999);
+
+// user-adjustable overrides flow through
+const pOv = regionAnalysisWindow({ name: 'SB222200', startS: 0, endS: 3000 }, { solutionDelayS: 60, regionMaxS: 600 });
+ok('proto: custom delay/max honored', pOv.winStart === 60 && pOv.winEnd === 660);
+
+// windowRegion integration: protocol OFF (default) = raw markers, unchanged behavior
+const wRaw = windowRegion(REC, { name: 'treatment-ish', startS: 0, endS: 2.5 });
+ok('proto integration: windowRegion default (protocol off) uses raw markers', wRaw.analyzable === true && wRaw.spikeCount === 2);
+// protocol ON classifies the same synthetic name as a treatment → +delay empties the tiny window
+const wProto = windowRegion(REC, { name: 'treatment-ish', startS: 0, endS: 2.5 }, { protocol: true });
+ok('proto integration: protocol on delays past the 2.5 s synthetic region → non-analyzable', wProto.analyzable === false && wProto.reason.includes('solution delay'));
 
 // machinery gates — hard errors
 ok('xlsx: missing trace sheet throws', throws(() => {

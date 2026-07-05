@@ -422,6 +422,19 @@ cell (§4); non-finite trace samples are the literal `NaN`; the pre-trim `timing
 > its offline-converter / no-egress posture is inherited; only the layout and granularity
 > (per-region → per-recording) change.
 
+> **Region *analysis windows* are derived by the app from the raw markers + region name
+> ([ADR-0035](docs/adr/0035-region-protocol-windowing.md)) — supersedes the "raw `[start_s,end_s]`,
+> no offset" windowing sentence of ADR-0019 §4.** The producer still emits raw markers (`exp×60`, no
+> offset); the *app* now derives a per-region analysis window BEFORE the ±1 s spike-bracket, keyed on
+> the region **name** (names are semantic — a v1.1 bus-contract clarification, no golden re-emit):
+> **baseline** = the last `MAX` anchored at the period END (the baseline nearest the transition);
+> **treatment** (any non-baseline, non-hiK switch) = a wash-in **delayed** start (`+DELAY`) then up to
+> `MAX`; **hiK** = the entire period raw (high-K⁺ acts fast — no delay/cap); the synthetic full-recording
+> region = raw passthrough. Defaults `DELAY=2min / MIN=12min / MAX=20min`, **user-adjustable** in Tab 2.
+> Nothing is silently dropped (report-don't-throw, §3): sub-`MIN` durations are flagged-but-kept; only a
+> treatment shorter than `DELAY` is non-analyzable. This closes the wash-in **AP leak** ("APs in
+> TTX/treatment" — spikes under the *previous* solution counted into the new region).
+
 > **Region-end markers are emitted raw — they may overhang the recording
 > ([ADR-0020](docs/adr/0020-region-end-markers-raw-no-clamp.md)).** Finite region-end
 > markers are written source-faithfully (`exp_timing × 60`) and are **not** clamped to the trace's
