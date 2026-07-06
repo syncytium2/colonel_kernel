@@ -7,6 +7,50 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ✅ DONE — region protocol windowing (ADR-0035, 2026-07-06) + dataset-summary PROTOTYPE
+On branch **`region-window-arithmetic`** (commit `206b1a8`; **NOT yet merged to master, now pushed to
+origin**). Tony laid out the established region-windowing rule ("don't relitigate") and directed it into
+v1 that day; built, figure-gated, committed.
+
+**ADR-0035 — region protocol windowing (canon: ADR-0035 + FOUNDATIONS §5 + ADR README).**
+The app now derives a per-region analysis window from the raw markers + region NAME, before the ±1 s
+spike-bracket. **Supersedes the ADR-0019 §4 raw-windowing sentence** (raw markers still the emitted
+contract):
+- **baseline** (name has "baseline") → last MAX anchored at the period END `[end−MAX, end]`.
+- **treatment** (any non-baseline, non-hiK switch — sb222200, senktide, wash …) → wash-in delayed start
+  `+DELAY`, then up to MAX `[start+DELAY, min(end, start+DELAY+MAX)]`.
+- **hiK** (name normalizes to "hik"/"highk") → entire period raw (acts fast, no delay/cap).
+- **full** (synthetic "(full recording)"/"whole") → raw passthrough (Tab 1 handoff / CSV / file-80
+  equivalence byte-identical).
+Defaults **DELAY=2min / MIN=12min / MAX=20min**, **user-adjustable** in Tab 2's Advanced fold (3 number
+fields, shown only with metadata regions). Never silently drops: sub-MIN durations flagged-but-kept;
+only a treatment shorter than DELAY is non-analyzable. Opt-in via `windowRegion(rec, region,
+{protocol:true, solutionDelayS, regionMinS, regionMaxS})`, default off (existing callers/tests
+unchanged). Spike-trim buffer confirmed = 10 samples = 1 s (aCa98_batch_APs.m:33), already
+`DEFAULT_BUFFER_S`. **test:core 217/217 (+15), build clean.** Figure-gated by Tony (golden 98 sb222200:
+382 wash-in APs + 627 cap APs trimmed; multi-treatment file 211 confirms per-region independence).
+
+**Dataset-summary PROTOTYPE (darkroom, gitignored — see memory `dataset-summary-feature`).** Toward an
+in-app "quickly summarize a dataset" feature (Tony's stated goal). Per-slice page: context strip (roi1
+calcium + 1 s-binned APs + region windows/solution_delay) over per-region blocks of top-4 kernel ROIs
+(baseline + treatment reserved, hiK if present), each panel overlaying free/parametric/shaped + STA.
+**Key resolved decision:** kernels at a FIXED absolute dF/F₀ scale anchored on the ~constant unitary-event
+amplitude (memory `unitary-amplitude-fixed-scale`) — settles the ADR-0024/0029 scale-mode horizon;
+STA scaled-to-fit as shape reference. ROI 1 pinned first per block, then top-3. Scripts:
+`darkroom/{scan_kernels,dump_slice_page2}.mjs` + `fig_slice_page2.py`. Best app-test goldens: file **80**
+roi1 (+0.6 s, gold standard) and **240** roi1.
+
+**▶ NEXT (owed, in order):**
+1. **Merge `region-window-arithmetic` → master** (figure-gated; Tony's go-ahead).
+2. **Bus contract v1.1** — the cross-team clarification in Dropbox `team_colonel_kernel/contract/`
+   (names are semantic; app owns windowing; NO golden re-emit). Drafted, not written — needs Tony's OK
+   (touches the MATLAB team's channel). See `solution-delay-decision-pending` memory.
+3. **Dataset-summary:** lock the format (near-final), then fork — batch static darkroom pages vs. scope
+   the **in-app Summarize feature** (recommended; dissolves the 4-region squish via a responsive grid).
+   Optional: canonize the fixed-absolute-scale principle (extend ADR-0029).
+
+---
+
 ## ✅ DONE — shared 20/80 plot shell (both tabs) + Tab 1→Tab 2 handoff (ADR-0033/0034, 2026-07-03)
 Unified both tabs onto one layout and closed the ground-truth loop. On branch **`tab-shared-layout`**
 (not yet merged to master).
