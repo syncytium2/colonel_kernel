@@ -38,6 +38,7 @@ def draw_panel(ax, p, show_y):
         speak = np.nanmax(np.abs(sy[(st >= 0) & (st <= 2)])) or 1
         ax.plot(st, sy * (FIXED_HI * 0.75 / speak), color="#666", ls="--", lw=1.0)
     ax.set_xlim(-5, 5); ax.set_ylim(FIXED_LO, FIXED_HI); ax.tick_params(labelsize=6.5)
+    ax.set_xlabel("lag (s)", fontsize=7, labelpad=1)
     if not show_y:
         ax.set_yticklabels([])  # shared y-axis — only the leftmost column is labeled
     else:
@@ -87,6 +88,7 @@ def render_page(d):
         axc.text((ws+we)/2, axc.get_ylim()[1], f"{r['name']}\n({r['type']})", ha="center", va="top",
                  fontsize=8, color=c, weight="bold")
     axc.set_xlim(0, d["tEnd"]/60.0)
+    axc.set_xlabel("recording time (min)", fontsize=8, labelpad=1)
     axc.set_title("calcium (roi1) + 1 s-binned APs · region windows (solid edges) · red = solution_delay / cap trim", fontsize=9.5)
 
     def draw_block(block, col0, kind):
