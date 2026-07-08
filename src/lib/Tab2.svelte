@@ -39,6 +39,7 @@
     sigmaForLevel,
     mulberry32,
   } from './core/index.js';
+  import methodsSvg from './assets/methods_explainer.svg?url'; // "About the methods" modal (data-safe explainer)
 
   // Shared plot-width preference from App (2026-07-03 layout unification): false =
   // capped (1600px), true = full-bleed. Was the old `main.wide` cap; now driven by
@@ -119,6 +120,7 @@
   // --- slice-viewer state ---
   let selectedCol = $state(0); // which ROI column (0 = the expected target, §4)
   let method = $state('free'); // 'free' (ADR-0004) | 'parametric' (ADR-0021 m2) | 'shaped' (ADR-0021 m3 / ADR-0023)
+  let showMethods = $state(false); // "About the methods" explainer modal
   let overlayMode = $state('shared'); // 'shared' (default) | 'normalized' (ADR-0024)
   let showRailed = $state(false); // ADR-0025: reveal default-hidden railed-parametric output
   let histWinS = $state(HIST_WIN_DEFAULT); // spike-histogram review window (s), display only
@@ -923,7 +925,9 @@
               </select>
             </label>
             <div class="field">
-              <span>Method</span>
+              <span class="field-lab">Method
+                <button class="help-btn" onclick={() => (showMethods = true)} aria-label="About the recovery methods" title="About the methods">?</button>
+              </span>
               <div class="seg" role="group" aria-label="Recovery method">
                 <button class:on={method === 'free'} onclick={() => (method = 'free')}>Free-vector</button>
                 <button class:on={method === 'parametric'} onclick={() => (method = 'parametric')}>Parametric</button>
@@ -1293,9 +1297,93 @@
       {/snippet}
     </Shell>
   {/if}
+
+  {#if showMethods}
+    <div class="methods-modal-bg">
+      <button class="methods-scrim" onclick={() => (showMethods = false)} aria-label="Close methods explainer"></button>
+      <div class="methods-modal" role="dialog" aria-modal="true" aria-label="About the recovery methods">
+        <button class="methods-close" onclick={() => (showMethods = false)} aria-label="Close">×</button>
+        <img src={methodsSvg} alt="Explainer of the four kernel-recovery methods: free-vector, parametric, shaped, and STA" />
+      </div>
+    </div>
+  {/if}
 </section>
 
 <style>
+  /* "About the methods" — help affordance + explainer modal */
+  .field-lab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .help-btn {
+    width: 16px;
+    height: 16px;
+    line-height: 1;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--border, #bbb);
+    background: transparent;
+    color: var(--text, #555);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .help-btn:hover {
+    background: var(--accent, #6b46c1);
+    color: #fff;
+    border-color: var(--accent, #6b46c1);
+  }
+  .methods-modal-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .methods-scrim {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+  }
+  .methods-modal {
+    position: relative;
+    background: #fff; /* the figure has a white background; keep it light in either theme */
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    padding: 14px;
+    max-width: min(1100px, 94vw);
+    max-height: 92vh;
+    overflow: auto;
+  }
+  .methods-modal img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .methods-close {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.06);
+    color: #333;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .methods-close:hover {
+    background: rgba(0, 0, 0, 0.14);
+  }
+
   .tab2 {
     display: flex;
     flex-direction: column;

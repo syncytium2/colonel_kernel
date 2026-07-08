@@ -108,4 +108,5 @@ fig.text(0.5, 0.035, "If a real kernel exists, all four roughly AGREE.   Disagre
 
 fig.savefig("darkroom/methods_explainer.pdf")
 fig.savefig("darkroom/methods_explainer.png", dpi=140)
-print("wrote darkroom/methods_explainer.pdf (+ .png)")
+fig.savefig("darkroom/methods_explainer.svg")  # for the in-app "About the methods" modal
+print("wrote darkroom/methods_explainer.pdf (+ .png, .svg)")
