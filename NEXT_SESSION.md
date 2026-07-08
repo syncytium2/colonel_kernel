@@ -7,6 +7,39 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ✅ DONE — dataset-summary pipeline (tracked) + full-dataset PDF + methods explainer (2026-07-08)
+On branch **`region-window-arithmetic`** (depends on ADR-0035 windowing). The per-slice summary
+prototype is now a **tracked, reusable pipeline** in **`scripts/dataset-summary/`** (see its README) —
+promoted out of gitignored `darkroom/` so it survives. Generated outputs (PDFs, per-slice JSON) stay
+in `darkroom/` (unpublished-data-derived).
+
+- **Full-dataset PDF** (`darkroom/dataset_summary_full.pdf`, gitignored): **one page per slice, all 39
+  goldens**, ordered by treatment (baseline → senktide → TTX → sb222200), each titled
+  `Group <cohort> · <slice> · <treat>`. Per page: context strip (roi1 calcium + 1 s-binned APs + region
+  windows/solution_delay) over per-region blocks of **top-4 kernel ROIs** (ROI 1 pinned first), each
+  panel overlaying **free-vector / parametric / shaped + STA** at the fixed absolute dF/F₀ scale
+  (constant-unitary-amplitude anchor; STA scaled-to-fit; auto-scale inset top-left).
+- **Cohort/treatment + region timing from `indiegroups_db4.xlsx`** (`indiegroups` + `exp_timing`
+  sheets): `batch_dump.mjs` reads db4 and **overrides the goldens' metadata region timing** so db4
+  corrections apply on a re-dump without touching the shared-bus goldens. group_id = MALE/ORX/OVX/DI.
+- **TTX-timing corrections** Tony made in db4 flowed through (110/190/287); 110 landed at TTX onset
+  **27 min** after two db4 edits. Non-analyzable blocks now state the neutral fact — *"⟨region⟩ — N
+  spikes in window — too few for kernel test"* (vs *"no ⟨kind⟩ region"* when truly absent) — no verdicts.
+- **Methods explainer** (`darkroom/methods_explainer.pdf`, synthetic/data-safe): one-page, graphics-first
+  "Four ways to ask if there is a calcium kernel" (free-vector / parametric / shaped / STA), colors +
+  names matching the summary. Could be promoted to `docs/img/` as a tracked teaching asset if wanted.
+
+**Which goldens have decent kernels (app-test cases):** file **80** roi1 (+0.6 s, gold standard) and
+**240** roi1 are cleanest (`scan_kernels.mjs`). Memory: [[dataset-summary-feature]],
+[[unitary-amplitude-fixed-scale]].
+
+**▶ NEXT / still owed (unchanged):** (1) **MATLAB re-export** of the TTX-corrected goldens is the
+canonical fix (our db4 override just unblocks the deadline); (2) **merge `region-window-arithmetic` →
+master**; (3) **bus contract v1.1** write; (4) optionally canonize the fixed-absolute-scale principle
+(extend ADR-0029) + promote the explainer to `docs/img/`.
+
+---
+
 ## ✅ DONE — region protocol windowing (ADR-0035, 2026-07-06) + dataset-summary PROTOTYPE
 On branch **`region-window-arithmetic`** (commit `206b1a8`; **NOT yet merged to master, now pushed to
 origin**). Tony laid out the established region-windowing rule ("don't relitigate") and directed it into
