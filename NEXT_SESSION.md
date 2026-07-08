@@ -7,6 +7,25 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ✅ DONE — merged to master + DEPLOYED + in-app explainer (2026-07-08)
+- **`region-window-arithmetic` (ADR-0035 + tooling) fast-forward merged → `master`** (`2569758`),
+  pushed. Branch kept (Tony's call).
+- **Explainer → `docs/img/methods_explainer.{pdf,png}`** + README entry (synthetic/data-safe).
+- **In-app explainer (option A):** Tab 2 "Method" control gained a **?** button → modal showing the
+  four-methods SVG (`src/lib/assets/methods_explainer.svg`, bundled same-origin, on-demand; white card
+  for either theme). `methods_explainer.py` also emits SVG. 217/217, verified rendering under CSP.
+- **DEPLOYED to Cloudflare** (`npm run build` + `npx wrangler deploy`): live on
+  `colonel-kernel.tonydefazio.workers.dev` **and** `kernel.tonydefazio.com` (new bundle + SVG both 200;
+  custom-domain SVG had a brief edge-cache lag then HIT). Tab 2 now has ADR-0035 region windowing +
+  controls live.
+- **⚠ PRIVACY — Cloudflare Web Analytics is injecting a `static.cloudflareinsights.com/beacon.min.js`
+  at the edge.** Our **CSP BLOCKS it** (`default-src 'self'` stops the load; `connect-src 'none'` stops
+  egress) → confirmed `BLOCKED: csp`, **no data leaves** — posture holds. But it's a blocked third-party
+  attempt + a console CSP error every load, against §6 spirit. **TODO (dashboard, Tony): disable
+  Cloudflare Web Analytics for the zone / kernel.tonydefazio.com.** Not from our code (not in the build).
+
+---
+
 ## ✅ DONE — dataset-summary pipeline (tracked) + full-dataset PDF + methods explainer (2026-07-08)
 On branch **`region-window-arithmetic`** (depends on ADR-0035 windowing). The per-slice summary
 prototype is now a **tracked, reusable pipeline** in **`scripts/dataset-summary/`** (see its README) —
