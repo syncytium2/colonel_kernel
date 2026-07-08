@@ -1,13 +1,17 @@
 // Batch-dump every golden slice for the full-dataset PDF, ordered by treatment
 // (baseline → senktide → TTX → sb222200 → other), tagged with group_id + treat from
-// indiegroups_db4.xlsx. Writes darkroom/pdf/<NN>_<id>.json + darkroom/pdf/manifest.json.
-//   node darkroom/batch_dump.mjs
+// indiegroups_db4.xlsx. Writes <SUMMARY_DIR>/pdf/<NN>_<id>.json + manifest.json.
+//   node scripts/dataset-summary/batch_dump.mjs
 import * as XLSX from 'xlsx';
 import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { buildSlice, GOLDEN_DIR } from './slice_lib.mjs';
 
 const DB = '/Users/tonydefazio/Library/CloudStorage/Dropbox-UniversityofMichigan/Richard DeFazio/data/indiegroups_db4.xlsx';
-const OUTDIR = 'darkroom/pdf';
+// Deliverables (per-slice JSON + the PDF) sync to the team Dropbox — backup + cross-machine.
+// The venv + scratch stay in the repo's local darkroom/. Override with SUMMARY_DIR.
+const SUMMARY_DIR = process.env.SUMMARY_DIR ||
+  '/Users/tonydefazio/Library/CloudStorage/Dropbox-UniversityofMichigan/Richard DeFazio/team_colonel_kernel/summaries';
+const OUTDIR = `${SUMMARY_DIR}/pdf`;
 mkdirSync(OUTDIR, { recursive: true });
 
 const dbwb = XLSX.read(readFileSync(DB), { type: 'buffer' });
