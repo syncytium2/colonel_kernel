@@ -26,6 +26,25 @@ Project started: 1:30pm, June 21 2026.
 
 ---
 
+## ▶ TODO — align trace color schemes: app ⇄ summaries (2026-07-08)
+The Tab 2 app and the summary PDFs use **different color grammars**, so they read inconsistently:
+- **App (Tab 2):** colors by **REGION** — Okabe-Ito `#E69F00`/`#56B4E9`/`#009E73`/`#D55E00` (one hue per
+  region), kernel solid + STA dashed same hue; single-region/CSV fallback = **purple `#7b2ff7`** kernel /
+  **coral `#e76f51`** STA; reconstruction band = **teal `#2a9d8f`** actual / **red `#c0392b`** predicted.
+  (Tab 1 output trace + noise use their own colors.) See `src/lib/Tab2.svelte` (REGION_COLORS, the
+  kernel-band series list ~L713-753, recon Plot ~L1170).
+- **Summaries:** colors by **METHOD** — free-vector teal `#1177aa` · parametric green `#77aa33` · shaped
+  orange `#cc5500` · STA gray `#666`; region shading baseline-orange `#e69f00` / treatment-green `#2a2` /
+  hik-blue `#0072b2`. See `scripts/dataset-summary/fig_slice_page2.py` (KERNELS, TYPE_C).
+
+**Not a find-replace — needs a direction decision first:** the app codes color = region (compare a kernel
+across regions, one method at a time); the summary codes color = method (compare methods within a region).
+Pick the canonical scheme and what maps to what. Cheapest shared wins: **region hues** (baseline orange
+already ≈ matches) and the **STA / actual-vs-predicted** colors. Method colors only apply in the app if/when
+it grows a 4-method overlay (a separate horizon item). Decide, then it's a small edit on each side.
+
+---
+
 ## ✅ DONE — dataset-summary pipeline (tracked) + full-dataset PDF + methods explainer (2026-07-08)
 On branch **`region-window-arithmetic`** (depends on ADR-0035 windowing). The per-slice summary
 prototype is now a **tracked, reusable pipeline** in **`scripts/dataset-summary/`** (see its README) —
