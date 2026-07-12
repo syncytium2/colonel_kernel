@@ -2,6 +2,7 @@
   import Plot from './lib/Plot.svelte';
   import Tab2 from './lib/Tab2.svelte';
   import Shell from './lib/Shell.svelte';
+  import Help from './lib/Help.svelte';
   import {
     makeGrid,
     rasterize,
@@ -15,10 +16,19 @@
     mulberry32,
   } from './lib/core/index.js';
 
-  // --- tab selection (initial tab honors #tab2 for direct/screenshot links) ---
-  let tab = $state(
-    typeof location !== 'undefined' && location.hash.replace('#', '') === 'tab2' ? 2 : 1,
-  );
+  // --- tab selection ---
+  // First-time landing is Tab 0 (Start here) — the accessible on-ramp for naive
+  // users. Direct/screenshot links still work: #tab1 / #tab2 (and #tab0/#help)
+  // pick their tab explicitly.
+  function initialTab() {
+    if (typeof location === 'undefined') return 0;
+    const h = location.hash.replace('#', '');
+    if (h === 'tab2') return 2;
+    if (h === 'tab1') return 1;
+    if (h === 'tab0' || h === 'help' || h === 'start') return 0;
+    return 0;
+  }
+  let tab = $state(initialTab());
 
   // --- controls (FOUNDATIONS §11) ---
   // Surfaced by default: place spikes, shape the kernel, see the output.
@@ -153,6 +163,12 @@
     };
     tab = 2;
   }
+  // Tab 0 "Open Tab N" buttons. Tab 2 must go through goToTab2() so it loads the
+  // current Tab 1 signal (the handoff); any other tab is a plain switch.
+  function navFromHelp(n) {
+    if (n === 2) goToTab2();
+    else tab = n;
+  }
 
   // --- presentation transforms (core untouched) ---
 
@@ -209,6 +225,7 @@
 
 <main class="appmain">
   <nav class="tabs">
+    <button class:active={tab === 0} onclick={() => (tab = 0)} title="What this tool is + the mathematical reference">0 · Start here</button>
     <button class:active={tab === 1} onclick={() => (tab = 1)}>1 · Convolution</button>
     <button class:active={tab === 2} onclick={goToTab2} title="loads the current Tab 1 signal for recovery">2 · Kernel recovery</button>
     <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
@@ -217,7 +234,9 @@
     </button>
   </nav>
 
-  {#if tab === 2}
+  {#if tab === 0}
+    <Help onNavigate={navFromHelp} />
+  {:else if tab === 2}
     <Tab2 {wide} {handoff} />
   {:else}
     <Shell {wide}>

@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!--
+    Standalone, citable methods reference. It is a public/ asset, copied to the
+    site root verbatim (served at /methods.html), so it does NOT receive the
+    build-time CSP injected into index.html. We therefore declare the same
+    strict policy here by hand, so the citable page carries the identical
+    no-egress guarantee as the app (FOUNDATIONS §6 / ADR-0008). default-src
+    'self' permits the linked same-origin methods.css and forbids inline
+    script; connect-src 'none' forbids all network egress.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="connect-src 'none'; default-src 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Methods and mathematical reference for Colonel Kernel: recovering calcium-indicator kernels from ground-truth spike trains by regularized deconvolution, with spike-triggered-average validation." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="methods.css" />
+  <title>Colonel Kernel — Methods &amp; Mathematical Reference</title>
+</head>
+<body>
+<div class="wrap">
+
+  <a class="backlink" href="index.html">&larr; Back to the Colonel Kernel app</a>
+
+  <header class="masthead">
+    <p class="eyebrow">Methods &amp; Mathematical Reference</p>
+    <h1>Recovering calcium-indicator kernels from ground-truth spike trains by regularized deconvolution</h1>
+    <p class="lede">
+      The mathematics, algorithms, and interpretation rules behind
+      <strong>Colonel Kernel</strong> &mdash; a client-side instrument for asking
+      whether a single linear kernel relates recorded action potentials to a
+      measured calcium trace, and for reporting honestly when none does.
+    </p>
+    <div class="docmeta">
+      <span>Version <b>1.0</b></span>
+      <span>Revised <b>2026-07-12</b></span>
+      <span>Status <b>Stable reference</b></span>
+      <span>License <b>MIT (software)</b></span>
+    </div>
+  </header>
+
+  <section class="abstract">
+    <h2>Scope</h2>
+    <p>
+      Colonel Kernel solves the single relationship
+      <var>y</var> = <var>x</var> <span class="op">&otimes;</span> <var>k</var>
+      (trace = spikes convolved with kernel) for whichever term is unknown. Its
+      flagship problem is <em>kernel recovery</em>: given a <strong>known</strong>
+      spike train and a <strong>measured</strong> calcium trace, recover the kernel
+      <var>k</var> &mdash; or determine that no clean linear <var>k</var> exists.
+      This is a deliberately different, better-posed problem than spike inference,
+      and it carries a different scientific stance: the tool is a <em>skeptic</em>
+      that tests whether spike&ndash;calcium coupling holds, not a <em>believer</em>
+      that assumes it.
+    </p>
+    <p>
+      This document specifies the forward model, the recovery methods, the
+      independent validation partner (spike-triggered averaging), the four
+      goodness-of-fit checks, the regional-analysis rules, and the numerical
+      conventions required to reproduce the results. It is intended to be citable
+      by researchers who use the tool to verify ground-truth recordings.
+    </p>
+  </section>
+
+  <nav class="toc" aria-label="Table of contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#problem">The problem and the three inversions</a></li>
+      <li><a href="#model">Signal model and definitions</a></li>
+      <li><a href="#forward">The forward model (convolution)</a></li>
+      <li><a href="#recovery">Kernel recovery by deconvolution</a></li>
+      <li><a href="#methods">Three parallel recovery methods</a></li>
+      <li><a href="#sta">Spike-triggered averaging (validation partner)</a></li>
+      <li><a href="#checks">The four goodness-of-fit checks</a></li>
+      <li><a href="#regions">Regional analysis</a></li>
+      <li><a href="#multiroi">The multi-ROI phenomenon</a></li>
+      <li><a href="#numerics">Numerical conventions &amp; reproducibility</a></li>
+      <li><a href="#limits">Limitations and caveats</a></li>
+      <li><a href="#privacy">Data-handling &amp; privacy</a></li>
+      <li><a href="#cite">How to cite</a></li>
+      <li><a href="#refs">References</a></li>
+    </ol>
+  </nav>
+
+  <!-- ===================================================================== -->
+  <h2 id="problem"><span class="num">1</span>The problem and the three inversions</h2>
+  <p>
+    A calcium indicator turns a train of action potentials into a fluorescence
+    signal. To first approximation, each spike contributes a stereotyped transient
+    &mdash; a fast rise followed by an exponential decay &mdash; and the transients
+    sum. That is exactly a <strong>linear convolution</strong> of the spike train
+    with a single response <em>kernel</em>:
+  </p>
+  <div class="eq">
+    <var>y</var>(<var>t</var>) = ( <var>x</var> <span class="op">&otimes;</span> <var>k</var> )(<var>t</var>)
+    = &sum;<sub>&tau;</sub> <var>x</var>(&tau;) <var>k</var>(<var>t</var> &minus; &tau;)
+    <span class="tag">(1)</span>
+  </div>
+  <p>
+    where <var>x</var> is the spike train (input), <var>k</var> is the kernel, and
+    <var>y</var> is the calcium trace (output). This one equation admits three
+    distinct inverse problems, and the tool exposes each as a tab:
+  </p>
+  <div class="tblwrap">
+    <table>
+      <thead>
+        <tr><th>Given</th><th>Solve for</th><th>Operation</th><th>Role in the tool</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><var>x</var>, <var>k</var></td><td><var>y</var></td><td>convolution</td><td>Tab&nbsp;1 &mdash; teaching on-ramp</td></tr>
+        <tr><td><var>y</var>, <var>x</var></td><td><strong><var>k</var></strong></td><td>deconvolution</td><td><strong>Tab&nbsp;2 &mdash; flagship</strong></td></tr>
+        <tr><td><var>y</var>, <var>k</var></td><td><var>x</var></td><td>deconvolution</td><td>Tab&nbsp;3 &mdash; honest illustration of spike inference</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Recovering <var>k</var> from two known signals (Tab&nbsp;2) is more stable than
+    recovering spikes <var>x</var> from a trace and an <em>assumed</em> kernel
+    (Tab&nbsp;3). Spike inference is a genuinely harder inverse problem addressed by
+    dedicated methods (CASCADE, MLspike, OASIS; see &sect;<a href="#refs">14</a>);
+    Tab&nbsp;3 exists to <em>show</em> why naive inference struggles, not to compete
+    with those tools.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="model"><span class="num">2</span>Signal model and definitions</h2>
+  <p>Every signal in the tool obeys one in-memory contract:</p>
+  <div class="eq">Signal = { samples, dt, zeroIndex, times? }<span class="tag">(2)</span></div>
+  <ul>
+    <li><strong>Spike train <var>x</var>.</strong> Action-potential event <em>times</em>
+      (seconds), a sparse list &mdash; not pre-binned. Rasterization onto the frame
+      grid (&sect;<a href="#forward">3</a>) is the tool's job.</li>
+    <li><strong>Trace <var>y</var>.</strong> A measured &Delta;<var>F</var>/<var>F</var><sub>0</sub>
+      time series on a dense, regular (but clock-jittered) frame grid; one column per
+      region of interest (ROI).</li>
+    <li><strong>Kernel <var>k</var>.</strong> The linear response of the trace to a
+      single unit spike, expressed on a <strong>lag</strong> axis rather than on
+      recording time.</li>
+    <li><strong><code>dt</code></strong> is the nominal sample interval; <strong><code>times</code></strong>,
+      when present, is the authoritative timebase and <code>dt</code> is then the
+      derived convenience <code>mean(diff(times))</code>. Real fluorescence clocks
+      jitter (&plusmn;~10&nbsp;&micro;s about nominal), so a single nominal <code>dt</code>
+      silently drifts spike alignment over a long recording &mdash; a correctness
+      failure, not a rounding one.</li>
+    <li><strong><code>zeroIndex</code></strong> is the 0-based sample at lag&nbsp;=&nbsp;0.
+      It is carried <em>explicitly</em> in the data structure and never re-inferred from
+      the array center at a call site &mdash; re-deriving the origin is the classic
+      half-sample lag bug that is invisible on a plot but inverts a coupling-direction read.</li>
+  </ul>
+
+  <h3>Lag convention</h3>
+  <p>
+    Recovered kernels are <strong>symmetric about lag&nbsp;0</strong>: length
+    2&middot;<var>W</var>&nbsp;+&nbsp;1 with <code>zeroIndex&nbsp;=&nbsp;W</code>, where
+    <var>W</var> = round(<var>win</var>/<code>dt</code>) is the half-window in samples.
+    <strong>Negative-lag content is retained, not discarded.</strong> A causal indicator
+    fills the positive half and sits near zero on the negative side; genuine
+    <em>negative-lag</em> energy encodes lead/lag structure between cells (or a
+    regularization artifact &mdash; &sect;<a href="#limits">11</a>). Retaining it turns
+    the question from &ldquo;is there a kernel?&rdquo; into &ldquo;is there a kernel, and
+    what is its coupling direction?&rdquo;
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="forward"><span class="num">3</span>The forward model (convolution)</h2>
+  <h3>Rasterization</h3>
+  <p>
+    Spike times are binned onto the frame grid before convolution. Two amplitude
+    conventions matter:
+  </p>
+  <ul>
+    <li><strong>Unit amplitude (teaching default).</strong> Each spike contributes weight&nbsp;1.
+      Colliding spikes in one bin are clamped to 1 (collisions are logged). This keeps the
+      &ldquo;is there a clean kernel?&rdquo; test meaningful by forcing the kernel to explain
+      the trace.</li>
+    <li><strong>Binned count (validation path).</strong> The honest representation of real
+      data: a bin holds the <em>number</em> of spikes that fall in it
+      (<code>hist(spikes, times)</code>). At a 10&nbsp;Hz frame rate a cell can fire several
+      times per 100&nbsp;ms bin, so a bin value of 3 means three identical unit events. The
+      count is objective &mdash; it does not introduce a free fit parameter &mdash; so it does
+      not compromise the identifiability of Tab&nbsp;2.</li>
+  </ul>
+  <p>
+    Timing placement is a separate axis: <em>snap</em> to the nearest sample (v1 default;
+    worst-case error is half a frame, below the calcium timescale) or <em>anti-alias</em>
+    across adjacent samples (planned). Placement and amplitude are the two independent
+    arguments of a single <code>rasterize(times, grid, method)</code> function.
+  </p>
+  <h3>Linear, not circular</h3>
+  <p>
+    Convolution is <strong>linear</strong> (zero-padded). Circular convolution &mdash; the
+    naive consequence of a bare FFT &mdash; is retained only as a teaching illustration of
+    why zero-padding is necessary; it wraps the tail of the signal back onto its head and is
+    never the analysis default.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="recovery"><span class="num">4</span>Kernel recovery by deconvolution</h2>
+  <h3>The commutativity trick</h3>
+  <p>
+    Because convolution commutes, <var>y</var> = <var>x</var> <span class="op">&otimes;</span> <var>k</var>
+    = <var>k</var> <span class="op">&otimes;</span> <var>x</var>. A deconvolution routine that
+    recovers the &ldquo;input&rdquo; from an &ldquo;output&rdquo; and a &ldquo;point-spread
+    function&rdquo; can therefore be handed the <strong>trace as the output</strong> and the
+    <strong>spike density as the PSF</strong> &mdash; and what it returns as the recovered input
+    <em>is the kernel</em>:
+  </p>
+  <div class="eq">
+    <var>k&#770;</var> = deconv( <var>y</var> ; <var>x</var> )
+    &nbsp;&nbsp;because&nbsp;&nbsp;
+    <var>y</var> = <var>x</var> <span class="op">&otimes;</span> <var>k</var>
+    <span class="tag">(3)</span>
+  </div>
+  <p>
+    This is the crux of the method: it recovers the <em>unknown</em> kernel using the
+    <em>known</em> spikes, rather than attempting the harder recovery of spikes.
+  </p>
+  <h3>Regularized least squares</h3>
+  <p>
+    Deconvolution is ill-posed: naive spectral division amplifies noise without bound
+    (the tool shows this failure deliberately). The stable formulation is a regularized
+    least-squares problem &mdash; find the kernel whose reconvolution best matches the trace,
+    penalized for roughness:
+  </p>
+  <div class="eq">
+    <var>k&#770;</var> = argmin<sub><var>k</var></sub>
+    &#8214; <var>x</var> <span class="op">&otimes;</span> <var>k</var> &minus; <var>y</var> &#8214;<sup>2</sup>
+    &nbsp;+&nbsp; &lambda;<sup>2</sup> &#8214; <var>L</var><var>k</var> &#8214;<sup>2</sup>
+    <span class="tag">(4)</span>
+  </div>
+  <p>
+    Here <var>L</var> is a smoothness operator (a discrete Laplacian &mdash; a second-difference
+    penalty) and &lambda; is the regularization strength. The reference lab pipeline calls
+    MATLAB&rsquo;s <code>deconvreg</code> with its <em>default</em> Laplacian prior and <em>no</em>
+    explicit parameter &mdash; the smoothing happens silently. <strong>Colonel Kernel makes
+    &lambda; an explicit, adjustable control</strong>, because whether an apparent feature
+    survives across &lambda; is itself one of the four checks (&sect;<a href="#checks">7</a>).
+    What was hidden becomes inspectable.
+  </p>
+  <div class="callout">
+    <span class="label">Why regularization stays visible</span>
+    <p>
+      Negative-lag energy can be genuine cross-cell lead/lag structure <em>or</em> a
+      regularization artifact (e.g. an acausal pedestal from a circular-FFT convention plus a
+      silent Laplacian). Distinguishing the two is a human judgment, which is only possible if
+      the regularization is exposed rather than buried in a library default.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="methods"><span class="num">5</span>Three parallel recovery methods</h2>
+  <p>
+    Kernel recovery runs as <strong>three methods in parallel</strong>. None is
+    authoritative; <strong>the spread between them is the diagnostic</strong> &mdash; when the
+    cell is cleanly coupled they converge, and when it is not they diverge.
+  </p>
+  <div class="tblwrap">
+    <table>
+      <thead>
+        <tr><th>Method</th><th>Form</th><th>What it contributes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Free-vector</strong></td>
+          <td>Regularized least squares, eq.&nbsp;(4); kernel is an unconstrained vector.</td>
+          <td>The most faithful recovery; makes no shape assumption, so it can express ringing,
+            baseline tilt, and negative-lag structure as they are.</td>
+        </tr>
+        <tr>
+          <td><strong>Constrained-parametric</strong></td>
+          <td>Causal double-exponential fit (&tau;<sub>rise</sub>, &tau;<sub>decay</sub>), zero
+            baseline by construction.</td>
+          <td>A deliberately minimal linear <em>reference shape</em> (a &ldquo;foil&rdquo;), analogous
+            to STA&rsquo;s cross-method role. Because it has no free baseline term it always yields a
+            finite &tau;<sub>decay</sub>, even where the free-vector method cannot fit one under a
+            baseline tilt. It fails loudly on decoupled columns &mdash; a feature.</td>
+        </tr>
+        <tr>
+          <td><strong>Shape-regularized</strong></td>
+          <td>Free-vector recovery with an added baseline-flatness penalty plus a minimal low-order
+            drift nuisance basis, combined in one objective.</td>
+          <td>Protects the recovered decay from baseline drift without letting the drift basis steal
+            the transient. The basis is a kernel-protection device, <em>not</em> a trustworthy drift
+            measurement (it over-claims drift ~4&times;); it is held deliberately minimal.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout">
+    <span class="label">Caveat &mdash; the foil is linear</span>
+    <p>
+      A column that <em>departs</em> from the double-exponential foil may be
+      <strong>nonlinearly</strong> coupled rather than decoupled. Deviation from the foil is not,
+      by itself, evidence of decoupling. The parametric method is intentionally simpler than a
+      biophysical generative model (e.g. MLspike): it omits indicator saturation and models no
+      baseline drift.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="sta"><span class="num">6</span>Spike-triggered averaging (validation partner)</h2>
+  <p>
+    Every deconvolution is read against an <strong>independent</strong> spike-triggered average
+    (STA): the mean trace snippet in a symmetric window around each isolated spike. STA assumes
+    no kernel and solves no inverse problem, so agreement between STA and the deconvolved kernel is
+    a primary &ldquo;is there a real kernel?&rdquo; signal. It shares the deconvolved kernel&rsquo;s
+    <code>zeroIndex</code> origin so the two are comparable sample-for-sample about lag&nbsp;0.
+  </p>
+  <p>STA uses a <em>different effective spike set</em> from deconvolution &mdash; do not share one set:</p>
+  <ul>
+    <li><strong>Overlap rejection.</strong> With block = 0.5&middot;window, an event is kept only if
+      <em>both</em> neighbors are farther than block away. Deconvolution bins <em>all</em> spikes;
+      STA drops overlapping ones.</li>
+    <li><strong>Endpoint skip.</strong> The first and last events are skipped.</li>
+    <li><strong>Per-event baseline zeroing.</strong> A pre-spike window (0.5&nbsp;s) is subtracted
+      from each event before averaging.</li>
+    <li><strong>Match tolerance.</strong> Spike&rarr;sample matching uses a 0.1&nbsp;s tolerance.</li>
+  </ul>
+  <div class="callout">
+    <span class="label">Read agreement alongside spike rate</span>
+    <p>
+      STA and deconvolution have <em>different failure modes</em>: STA degrades at high spike
+      frequency (windows overlap and few isolated events survive), while deconvolution holds.
+      Their disagreement is therefore benign in the high-frequency regime but alarming in the
+      low-frequency regime. Spike rate is surfaced as context so the reader can tell which regime
+      applies &mdash; a late STA peak relative to the kernel is often expected behavior, not
+      disagreement.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="checks"><span class="num">7</span>The four goodness-of-fit checks</h2>
+  <p>
+    Recovery <em>always returns something</em>. The scientific question is whether that something
+    is meaningful, and the tool surfaces four checks so the human can judge:
+  </p>
+  <ol>
+    <li><strong>Kernel plausibility.</strong> Does the recovered kernel look like a real indicator
+      transient (fast rise, exponential decay), or like noise/ringing?</li>
+    <li><strong>Reconstruction residual.</strong> Reconvolve the known spikes with the recovered
+      kernel and compare to the actual trace; report the residual / <var>R</var><sup>2</sup>.</li>
+    <li><strong>Stability.</strong> Does the kernel stay consistent across &lambda; settings and
+      across spike subsets, or swing wildly?</li>
+    <li><strong>Cross-method agreement.</strong> Does the deconvolved kernel agree with the
+      independent STA, read alongside the spike rate?</li>
+  </ol>
+
+  <h3>Machinery is gated; fit is reported</h3>
+  <p>
+    This is the single most easily-violated principle in the tool. Spikes and calcium can be
+    genuinely <strong>uncoupled</strong> &mdash; that is the project&rsquo;s core scientific premise,
+    not an artifact to correct. Validation therefore splits into two things that must never be
+    conflated:
+  </p>
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th></th><th>Machinery correctness</th><th>Fit quality</th></tr></thead>
+      <tbody>
+        <tr><td><strong>What</strong></td>
+          <td>Convolution arithmetic, origin/<code>zeroIndex</code> alignment, binned-count matching
+            <code>hist()</code>, output length &amp; finiteness.</td>
+          <td>The <var>R</var><sup>2</sup>/residual of reconstruction against the real trace.</td></tr>
+        <tr><td><strong>How treated</strong></td>
+          <td><strong>Gated</strong>, pass/fail. Must hold <em>regardless of coupling</em>; verified on
+            synthetic/known-coupled data where the expected output is known.</td>
+          <td><strong>Reported</strong>, never a global gate. A low fit on an uncoupled ROI is the
+            <em>correct</em> answer, not a failure.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    A correct forward path that faithfully reconstructs a <em>coupled</em> ROI and faithfully
+    <em>fails</em> to reconstruct an <em>uncoupled</em> one is working exactly as intended. The
+    <em>spread</em> of fit across ROIs &mdash; high on coupled cells, low on uncoupled ones &mdash;
+    is itself the scientific signal. Consequently the tool reports <strong>mechanical facts</strong>
+    (a parametric &tau; pinned to its bound; a kernel whose peak sample sits at the window edge)
+    through a neutral indicator, and <strong>never pronounces &ldquo;this fit failed&rdquo; or
+    &ldquo;there is no kernel.&rdquo;</strong> That verdict is the human&rsquo;s; asserting it in code
+    <em>is</em> the coupling claim the tool exists to leave to the scientist.
+  </p>
+  <div class="callout">
+    <span class="label">Upstream: zero spikes is a policy skip, not a poor fit</span>
+    <p>
+      A region with <em>zero</em> action potentials has no input to convolve, so recovery is
+      <em>undefined</em>, not poorly-fit. Such regions are skipped by policy and excluded from any
+      decoupling-incidence denominator. A silent recording is the absence of the input the question
+      is even asked of &mdash; it is not evidence of decoupling. (In one 72-file batch, 33 recordings
+      were fully silent and 22 partially silent.)
+    </p>
+  </div>
+
+  <h3>What &ldquo;no kernel&rdquo; looks like</h3>
+  <p>
+    An uncoupled recording presents as: implausible kernel shape + high residual + unstable estimate
+    + STA/deconvolution disagreement that the spike rate does <em>not</em> explain. Those four checks,
+    together, <em>are</em> the &ldquo;there isn&rsquo;t one&rdquo; verdict &mdash; which is a
+    scientifically interesting result, not a tool failure.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="regions"><span class="num">8</span>Regional analysis</h2>
+  <p>
+    A recording may span several experimental epochs (baseline, drug wash-in, high-K&#8314;, etc.).
+    A kernel recovered over the <strong>whole</strong> multi-region signal is
+    <strong>uninformative</strong>: it averages across heterogeneous epochs whose coupling may
+    differ by design, producing a blend that is neither the baseline kernel nor any treatment kernel.
+    The tool therefore does <em>not</em> render a whole-signal kernel when a recording contains more
+    than one region; the question &ldquo;is there a kernel?&rdquo; is asked and answered
+    <strong>per region</strong>. A single-region (baseline-only) recording is the boundary case where
+    the whole and regional kernels coincide.
+  </p>
+  <p>
+    Analysis windows are derived from the raw region markers and the region <em>name</em> (names are
+    semantic), then bracketed to the region&rsquo;s spikes with a symmetric one-second buffer before
+    recovery:
+  </p>
+  <ul>
+    <li><strong>baseline</strong> &mdash; the interval anchored at the period end, nearest the
+      transition.</li>
+    <li><strong>treatment</strong> (any non-baseline wash-in) &mdash; a delayed start (<code>+DELAY</code>,
+      default 2&nbsp;min, for solution exchange) then up to a duration cap (<code>MAX</code>, default
+      20&nbsp;min). This closes the wash-in <em>AP leak</em>: spikes still under the previous solution
+      are not counted into the new region.</li>
+    <li><strong>high-K&#8314;</strong> &mdash; the entire period raw (it acts fast; no delay/cap).</li>
+  </ul>
+  <p>
+    Defaults (<code>DELAY&nbsp;=&nbsp;2&nbsp;min</code>, <code>MIN&nbsp;=&nbsp;12&nbsp;min</code>,
+    <code>MAX&nbsp;=&nbsp;20&nbsp;min</code>) are user-adjustable. Nothing is silently dropped:
+    sub-<code>MIN</code> durations are flagged but kept; only a treatment shorter than <code>DELAY</code>
+    is non-analyzable. Cross-region comparison &mdash; <em>does the kernel change across epochs?</em>
+    &mdash; is the scientific payoff a contaminated whole-signal average would obscure.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="multiroi"><span class="num">9</span>The multi-ROI phenomenon</h2>
+  <p>
+    An input file carries several calcium-trace columns. The first is the default targeted cell, but
+    it is only a default highlight &mdash; recovery runs against <strong>every</strong> trace column,
+    with the four checks reported per column and laid side by side. This is deliberate: a recoverable
+    kernel <em>sometimes appears in a non-targeted ROI</em> &mdash; a cell other than the expected one
+    shows clean spike&rarr;trace coupling. Prevalence is unknown because the approach is not reported
+    in the literature; running the tool over many recordings turns that unknown into a measured
+    quantity.
+  </p>
+  <div class="callout">
+    <span class="label">Multiple-comparisons caution</span>
+    <p>
+      Testing many ROIs against one spike train means some will fit well by chance. Before declaring a
+      second cell &ldquo;real,&rdquo; compare its fit score against the <em>distribution</em> of scores
+      across all ROIs (a real one stands out from the pack) and/or against a
+      <strong>shuffled-spikes null</strong> &mdash; recovery against time-scrambled spike times, which
+      reveals what &ldquo;no real relationship&rdquo; scores look like.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="numerics"><span class="num">10</span>Numerical conventions &amp; reproducibility</h2>
+  <p>These conventions make sample counts and lag alignment reproducible against the reference pipeline:</p>
+  <ul>
+    <li><strong>Odd, symmetric kernel.</strong> <var>W</var> = round(<var>win</var>/<code>dt</code>);
+      kernel length = 2<var>W</var>&nbsp;+&nbsp;1, extracted symmetrically about the center so a true
+      lag-0 sample always exists. Recovery requires <code>k&nbsp;&gt;&nbsp;2W</code> samples of data;
+      shorter regions are declined (&ldquo;region too short&rdquo;).</li>
+    <li><strong>Even-length trim.</strong> The reference drops the final sample when the frame count is
+      odd (following the executed code, whose comment states the opposite). This shifts only the phase
+      alignment of the binned spike density against the frame grid; it does not affect centering, which
+      the symmetric odd-length extraction guarantees independently.</li>
+    <li><strong>Edge buffer.</strong> Each region is cropped with ~1&nbsp;s (10&nbsp;samples at 10&nbsp;Hz)
+      of padding before the first spike and after the last, so the kernel&rsquo;s edges are not
+      data-starved.</li>
+    <li><strong>Authoritative timebase.</strong> When a <code>times</code> vector is present it governs;
+      a bare nominal <code>dt</code> is accepted with a warning that uniform-<code>dt</code> reconstruction
+      can drift from the spike clock.</li>
+    <li><strong>Binned-count on the validation path.</strong> The path that validates against the reference
+      kernels uses <code>hist(spikes, times)</code> (count-valued), not the unit-amplitude teaching default.</li>
+  </ul>
+  <div class="callout">
+    <span class="label">Positive control (real data)</span>
+    <p>
+      On a real paired recording, ROI&nbsp;1 yields a recoverable kernel: the lab routine produces a clean
+      transient peaking at +0.6&nbsp;s, and the regularized recovery reproduces that +0.6&nbsp;s peak stably
+      across &lambda;&nbsp;=&nbsp;0.002&ndash;3. Free-vector (+0.60&nbsp;s), parametric (+0.63&nbsp;s), and STA
+      (+0.80&nbsp;s) agree at the peak (the later STA peak is expected STA behavior). Yet the <em>global</em>
+      reconstruction fit is imperfect (a large calcium transient near 780&nbsp;s with no matching spikes; a
+      400&ndash;700&nbsp;s stretch of reduced gain). A coupled cell with localized decoupling episodes
+      produces a <em>real kernel plus a less-than-perfect global fit</em> &mdash; precisely the
+      machinery-gated / fit-reported split, not a &ldquo;no kernel&rdquo; verdict.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="limits"><span class="num">11</span>Limitations and caveats</h2>
+  <ul>
+    <li><strong>Baseline tilt / Laplacian low-frequency blindness.</strong> The free-vector recovery can
+      ride a slow baseline that tilts opposite the reference kernel, producing a whole-window correlation
+      that is negative even when the peak agreement is strong. This is a baseline-dominated statistic and a
+      known, still-being-characterized regularization-side artifact &mdash; not a sign inversion and not
+      evidence against the kernel. Read peak agreement over a narrow window around the peak, not raw
+      whole-window correlation, as the headline.</li>
+    <li><strong>The parametric foil is linear.</strong> Departure from it can indicate nonlinear coupling
+      rather than decoupling (&sect;<a href="#methods">5</a>).</li>
+    <li><strong>Drift is modeled minimally, not measured.</strong> The shape-regularized method&rsquo;s drift
+      basis protects the kernel but over-claims the drift itself; it is not a trustworthy baseline-drift
+      estimate.</li>
+    <li><strong>Linearity assumption.</strong> The whole framework assumes a single linear kernel. Indicator
+      saturation and other nonlinearities are outside the model; the tool&rsquo;s job is to reveal when the
+      linear assumption fails, not to repair it.</li>
+    <li><strong>Not spike inference.</strong> Colonel Kernel assumes known spikes. Inferring spikes from a
+      trace alone is a separate, harder problem and a deliberately separate concern (&sect;<a href="#refs">14</a>).</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <h2 id="privacy"><span class="num">12</span>Data-handling &amp; privacy</h2>
+  <p>
+    Colonel Kernel runs <strong>entirely in the browser</strong>. All computation &mdash; rasterization,
+    convolution, FFT, deconvolution, STA &mdash; is client-side; there is no backend. The application makes
+    <strong>no third-party network requests</strong> (no CDNs, fonts, analytics, or error reporting): every
+    library, font, and asset is bundled and served same-origin. A strict Content-Security-Policy
+    (<code>connect-src 'none'; default-src 'self'</code>) is injected into the shipped artifact and enforces
+    the no-egress guarantee at the browser level; this reference page carries the same policy. Consequently a
+    researcher&rsquo;s unpublished trace data <strong>never leaves their machine</strong>, and the claim is
+    auditable (DevTools &rarr; Network &rarr; reload &rarr; only same-origin requests). No user data is
+    persisted beyond explicit, user-controlled file open/download.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="cite"><span class="num">13</span>How to cite</h2>
+  <p>
+    If Colonel Kernel supports an analysis in your work, please cite the tool and this reference. Adapt the
+    author/venue fields to your context:
+  </p>
+  <div class="cite-box">Colonel Kernel: a client-side instrument for ground-truth calcium-indicator
+kernel recovery. Methods &amp; Mathematical Reference, version 1.0, 2026.
+Retrieved from &lt;application URL&gt;/methods.html</div>
+  <div class="cite-box">@software{colonel_kernel_2026,
+  title  = {Colonel Kernel: client-side calcium-indicator kernel recovery},
+  note   = {Methods &amp; Mathematical Reference, v1.0},
+  year   = {2026},
+  url    = {&lt;application URL&gt;/methods.html}
+}</div>
+
+  <!-- ===================================================================== -->
+  <h2 id="refs"><span class="num">14</span>References</h2>
+  <ol class="refs">
+    <li>Spike inference &mdash; the inverse problem in the opposite direction, addressed by dedicated
+      method families that run outside this tool:
+      <cite>CASCADE</cite> (supervised deep learning trained on ground truth),
+      <cite>MLspike</cite> (model-based Bayesian MAP inference over a biophysical generative model with
+      drifting baseline and indicator nonlinearities), and
+      <cite>OASIS</cite> (fast convex autoregressive sparse inference). Colonel Kernel deliberately does
+      <em>not</em> assume the generative model these tools rely on.</li>
+    <li>Regularized deconvolution &mdash; MATLAB <cite>deconvreg</cite> (constrained least squares with a
+      default Laplacian smoothness prior), the lab routine this tool ports and makes explicit.</li>
+    <li>Related interactive demonstrators &mdash; <cite>phiresky/convolution-demo</cite> (client-side 1D
+      forward convolution) and <cite>CNN Explainer</cite> (Svelte + D3, fully in-browser), which validate
+      the stack and the in-browser, no-backend architecture.</li>
+    <li>Project decision records &mdash; the Architecture Decision Records (ADRs) and <cite>FOUNDATIONS</cite>
+      document that this reference summarizes are maintained alongside the source and are the authoritative
+      account of each individual decision.</li>
+  </ol>
+
+  <footer>
+    <p>
+      Colonel Kernel &mdash; Methods &amp; Mathematical Reference, v1.0 (2026-07-12). Software under the MIT
+      license. This document is a summary for citation; where it and the project&rsquo;s FOUNDATIONS / ADRs
+      differ, those source documents govern.
+    </p>
+    <p><a class="backlink backlink-flush" href="index.html">&larr; Back to the Colonel Kernel app</a></p>
+  </footer>
+
+</div>
+</body>
+</html>
