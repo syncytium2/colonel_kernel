@@ -3,6 +3,7 @@
   import Tab2 from './lib/Tab2.svelte';
   import BeatTheColonel from './lib/BeatTheColonel.svelte';
   import FitTheTrace from './lib/FitTheTrace.svelte';
+  import GuessTheSpikes from './lib/GuessTheSpikes.svelte';
   import Shell from './lib/Shell.svelte';
   import Help from './lib/Help.svelte';
   import Tab3 from './lib/Tab3.svelte';
@@ -73,6 +74,7 @@
   // Per-tab "Challenge" modes. Tab-local; Learn mode is unchanged.
   let challenge1 = $state(false); // Tab 1 · Fit the trace
   let challenge2 = $state(false); // Tab 2 · Beat the Colonel
+  let challenge3 = $state(false); // Tab 3 · Guess the spikes
   // Kernel peak height in dF/F₀ (ADR-0031 follow-up). Builders emit a peak-1
   // shape; this scales it to a realistic transient height so the imported
   // measurement noise (σ ≈ 0.0024 dF/F₀, ADR-0015) actually bites. Universal to
@@ -246,6 +248,11 @@
         {challenge2 ? '← Back to Analyze' : '🎯 Beat the Colonel'}
       </button>
     {/if}
+    {#if tab === 3}
+      <button class="challengebtn" class:on={challenge3} onclick={() => (challenge3 = !challenge3)} title="Guess the spikes — infer the spike train that made the trace">
+        {challenge3 ? '← Back to Learn' : '🎯 Guess the spikes'}
+      </button>
+    {/if}
     <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
     <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
       {wide ? '▥ Fit width' : '▤ Full width'}
@@ -261,18 +268,22 @@
       <Tab2 {wide} {handoff} />
     {/if}
   {:else if tab === 3}
-    <Tab3
-      {wide}
-      {grid}
-      {kernel}
-      {kernelDisplay}
-      {kernelXRange}
-      traceTimes={outTimes}
-      traceValues={noisyOut ?? outValues}
-      {gridTimes}
-      {rasterSamples}
-      spikeCount={raster.placed}
-    />
+    {#if challenge3}
+      <GuessTheSpikes {wide} />
+    {:else}
+      <Tab3
+        {wide}
+        {grid}
+        {kernel}
+        {kernelDisplay}
+        {kernelXRange}
+        traceTimes={outTimes}
+        traceValues={noisyOut ?? outValues}
+        {gridTimes}
+        {rasterSamples}
+        spikeCount={raster.placed}
+      />
+    {/if}
   {:else if tab === 1 && challenge1}
     <FitTheTrace {wide} />
   {:else}

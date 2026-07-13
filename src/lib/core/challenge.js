@@ -34,6 +34,42 @@ export function rSquared(recon, target, n) {
 }
 
 /**
+ * Match guessed spike times against the truth within a tolerance (greedy nearest,
+ * each true spike claims at most one guess). The scoring for "guess the spikes":
+ * precision = fraction of your guesses that hit a real spike, recall = fraction of
+ * real spikes you found, f1 = their harmonic mean.
+ * @param {ArrayLike<number>} guessed
+ * @param {ArrayLike<number>} truth
+ * @param {number} [tolS] match tolerance in seconds
+ * @returns {{ matched:number, falsePos:number, missed:number, precision:number, recall:number, f1:number }}
+ */
+export function spikeMatch(guessed, truth, tolS = 0.3) {
+  const g = Array.from(guessed);
+  const used = new Array(g.length).fill(false);
+  let matched = 0;
+  for (const t of truth) {
+    let best = -1;
+    let bestD = tolS;
+    for (let i = 0; i < g.length; i++) {
+      if (used[i]) continue;
+      const d = Math.abs(g[i] - t);
+      if (d <= bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    if (best >= 0) {
+      used[best] = true;
+      matched++;
+    }
+  }
+  const precision = g.length ? matched / g.length : 0;
+  const recall = truth.length ? matched / truth.length : 0;
+  const f1 = precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+  return { matched, falsePos: g.length - matched, missed: truth.length - matched, precision, recall, f1 };
+}
+
+/**
  * Seeded Poisson spike train over [0, durationS): exponential inter-spike
  * intervals with mean 1/rateHz. Returns event times (seconds), ascending.
  * @param {() => number} rand a seeded uniform generator in [0,1)
