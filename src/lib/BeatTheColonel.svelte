@@ -79,9 +79,11 @@
     const hiddenKernel = buildKernel('calcium', hiddenParams, grid.dt, hiddenAmp);
     const conv = convolveOnGrid(raster.samples, grid, hiddenKernel).samples;
 
-    // target on the recording window (drop the convolution tail for display+scoring)
+    // target on the recording window. convolveOnGrid's output sample i sits at time
+    // t0 + (i - kernel.zeroIndex)·dt, so the recording grid starts at index zeroIndex —
+    // slice from there (else a symmetric kernel's negative-lag half shifts the trace).
     const target = new Float64Array(grid.n);
-    for (let i = 0; i < grid.n; i++) target[i] = conv[i] ?? 0;
+    for (let i = 0; i < grid.n; i++) target[i] = conv[hiddenKernel.zeroIndex + i] ?? 0;
 
     if (uncoupled) {
       // 1–2 spurious calcium transients with NO spike (calcium without APs)...
@@ -112,7 +114,9 @@
     const colonelKernel = recoverKernel(targetPad, sdPad, { windowSamples: winSamples, dt: grid.dt, lambda: LAMBDA });
     const colonelReconFull = convolveOnGrid(raster.samples, grid, colonelKernel).samples;
     const colonelRecon = new Float64Array(grid.n);
-    for (let i = 0; i < grid.n; i++) colonelRecon[i] = colonelReconFull[i] ?? 0;
+    // offset by the Colonel kernel's zeroIndex (its center) so its reconstruction lands
+    // on the same recording grid as the target — this fixes the ~win-second shift.
+    for (let i = 0; i < grid.n; i++) colonelRecon[i] = colonelReconFull[colonelKernel.zeroIndex + i] ?? 0;
     const colonelR2 = rSquared(colonelRecon, targetTrace, grid.n);
 
     return {
@@ -130,7 +134,7 @@
   const userRecon = $derived.by(() => {
     const full = convolveOnGrid(round.raster.samples, grid, userKernel).samples;
     const r = new Float64Array(grid.n);
-    for (let i = 0; i < grid.n; i++) r[i] = full[i] ?? 0;
+    for (let i = 0; i < grid.n; i++) r[i] = full[userKernel.zeroIndex + i] ?? 0;
     return r;
   });
   const userR2 = $derived(rSquared(userRecon, round.target, grid.n));
@@ -248,10 +252,10 @@
       <div class="verdict {verdict}">
         {#if verdict === 'uncoupled'}
           🤝 Uncoupled round — the trace holds a calcium event no spike explains, so
-          <strong>no single kernel explains the whole thing</strong> and this round counts for nobody.
-          The Colonel's free-vector deconvolution over-fit the rogue event into a noisy kernel (see its
-          R²); a good-looking score of your own only captures the coupled part. That's the science: sometimes
-          there is no clean kernel to find — which is exactly what the real tool exists to surface.
+          <strong>no single kernel can fully fit it</strong> and this round counts for nobody. Whatever
+          score either of you posts only reflects the coupled part of the trace, not a real kernel. That's
+          the science: sometimes there is no clean kernel to find — which is exactly what the real tool
+          exists to surface.
         {:else if verdict === 'you'}
           🏆 You beat the Colonel! Your kernel reconstructs the trace better.
         {:else if verdict === 'colonel'}
