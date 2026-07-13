@@ -106,7 +106,7 @@
     onSpikeMove = null,
     spikeTimesForEdit = [],
     editSnapDt = null,
-    editHitPx = 10,
+    editHitPx = 14,
   } = $props();
 
   let wrap;
@@ -370,11 +370,14 @@
     // DATA-time (snapped to editSnapDt). Reads the live spikeTimesForEdit each event.
     let editDown = null, editMove = null, editUp = null;
     if (editable) {
-      // Click vs. drag: a plain click ALWAYS adds (so you can place spikes right next
-      // to each other), and only an actual drag moves a spike. The nearest spike is a
-      // candidate to drag, resolved only once the pointer travels past EDIT_DRAG_MIN.
-      const EDIT_DRAG_MIN = 4; // px
-      let grab = -1, pressed = false, moved = false, dx0 = 0, dy0 = 0;
+      // Gestures: mousedown near a spike GRABS it; if the pointer then moves at all
+      // (>= MOVE_MIN) it's a DRAG that moves that spike. A release with no such move is
+      // a CLICK: shift removes the grabbed spike, a plain click ADDS one (never blocked
+      // by a nearby spike, so you can still place spikes right next to each other).
+      // Empty-space presses never grab, so their release always adds — even if the
+      // pointer jittered. This keeps "place close" and "drag to adjust" both reliable.
+      const MOVE_MIN = 2; // px travel (with a spike grabbed) that counts as a drag
+      let grab = -1, pressed = false, movedGrab = false, dx0 = 0, dy0 = 0;
       const overX = (e) => e.clientX - plot.over.getBoundingClientRect().left;
       const snap = (x) => (editSnapDt ? Math.round(x / editSnapDt) * editSnapDt : x);
       const dataX = (e) => snap(plot.posToVal(overX(e), 'x'));
@@ -389,22 +392,20 @@
       };
       editDown = (e) => {
         pressed = true;
-        moved = false;
+        movedGrab = false;
         dx0 = e.clientX;
         dy0 = e.clientY;
-        grab = nearest(e); // only used if this press becomes a drag
+        grab = nearest(e); // a spike within reach → candidate to drag
       };
       editMove = (e) => {
-        if (!pressed) return;
-        if (!moved && Math.hypot(e.clientX - dx0, e.clientY - dy0) >= EDIT_DRAG_MIN) moved = true;
-        if (moved && grab >= 0 && onSpikeMove) onSpikeMove(grab, dataX(e));
+        if (!pressed || grab < 0) return; // only a grabbed spike drags
+        if (!movedGrab && Math.hypot(e.clientX - dx0, e.clientY - dy0) >= MOVE_MIN) movedGrab = true;
+        if (movedGrab && onSpikeMove) onSpikeMove(grab, dataX(e));
       };
       editUp = (e) => {
         if (!pressed) return;
         pressed = false;
-        if (moved) { grab = -1; return; } // was a drag — the move is already applied
-        // a CLICK: shift-click removes the nearest; a plain click ADDS (never blocked by a
-        // nearby spike). To move, drag; to remove, shift-click.
+        if (movedGrab) { grab = -1; return; } // dragged a spike — the move is applied
         if (e.shiftKey) { if (grab >= 0 && onSpikeRemove) onSpikeRemove(grab); }
         else if (onSpikeAdd) onSpikeAdd(dataX(e));
         grab = -1;
