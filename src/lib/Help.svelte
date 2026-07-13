@@ -9,6 +9,12 @@
   // buttons drop the reader straight into Tab 1 / Tab 2.
   let { onNavigate } = $props();
 
+  // The "help document" — the four-methods explainer figure. Same asset the
+  // Tab 2 "?" modal uses (src/lib/assets/methods_explainer.svg), surfaced here
+  // on Tab 0 so naive users meet it up front instead of hunting for it behind a
+  // modal. Imported as a bundled, same-origin URL (CSP-safe, no egress).
+  import methodsSvg from './assets/methods_explainer.svg?url';
+
   // Relative link (not root-absolute) so it resolves correctly under any base
   // path, and opens in a new tab so the reader keeps their place in the app.
   const METHODS_URL = 'methods.html';
@@ -52,6 +58,24 @@
       Crucially, it will also tell you honestly when there <em>isn&rsquo;t</em> one clean
       shape that fits — which is often the scientifically interesting answer.
     </p>
+  </section>
+
+  <section class="explainer">
+    <h2>The idea in one picture</h2>
+    <p class="plain">
+      There are several ways to ask &ldquo;is there a kernel here?&rdquo; &mdash; and the honest
+      trick is to try them all at once. If a real kernel exists, they roughly agree; when they
+      disagree, that disagreement is itself the finding.
+    </p>
+    <figure class="fig">
+      <a href={methodsSvg} target="_blank" rel="noopener" title="Open full size in a new tab">
+        <img src={methodsSvg} alt="Four ways to ask if there is a calcium kernel: free-vector, parametric, shaped, and spike-triggered average (STA). If a real kernel exists, all four roughly agree; disagreement is the diagnostic." />
+      </a>
+      <figcaption>
+        The four recovery methods, side by side.
+        <a href={methodsSvg} target="_blank" rel="noopener">Open full size ↗</a>
+      </figcaption>
+    </figure>
   </section>
 
   <section class="cards">
@@ -187,7 +211,33 @@
 
   section { margin: 30px 0; }
   h2 { font-size: 21px; color: var(--text-h); margin: 0 0 12px; }
-  .plain p { font-size: 16.5px; line-height: 1.62; color: var(--text); max-width: 66ch; }
+  .plain p, p.plain { font-size: 16.5px; line-height: 1.62; color: var(--text); max-width: 66ch; }
+
+  /* --- explainer figure (the "help document") --- */
+  .fig { margin: 16px 0 0; }
+  .fig a { display: block; }
+  .fig img {
+    display: block;
+    width: 100%;
+    height: auto;
+    /* the figure is drawn on white with dark text — keep it light in either
+       theme (same choice as the Tab 2 modal) rather than inverting it */
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+  .fig a:hover img { border-color: var(--accent-border); }
+  figcaption {
+    margin-top: 8px;
+    font-size: 13.5px;
+    color: var(--text-muted, var(--text));
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  figcaption a { font-weight: 600; }
 
   /* --- three-tab cards --- */
   .grid {
