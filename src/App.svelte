@@ -2,6 +2,7 @@
   import Plot from './lib/Plot.svelte';
   import Tab2 from './lib/Tab2.svelte';
   import BeatTheColonel from './lib/BeatTheColonel.svelte';
+  import FitTheTrace from './lib/FitTheTrace.svelte';
   import Shell from './lib/Shell.svelte';
   import Help from './lib/Help.svelte';
   import Tab3 from './lib/Tab3.svelte';
@@ -69,8 +70,9 @@
   // Shared width preference for the plot shell (both tabs). false = capped (1600px),
   // true = full-bleed. A view pref only; lives here so Tab 1 and Tab 2 obey one toggle.
   let wide = $state(false);
-  // Tab 2 "Challenge" (Beat the Colonel) mode. Tab-local; Learn mode is unchanged.
-  let challenge2 = $state(false);
+  // Per-tab "Challenge" modes. Tab-local; Learn mode is unchanged.
+  let challenge1 = $state(false); // Tab 1 · Fit the trace
+  let challenge2 = $state(false); // Tab 2 · Beat the Colonel
   // Kernel peak height in dF/F₀ (ADR-0031 follow-up). Builders emit a peak-1
   // shape; this scales it to a realistic transient height so the imported
   // measurement noise (σ ≈ 0.0024 dF/F₀, ADR-0015) actually bites. Universal to
@@ -234,6 +236,11 @@
     <button class:active={tab === 1} onclick={() => (tab = 1)}>1 · Convolution</button>
     <button class:active={tab === 2} onclick={goToTab2} title="loads the current Tab 1 signal for recovery">2 · Kernel recovery</button>
     <button class:active={tab === 3} onclick={() => (tab = 3)} title="naive spike inference — honest illustration (in development)">3 · Spike inference</button>
+    {#if tab === 1}
+      <button class="challengebtn" class:on={challenge1} onclick={() => (challenge1 = !challenge1)} title="Fit the trace — place spikes and shape a kernel to match the target">
+        {challenge1 ? '← Back to Learn' : '🎯 Fit the trace'}
+      </button>
+    {/if}
     {#if tab === 2}
       <button class="challengebtn" class:on={challenge2} onclick={() => (challenge2 = !challenge2)} title="Beat the Colonel — design a kernel to beat the deconvolution">
         {challenge2 ? '← Back to Analyze' : '🎯 Beat the Colonel'}
@@ -266,6 +273,8 @@
       {rasterSamples}
       spikeCount={raster.placed}
     />
+  {:else if tab === 1 && challenge1}
+    <FitTheTrace {wide} />
   {:else}
     <Shell {wide}>
       <!-- LEFT RAIL — tools (was the top controls card; folded into the 20% rail). -->

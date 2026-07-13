@@ -93,6 +93,17 @@
     // When set it REPLACES the ys/ys2 path. The series COUNT is fixed at init, so the parent
     // remounts (via {#key}) when the count changes. Off by default — only the kernel band uses it.
     seriesList = null,
+    // EDIT mode (challenge tabs): click empty space to ADD a spike, shift-click the
+    // nearest to REMOVE it, drag one to MOVE it. Emits data-time (snapped to
+    // editSnapDt when given). Disables zoom while on. Off by default — every existing
+    // plot passes nothing, so behavior is unchanged.
+    editable = false,
+    onSpikeAdd = null,
+    onSpikeRemove = null,
+    onSpikeMove = null,
+    spikeTimesForEdit = [],
+    editSnapDt = null,
+    editHitPx = 10,
   } = $props();
 
   let wrap;
@@ -233,7 +244,11 @@
         // below); uPlot only fires setSelect past `dist`, so a zoom-drag's release
         // never resets. Disable uPlot's own dblclick so it can't autorange behind the
         // parent (ADR-0026).
-        ...(zoomable
+        ...(editable
+          // EDIT mode: no uPlot drag/select or mousedown handling — our own listeners
+          // (added in onMount) own the pointer for add/remove/move.
+          ? { drag: { x: false, y: false }, bind: { mousedown: () => null, dblclick: () => null } }
+          : zoomable
           ? { drag: { x: true, y: false, setScale: false, dist: ZOOM_DRAG_MIN }, bind: { dblclick: () => null } }
           // Non-zoomable plots are parent-scale-controlled: kill uPlot's native drag-zoom
           // and dblclick-autorange so an interaction can't knock the pinned range loose and
@@ -342,11 +357,48 @@
       wrap.addEventListener('mousedown', onDown);
       window.addEventListener('mouseup', onUp);
     }
+
+    // EDIT mode: own the pointer for spike add/remove/move. Click empty → add;
+    // shift-click the nearest within editHitPx → remove; drag one → move. All emit
+    // DATA-time (snapped to editSnapDt). Reads the live spikeTimesForEdit each event.
+    let editDown = null, editMove = null, editUp = null;
+    if (editable) {
+      let dragIdx = -1;
+      const overX = (e) => e.clientX - plot.over.getBoundingClientRect().left;
+      const snap = (x) => (editSnapDt ? Math.round(x / editSnapDt) * editSnapDt : x);
+      const nearest = (e) => {
+        const px = overX(e);
+        let best = -1, bestD = editHitPx;
+        for (let i = 0; i < spikeTimesForEdit.length; i++) {
+          const d = Math.abs(plot.valToPos(spikeTimesForEdit[i], 'x') - px);
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+      };
+      editDown = (e) => {
+        const idx = nearest(e);
+        if (e.shiftKey) { if (idx >= 0 && onSpikeRemove) onSpikeRemove(idx); return; }
+        if (idx >= 0) dragIdx = idx; // grab existing to drag
+        else if (onSpikeAdd) onSpikeAdd(snap(plot.posToVal(overX(e), 'x'))); // add new
+      };
+      editMove = (e) => {
+        if (dragIdx >= 0 && onSpikeMove) onSpikeMove(dragIdx, snap(plot.posToVal(overX(e), 'x')));
+      };
+      editUp = () => { dragIdx = -1; };
+      plot.over.style.cursor = 'crosshair';
+      plot.over.addEventListener('mousedown', editDown);
+      window.addEventListener('mousemove', editMove);
+      window.addEventListener('mouseup', editUp);
+    }
+
     return () => {
       ro.disconnect();
       if (clickTimer) clearTimeout(clickTimer);
       if (onDown) wrap.removeEventListener('mousedown', onDown);
       if (onUp) window.removeEventListener('mouseup', onUp);
+      if (editDown) plot.over.removeEventListener('mousedown', editDown);
+      if (editMove) window.removeEventListener('mousemove', editMove);
+      if (editUp) window.removeEventListener('mouseup', editUp);
       plot?.destroy();
     };
   });
