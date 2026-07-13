@@ -18,6 +18,18 @@
   // Relative link (not root-absolute) so it resolves correctly under any base
   // path, and opens in a new tab so the reader keeps their place in the app.
   const METHODS_URL = 'methods.html';
+
+  // Born-on / last-updated, baked in at build time from git (vite.config define).
+  // The CSP forbids a runtime GitHub call, so these are fixed when the bundle is built.
+  const bornISO = typeof __BUILD_BORN__ !== 'undefined' ? __BUILD_BORN__ : '';
+  const updatedISO = typeof __BUILD_UPDATED__ !== 'undefined' ? __BUILD_UPDATED__ : '';
+  const prettyDate = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    return Number.isNaN(d.getTime())
+      ? iso
+      : d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
 </script>
 
 <div class="help">
@@ -28,6 +40,13 @@
       A friendly tool for a single idea: a burst of neural spikes gets turned into
       a smooth calcium signal, and we want to see the <em>shape</em> that links the two.
     </p>
+    {#if bornISO || updatedISO}
+      <p class="born">
+        {#if bornISO}<span>Born {prettyDate(bornISO)}</span>{/if}
+        {#if bornISO && updatedISO}<span class="sep">·</span>{/if}
+        {#if updatedISO}<span>Last updated {prettyDate(updatedISO)}</span>{/if}
+      </p>
+    {/if}
   </header>
 
   <!-- Prominent path to the serious document — first thing a professional sees. -->
@@ -177,6 +196,16 @@
     margin: 0;
     max-width: 60ch;
   }
+  .born {
+    margin: 12px 0 0;
+    font-size: 13px;
+    color: var(--text-muted, var(--text));
+    font-family: var(--mono);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .born .sep { opacity: 0.5; }
 
   /* --- prominent CTA to the serious document --- */
   .methods-cta {

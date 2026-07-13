@@ -1,5 +1,20 @@
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { execSync } from 'node:child_process'
+
+// Build-time git dates for the Tab 0 "born on / last updated" line. Baked in at
+// build (NOT fetched at runtime) — the strict CSP (connect-src 'none', §6) forbids
+// calling the GitHub API from the browser, so these come from git history when the
+// bundle is built. Born = the repo's first (root) commit; updated = HEAD at build.
+function gitDate(cmd, fallback) {
+  try {
+    return execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim().split('\n').pop() || fallback
+  } catch {
+    return fallback
+  }
+}
+const BUILD_BORN = gitDate('git log --max-parents=0 --format=%cs', '2026-06-21')
+const BUILD_UPDATED = gitDate('git log -1 --format=%cs', '')
 
 // Production CSP (FOUNDATIONS §6 / ADR-0008). It must hold on the shipped
 // static artifact, but it breaks Vite's dev server: the HMR websocket trips
@@ -30,4 +45,8 @@ function injectCspOnBuild() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [svelte(), injectCspOnBuild()],
+  define: {
+    __BUILD_BORN__: JSON.stringify(BUILD_BORN),
+    __BUILD_UPDATED__: JSON.stringify(BUILD_UPDATED),
+  },
 })
