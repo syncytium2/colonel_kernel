@@ -40,6 +40,11 @@
     mulberry32,
   } from './core/index.js';
   import methodsSvg from './assets/methods_explainer.svg?url'; // "About the methods" modal (data-safe explainer)
+  // Per-recording summary + Save-as-PDF (summaries & export, Phase 1). The builder is
+  // SheetJS-free (region helpers are injected via xlsxApi), so importing it here does
+  // NOT pull SheetJS into the main chunk (FOUNDATIONS §6 code-split).
+  import SummaryReport from './SummaryReport.svelte';
+  import { buildRecordingSummary } from './core/recording-summary.js';
 
   // Shared plot-width preference from App (2026-07-03 layout unification): false =
   // capped (1600px), true = full-bleed. Was the old `main.wide` cap; now driven by
@@ -97,6 +102,31 @@
 
   let recording = $state(null); // LoadedRecording (xlsx, has .regions) or LoadedRegion (csv) — the loaded file
   let xlsxApi = $state(null); // load-xlsx fns stashed after dynamic import (keeps SheetJS code-split, §6)
+
+  // --- per-recording summary + Save-as-PDF (summaries & export, Phase 1) ---
+  let showSummary = $state(false);
+  let summary = $state(null);
+  let summaryBusy = $state(false);
+  let summaryError = $state(null);
+  async function openSummary() {
+    if (!recording || !xlsxApi) return; // xlsx (with regions) only — the summary is per-region
+    showSummary = true;
+    summary = null;
+    summaryError = null;
+    summaryBusy = true;
+    // Let the "building…" overlay paint before the heavy recovery (all ROIs × regions × 3 methods + STA).
+    await new Promise((r) => setTimeout(r, 30));
+    try {
+      summary = buildRecordingSummary(recording, { xlsx: xlsxApi });
+    } catch (e) {
+      summaryError = String(e && e.message ? e.message : e);
+    } finally {
+      summaryBusy = false;
+    }
+  }
+  function closeSummary() {
+    showSummary = false;
+  }
   let error = $state(null);
   let fileName = $state('');
   let dragging = $state(false);
@@ -887,6 +917,13 @@
         </div>
         {#if error}<p class="error">{error}</p>{/if}
 
+        <!-- Per-recording summary → Save as PDF (summaries & export). xlsx w/ regions only. -->
+        {#if hasRegions && xlsxApi}
+          <button class="summary-btn" onclick={openSummary} disabled={summaryBusy}>
+            {summaryBusy ? 'Building summary…' : '📄 Summary report / Save as PDF'}
+          </button>
+        {/if}
+
         <!-- concise summary -->
         <p class="summary">
           <strong>{displayRegion.rois.length} ROIs</strong> · showing <strong>{colLabel(selectedCol)}</strong><br />
@@ -1307,9 +1344,74 @@
       </div>
     </div>
   {/if}
+
+  <!-- Per-recording summary report (summaries & export, Phase 1). -->
+  {#if showSummary}
+    {#if summary}
+      <SummaryReport {summary} onClose={closeSummary} />
+    {:else}
+      <div class="summary-loading" role="status">
+        <div class="sl-card">
+          {#if summaryError}
+            <p class="sl-err">Could not build summary: {summaryError}</p>
+            <button class="btn" onclick={closeSummary}>Close</button>
+          {:else}
+            <p>Building summary… <span class="muted">(recovering every ROI across regions)</span></p>
+          {/if}
+        </div>
+      </div>
+    {/if}
+  {/if}
 </section>
 
 <style>
+  /* Per-recording summary (summaries & export, Phase 1) */
+  .summary-btn {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 12px;
+    margin: 2px 0 4px;
+    border: 1px solid var(--accent-border);
+    border-radius: 8px;
+    background: var(--accent-bg);
+    color: var(--text-h);
+    cursor: pointer;
+    text-align: left;
+  }
+  .summary-btn:hover:not(:disabled) { border-color: var(--accent); }
+  .summary-btn:disabled { opacity: 0.7; cursor: default; }
+  .summary-loading {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+  }
+  .sl-card {
+    background: var(--bg);
+    color: var(--text-h);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 26px;
+    font-size: 15px;
+    text-align: center;
+    max-width: 90vw;
+  }
+  .sl-card .muted { color: var(--text); }
+  .sl-err { color: #c0392b; margin: 0 0 12px; }
+  .sl-card button {
+    font: inherit;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--text-h);
+    cursor: pointer;
+  }
+
   /* "About the methods" — help affordance + explainer modal */
   .field-lab {
     display: inline-flex;
