@@ -16,6 +16,7 @@
   // recoverKernel the real Tab 2 uses); this component only adds the game loop.
   import Shell from './Shell.svelte';
   import Plot from './Plot.svelte';
+  import Celebration from './Celebration.svelte';
   import {
     makeGrid,
     rasterize,
@@ -48,6 +49,7 @@
   let phase = $state('play'); // 'play' | 'revealed'
   let scored = $state(false); // guard: a round updates the tally exactly once
   let tally = $state({ you: 0, colonel: 0, ties: 0 });
+  let celebrateToken = $state(0); // bump → Celebration fires a fresh random pop
 
   // the player's kernel (calcium family; they shape rise/decay/peak)
   let uTauRise = $state(0.15);
@@ -156,6 +158,11 @@
       else tally.ties += 1;
       tally = { ...tally };
       scored = true;
+      // Celebrate ANY time you out-score the Colonel — even on an uncoupled round
+      // (a hollow win in the tally, but you still beat the number, so it pops).
+      const beat =
+        Number.isFinite(userR2) && Number.isFinite(round.colonelR2) && userR2 > round.colonelR2 + 1e-4;
+      if (beat) celebrateToken += 1;
     }
     phase = 'revealed';
   }
@@ -333,6 +340,8 @@
     </div>
   {/snippet}
 </Shell>
+
+<Celebration trigger={celebrateToken} />
 
 <style>
   .rail-title { display: flex; flex-direction: column; gap: 1px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
