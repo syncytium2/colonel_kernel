@@ -10,6 +10,11 @@ export { nextPow2, circularConvolve, deconvolveCircular, extractSymmetric, recov
 // "Beat the Colonel" challenge scoring (game modes): reconstruction R² + a seeded
 // Poisson spike generator. Pure, SheetJS-free.
 export { rSquared, poissonSpikes } from './challenge.js';
+// Tab 3 (honest illustration, FOUNDATIONS §2): naive spike inference — the SAME
+// regularized deconvolution as Tab 2, pointed the other way (recover the input
+// spikes given the trace + an ASSUMED kernel). Deliberately unclamped so the
+// failure (ringing, negative lobes) shows.
+export { inferSpikes, kernelToCircularPsf, inferenceReport } from './infer-spikes.js';
 // Constrained-parametric recovery (ADR-0021 method 2): causal double-exponential fit,
 // a PARALLEL method to the free-vector recoverKernel above (never replaces it).
 export {

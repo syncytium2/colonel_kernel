@@ -4,6 +4,7 @@
   import BeatTheColonel from './lib/BeatTheColonel.svelte';
   import Shell from './lib/Shell.svelte';
   import Help from './lib/Help.svelte';
+  import Tab3 from './lib/Tab3.svelte';
   import {
     makeGrid,
     rasterize,
@@ -19,11 +20,12 @@
 
   // --- tab selection ---
   // First-time landing is Tab 0 (Start here) — the accessible on-ramp for naive
-  // users. Direct/screenshot links still work: #tab1 / #tab2 (and #tab0/#help)
+  // users. Direct/screenshot links still work: #tab1 / #tab2 / #tab3 (and #tab0/#help)
   // pick their tab explicitly.
   function initialTab() {
     if (typeof location === 'undefined') return 0;
     const h = location.hash.replace('#', '');
+    if (h === 'tab3') return 3;
     if (h === 'tab2') return 2;
     if (h === 'tab1') return 1;
     if (h === 'tab0' || h === 'help' || h === 'start') return 0;
@@ -231,6 +233,7 @@
     <button class:active={tab === 0} onclick={() => (tab = 0)} title="What this tool is + the mathematical reference">0 · Start here</button>
     <button class:active={tab === 1} onclick={() => (tab = 1)}>1 · Convolution</button>
     <button class:active={tab === 2} onclick={goToTab2} title="loads the current Tab 1 signal for recovery">2 · Kernel recovery</button>
+    <button class:active={tab === 3} onclick={() => (tab = 3)} title="naive spike inference — honest illustration (in development)">3 · Spike inference</button>
     {#if tab === 2}
       <button class="challengebtn" class:on={challenge2} onclick={() => (challenge2 = !challenge2)} title="Beat the Colonel — design a kernel to beat the deconvolution">
         {challenge2 ? '← Back to Analyze' : '🎯 Beat the Colonel'}
@@ -250,6 +253,19 @@
     {:else}
       <Tab2 {wide} {handoff} />
     {/if}
+  {:else if tab === 3}
+    <Tab3
+      {wide}
+      {grid}
+      {kernel}
+      {kernelDisplay}
+      {kernelXRange}
+      traceTimes={outTimes}
+      traceValues={noisyOut ?? outValues}
+      {gridTimes}
+      {rasterSamples}
+      spikeCount={raster.placed}
+    />
   {:else}
     <Shell {wide}>
       <!-- LEFT RAIL — tools (was the top controls card; folded into the 20% rail). -->
