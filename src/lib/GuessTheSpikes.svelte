@@ -35,6 +35,8 @@
   const WIN_S = 5;
   const MATCH_TOL = 0.3;
   const GOOD_F1 = 0.7;
+  const NOISE_NORMAL = 1.2; // cohort-σ multiples (ADR-0015)
+  const NOISE_ADVANCED = 4; // advanced is harder in every way — a noisier trace too
   const grid = makeGrid({ sampleRate: RATE, duration: DURATION });
   const gridTimes = Array.from(grid.times);
 
@@ -94,7 +96,10 @@
     );
     const raster = rasterize(spikes, grid, { amplitudeMode: 'unit' });
     const clean = sliceGrid(convolveOnGrid(raster.samples, grid, kernel).samples, kernel.zeroIndex);
-    const target = Float64Array.from(addAWGN(clean, sigmaForLevel(1.2), mulberry32(roundSeed * 6151 + 9)).slice(0, grid.n));
+    // advanced hides the kernel AND runs a noisier trace (read `advanced` so the round
+    // re-derives when the mode changes)
+    const noiseLevel = advanced ? NOISE_ADVANCED : NOISE_NORMAL;
+    const target = Float64Array.from(addAWGN(clean, sigmaForLevel(noiseLevel), mulberry32(roundSeed * 6151 + 9)).slice(0, grid.n));
 
     // the machine: naive deconvolution → peak-pick → discrete spikes, TIMED.
     const tMach = performance.now();
@@ -183,9 +188,10 @@
 
     <div class="note">
       {#if advanced}
-        <strong>Advanced.</strong> You know <em>neither</em> the kernel nor the spikes — the real
-        inference problem. <strong>Tune the kernel</strong> and <strong>place spikes</strong> until
-        <span class="you">your reconstruction</span> explains the <span class="target">trace</span>.
+        <strong>Advanced.</strong> You know <em>neither</em> the kernel nor the spikes, on a
+        <strong>noisier trace</strong> — the real inference problem. <strong>Tune the kernel</strong>
+        and <strong>place spikes</strong> until <span class="you">your reconstruction</span> explains
+        the <span class="target">trace</span>.
       {:else}
         You're <strong>given the kernel</strong> and a <span class="target">calcium trace</span>. Place
         spikes (click add · shift-click remove · drag move) so <span class="you">your reconstruction</span>
