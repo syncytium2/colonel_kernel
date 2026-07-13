@@ -1,6 +1,7 @@
 <script>
   import Plot from './lib/Plot.svelte';
   import Tab2 from './lib/Tab2.svelte';
+  import BeatTheColonel from './lib/BeatTheColonel.svelte';
   import Shell from './lib/Shell.svelte';
   import Help from './lib/Help.svelte';
   import {
@@ -66,6 +67,8 @@
   // Shared width preference for the plot shell (both tabs). false = capped (1600px),
   // true = full-bleed. A view pref only; lives here so Tab 1 and Tab 2 obey one toggle.
   let wide = $state(false);
+  // Tab 2 "Challenge" (Beat the Colonel) mode. Tab-local; Learn mode is unchanged.
+  let challenge2 = $state(false);
   // Kernel peak height in dF/F₀ (ADR-0031 follow-up). Builders emit a peak-1
   // shape; this scales it to a realistic transient height so the imported
   // measurement noise (σ ≈ 0.0024 dF/F₀, ADR-0015) actually bites. Universal to
@@ -228,6 +231,11 @@
     <button class:active={tab === 0} onclick={() => (tab = 0)} title="What this tool is + the mathematical reference">0 · Start here</button>
     <button class:active={tab === 1} onclick={() => (tab = 1)}>1 · Convolution</button>
     <button class:active={tab === 2} onclick={goToTab2} title="loads the current Tab 1 signal for recovery">2 · Kernel recovery</button>
+    {#if tab === 2}
+      <button class="challengebtn" class:on={challenge2} onclick={() => (challenge2 = !challenge2)} title="Beat the Colonel — design a kernel to beat the deconvolution">
+        {challenge2 ? '← Back to Analyze' : '🎯 Beat the Colonel'}
+      </button>
+    {/if}
     <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
     <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
       {wide ? '▥ Fit width' : '▤ Full width'}
@@ -237,7 +245,11 @@
   {#if tab === 0}
     <Help onNavigate={navFromHelp} />
   {:else if tab === 2}
-    <Tab2 {wide} {handoff} />
+    {#if challenge2}
+      <BeatTheColonel {wide} />
+    {:else}
+      <Tab2 {wide} {handoff} />
+    {/if}
   {:else}
     <Shell {wide}>
       <!-- LEFT RAIL — tools (was the top controls card; folded into the 20% rail). -->
@@ -457,6 +469,16 @@
     border-color: var(--accent);
     color: var(--text-h);
     background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  }
+  .challengebtn {
+    border-color: var(--accent-border) !important;
+    color: var(--accent) !important;
+    font-weight: 600;
+  }
+  .challengebtn.on {
+    background: var(--accent) !important;
+    color: #fff !important;
+    border-color: var(--accent) !important;
   }
   .widthbtn {
     margin-left: auto; /* push the width toggle to the right edge of the nav */

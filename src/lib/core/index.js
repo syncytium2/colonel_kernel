@@ -7,6 +7,9 @@ export { convolveLinear, convolveOnGrid } from './convolve.js';
 // kernel diagnostics that judge a recovered kernel (ADR-0014).
 export { SIGMA_COHORT_TYPICAL, NOISE_LEVEL_MAX, sigmaForLevel, addAWGN, mulberry32, gaussian } from './noise.js';
 export { nextPow2, circularConvolve, deconvolveCircular, extractSymmetric, recoverKernel } from './deconvolve.js';
+// "Beat the Colonel" challenge scoring (game modes): reconstruction R² + a seeded
+// Poisson spike generator. Pure, SheetJS-free.
+export { rSquared, poissonSpikes } from './challenge.js';
 // Constrained-parametric recovery (ADR-0021 method 2): causal double-exponential fit,
 // a PARALLEL method to the free-vector recoverKernel above (never replaces it).
 export {
