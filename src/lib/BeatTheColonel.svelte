@@ -51,6 +51,21 @@
   let tally = $state({ you: 0, colonel: 0, ties: 0 });
   let celebrateToken = $state(0); // bump → Celebration fires a fresh random pop
 
+  // --- timers: your (wall-clock) design time vs the Colonel's compute time ---
+  let elapsedMs = $state(0); // ticks live during play
+  let yourTimeMs = $state(0); // frozen on reveal
+  let timerStart = 0; // plain (read by reveal for a precise final time)
+  $effect(() => {
+    const _seed = roundSeed; // restart the clock on every new round
+    if (phase !== 'play') return;
+    timerStart = performance.now();
+    elapsedMs = 0;
+    const id = setInterval(() => (elapsedMs = performance.now() - timerStart), 100);
+    return () => clearInterval(id);
+  });
+  const fmtTime = (ms) =>
+    !Number.isFinite(ms) ? '—' : ms < 1000 ? ms.toFixed(ms < 10 ? 1 : 0) + ' ms' : (ms / 1000).toFixed(1) + ' s';
+
   // the player's kernel (calcium family; they shape rise/decay/peak)
   let uTauRise = $state(0.15);
   let uTauDecay = $state(0.5);
@@ -113,7 +128,10 @@
     targetPad.set(targetTrace);
     const sdPad = new Float64Array(N);
     sdPad.set(raster.samples.subarray(0, Math.min(raster.samples.length, N)));
+    // time the Colonel's actual work — the regularized deconvolution (FFT-based).
+    const tCol = performance.now();
     const colonelKernel = recoverKernel(targetPad, sdPad, { windowSamples: winSamples, dt: grid.dt, lambda: LAMBDA });
+    const colonelTimeMs = performance.now() - tCol;
     const colonelReconFull = convolveOnGrid(raster.samples, grid, colonelKernel).samples;
     const colonelRecon = new Float64Array(grid.n);
     // offset by the Colonel kernel's zeroIndex (its center) so its reconstruction lands
@@ -124,7 +142,7 @@
     return {
       spikes, raster, hiddenKernel, uncoupled,
       target: targetTrace,
-      colonelKernel, colonelRecon, colonelR2,
+      colonelKernel, colonelRecon, colonelR2, colonelTimeMs,
       nSpikes: spikes.length,
     };
   });
@@ -150,8 +168,15 @@
     return 'tie';
   });
 
+  const speedup = $derived(
+    Number.isFinite(yourTimeMs) && yourTimeMs > 0 && round.colonelTimeMs > 0
+      ? Math.round(yourTimeMs / round.colonelTimeMs)
+      : null,
+  );
+
   function reveal() {
     if (!scored) {
+      yourTimeMs = performance.now() - timerStart;
       const v = verdict;
       if (v === 'you') tally.you += 1;
       else if (v === 'colonel') tally.colonel += 1;
@@ -248,10 +273,12 @@
       <div class="score you">
         <div class="k">Your fit (R²)</div>
         <div class="v">{pctR2(userR2)}</div>
+        <div class="t">⏱ {fmtTime(phase === 'play' ? elapsedMs : yourTimeMs)}</div>
       </div>
       <div class="score colonel" class:hidden={phase !== 'revealed'}>
         <div class="k">Colonel (R²)</div>
         <div class="v">{phase === 'revealed' ? pctR2(round.colonelR2) : '·····'}</div>
+        <div class="t">⏱ {phase === 'revealed' ? fmtTime(round.colonelTimeMs) : '·····'}</div>
       </div>
     </div>
 
@@ -272,7 +299,11 @@
         {/if}
       </div>
       <p class="reveal-note">
-        Kernel panel now overlays the <span class="true">hidden true kernel</span>,
+        You took <strong>{fmtTime(yourTimeMs)}</strong>; the Colonel's deconvolution took
+        <strong>{fmtTime(round.colonelTimeMs)}</strong>.{#if speedup && speedup > 1}
+          That's about <strong>{speedup.toLocaleString()}×</strong> faster.{/if}
+        The machine is instant; the game is whether you can be more <em>accurate</em>.
+        <br />Kernel panel now overlays the <span class="true">hidden true kernel</span>,
         the <span class="col">Colonel's</span>, and <span class="you">yours</span>.
       </p>
     {:else}
@@ -377,6 +408,7 @@
   .score.hidden { opacity: 0.6; }
   .score .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text); }
   .score .v { font-family: var(--mono); font-size: 30px; color: var(--text-h); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .score .t { font-family: var(--mono); font-size: 12px; color: var(--text); margin-top: 4px; font-variant-numeric: tabular-nums; }
 
   .verdict { margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 14px; line-height: 1.45; border: 1px solid var(--border); }
   .verdict.you { background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border-color: var(--accent-border); color: var(--text-h); }
