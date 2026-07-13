@@ -188,9 +188,9 @@
       Colliding spikes in one bin are clamped to 1 (collisions are logged). This keeps the
       &ldquo;is there a clean kernel?&rdquo; test meaningful by forcing the kernel to explain
       the trace.</li>
-    <li><strong>Binned count (validation path).</strong> The honest representation of real
+    <li><strong>Binned count (for real data).</strong> The honest representation of real
       data: a bin holds the <em>number</em> of spikes that fall in it
-      (<code>hist(spikes, times)</code>). At a 10&nbsp;Hz frame rate a cell can fire several
+      (the per-frame spike count). At a 10&nbsp;Hz frame rate a cell can fire several
       times per 100&nbsp;ms bin, so a bin value of 3 means three identical unit events. The
       count is objective &mdash; it does not introduce a free fit parameter &mdash; so it does
       not compromise the identifiability of Tab&nbsp;2.</li>
@@ -245,9 +245,10 @@
   </div>
   <p>
     Here <var>L</var> is a smoothness operator (a discrete Laplacian &mdash; a second-difference
-    penalty) and &lambda; is the regularization strength. The reference lab pipeline calls
-    MATLAB&rsquo;s <code>deconvreg</code> with its <em>default</em> Laplacian prior and <em>no</em>
-    explicit parameter &mdash; the smoothing happens silently. <strong>Colonel Kernel makes
+    penalty) and &lambda; is the regularization strength. Many deconvolution routines fix this
+    regularization at a hidden default &mdash; for example, MATLAB&rsquo;s constrained-least-squares
+    deconvolution (<code>deconvreg</code>) applies a Laplacian smoothness prior with no exposed
+    parameter, so the smoothing happens silently. <strong>Colonel Kernel instead makes
     &lambda; an explicit, adjustable control</strong>, because whether an apparent feature
     survives across &lambda; is itself one of the four checks (&sect;<a href="#checks">8</a>).
     What was hidden becomes inspectable.
@@ -373,7 +374,7 @@
       <tbody>
         <tr><td><strong>What</strong></td>
           <td>Convolution arithmetic, origin/<code>zeroIndex</code> alignment, binned-count matching
-            <code>hist()</code>, output length &amp; finiteness.</td>
+            a per-frame spike histogram, output length &amp; finiteness.</td>
           <td>The <var>R</var><sup>2</sup>/residual of reconstruction against the real trace.</td></tr>
         <tr><td><strong>How treated</strong></td>
           <td><strong>Gated</strong>, pass/fail. Must hold <em>regardless of coupling</em>; verified on
@@ -470,31 +471,31 @@
 
   <!-- ===================================================================== -->
   <h2 id="numerics"><span class="num">11</span>Numerical conventions &amp; reproducibility</h2>
-  <p>These conventions make sample counts and lag alignment reproducible against the reference pipeline:</p>
+  <p>These conventions fix how sample counts and lag alignment are computed, so results are exactly reproducible:</p>
   <ul>
     <li><strong>Odd, symmetric kernel.</strong> <var>W</var> = round(<var>win</var>/<code>dt</code>);
       kernel length = 2<var>W</var>&nbsp;+&nbsp;1, extracted symmetrically about the center so a true
       lag-0 sample always exists. Recovery requires <code>k&nbsp;&gt;&nbsp;2W</code> samples of data;
       shorter regions are declined (&ldquo;region too short&rdquo;).</li>
-    <li><strong>Even-length trim.</strong> The reference drops the final sample when the frame count is
-      odd (following the executed code, whose comment states the opposite). This shifts only the phase
-      alignment of the binned spike density against the frame grid; it does not affect centering, which
-      the symmetric odd-length extraction guarantees independently.</li>
+    <li><strong>Even-length trim.</strong> When the frame count is odd, the final sample is dropped so
+      the record has even length. This shifts only the phase alignment of the binned spike density
+      against the frame grid; it does not affect centering, which the symmetric odd-length kernel
+      extraction guarantees independently.</li>
     <li><strong>Edge buffer.</strong> Each region is cropped with ~1&nbsp;s (10&nbsp;samples at 10&nbsp;Hz)
       of padding before the first spike and after the last, so the kernel&rsquo;s edges are not
       data-starved.</li>
     <li><strong>Authoritative timebase.</strong> When a <code>times</code> vector is present it governs;
       a bare nominal <code>dt</code> is accepted with a warning that uniform-<code>dt</code> reconstruction
       can drift from the spike clock.</li>
-    <li><strong>Binned-count on the validation path.</strong> The path that validates against the reference
-      kernels uses <code>hist(spikes, times)</code> (count-valued), not the unit-amplitude teaching default.</li>
+    <li><strong>Binned-count for quantitative recovery.</strong> Kernel recovery bins spikes as per-frame
+      counts (a spike-count histogram on the frame grid), not the unit-amplitude teaching default.</li>
   </ul>
   <div class="callout">
     <span class="label">Positive control (real data)</span>
     <p>
-      On a real paired recording, ROI&nbsp;1 yields a recoverable kernel: the lab routine produces a clean
-      transient peaking at +0.6&nbsp;s, and the regularized recovery reproduces that +0.6&nbsp;s peak stably
-      across &lambda;&nbsp;=&nbsp;0.002&ndash;3. Free-vector (+0.60&nbsp;s), parametric (+0.63&nbsp;s), and STA
+      On a real paired recording, ROI&nbsp;1 yields a recoverable kernel: the recovered transient peaks at
+      +0.6&nbsp;s and holds that peak stably across &lambda;&nbsp;=&nbsp;0.002&ndash;3. Free-vector
+      (+0.60&nbsp;s), parametric (+0.63&nbsp;s), and STA
       (+0.80&nbsp;s) agree at the peak (the later STA peak is expected STA behavior). Yet the <em>global</em>
       reconstruction fit is imperfect (a large calcium transient near 780&nbsp;s with no matching spikes; a
       400&ndash;700&nbsp;s stretch of reduced gain). A coupled cell with localized decoupling episodes
@@ -507,7 +508,7 @@
   <h2 id="limits"><span class="num">12</span>Limitations and caveats</h2>
   <ul>
     <li><strong>Baseline tilt / Laplacian low-frequency blindness.</strong> The free-vector recovery can
-      ride a slow baseline that tilts opposite the reference kernel, producing a whole-window correlation
+      ride a slow baseline that tilts opposite the true transient, producing a whole-window correlation
       that is negative even when the peak agreement is strong. This is a baseline-dominated statistic and a
       known, still-being-characterized regularization-side artifact &mdash; not a sign inversion and not
       evidence against the kernel. Read peak agreement over a narrow window around the peak, not raw
@@ -554,11 +555,17 @@ Retrieved from https://kernel.tonydefazio.com/methods</div>
       <a href="https://github.com/j-friedrich/OASIS" target="_blank" rel="noopener"><cite>OASIS</cite></a>
       (fast convex autoregressive sparse inference; Friedrich et al.). Colonel Kernel deliberately does
       <em>not</em> assume the generative model these tools rely on.</li>
-    <li>Regularized deconvolution &mdash; MATLAB <cite>deconvreg</cite> (constrained least squares with a
-      default Laplacian smoothness prior), the lab routine this tool ports and makes explicit.</li>
-    <li>Related interactive demonstrators &mdash; <cite>phiresky/convolution-demo</cite> (client-side 1D
-      forward convolution) and <cite>CNN Explainer</cite> (Svelte + D3, fully in-browser), which validate
-      the stack and the in-browser, no-backend architecture.</li>
+    <li>Regularized deconvolution &mdash; Colonel Kernel recovers the kernel by regularized least squares
+      with a Laplacian smoothness prior, the same well-established convention used by standard
+      constrained-least-squares deconvolution (for example, MATLAB&rsquo;s
+      <a href="https://www.mathworks.com/help/images/ref/deconvreg.html" target="_blank" rel="noopener"><cite>deconvreg</cite></a>).
+      The difference is that the tool exposes the regularization strength as an explicit control rather
+      than fixing it at a hidden default.</li>
+    <li>Related interactive demonstrators &mdash;
+      <a href="https://github.com/phiresky/convolution-demo" target="_blank" rel="noopener"><cite>phiresky/convolution-demo</cite></a>
+      (client-side 1D forward convolution) and
+      <a href="https://poloclub.github.io/cnn-explainer/" target="_blank" rel="noopener"><cite>CNN Explainer</cite></a>
+      (Svelte + D3, fully in-browser), which validate the stack and the in-browser, no-backend architecture.</li>
     <li>Project decision records &mdash; the
       <a href="https://github.com/syncytium2/colonel_kernel/tree/master/docs/adr" target="_blank" rel="noopener">Architecture Decision Records (ADRs)</a>
       and <a href="https://github.com/syncytium2/colonel_kernel/blob/master/FOUNDATIONS.md" target="_blank" rel="noopener"><cite>FOUNDATIONS</cite></a>
