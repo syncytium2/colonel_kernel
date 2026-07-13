@@ -66,6 +66,7 @@
   <nav class="toc" aria-label="Table of contents">
     <h2>Contents</h2>
     <ol>
+      <li><a href="#privacy">Data handling &amp; privacy</a></li>
       <li><a href="#problem">The problem and the three inversions</a></li>
       <li><a href="#model">Signal model and definitions</a></li>
       <li><a href="#forward">The forward model (convolution)</a></li>
@@ -77,14 +78,27 @@
       <li><a href="#multiroi">The multi-ROI phenomenon</a></li>
       <li><a href="#numerics">Numerical conventions &amp; reproducibility</a></li>
       <li><a href="#limits">Limitations and caveats</a></li>
-      <li><a href="#privacy">Data-handling &amp; privacy</a></li>
       <li><a href="#cite">How to cite</a></li>
       <li><a href="#refs">References</a></li>
     </ol>
   </nav>
 
   <!-- ===================================================================== -->
-  <h2 id="problem"><span class="num">1</span>The problem and the three inversions</h2>
+  <h2 id="privacy"><span class="num">1</span>Data handling &amp; privacy</h2>
+  <p>
+    Colonel Kernel runs <strong>entirely in the browser</strong>. All computation &mdash; rasterization,
+    convolution, FFT, deconvolution, STA &mdash; is client-side; there is no backend. The application makes
+    <strong>no third-party network requests</strong> (no CDNs, fonts, analytics, or error reporting): every
+    library, font, and asset is bundled and served same-origin. A strict Content-Security-Policy
+    (<code>connect-src 'none'; default-src 'self'</code>) is injected into the shipped artifact and enforces
+    the no-egress guarantee at the browser level; this reference page carries the same policy. Consequently a
+    researcher&rsquo;s unpublished trace data <strong>never leaves their machine</strong>, and the claim is
+    auditable (DevTools &rarr; Network &rarr; reload &rarr; only same-origin requests). No user data is
+    persisted beyond explicit, user-controlled file open/download.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="problem"><span class="num">2</span>The problem and the three inversions</h2>
   <p>
     A calcium indicator turns a train of action potentials into a fluorescence
     signal. To first approximation, each spike contributes a stereotyped transient
@@ -124,13 +138,13 @@
   </p>
 
   <!-- ===================================================================== -->
-  <h2 id="model"><span class="num">2</span>Signal model and definitions</h2>
+  <h2 id="model"><span class="num">3</span>Signal model and definitions</h2>
   <p>Every signal in the tool obeys one in-memory contract:</p>
   <div class="eq">Signal = { samples, dt, zeroIndex, times? }<span class="tag">(2)</span></div>
   <ul>
     <li><strong>Spike train <var>x</var>.</strong> Action-potential event <em>times</em>
       (seconds), a sparse list &mdash; not pre-binned. Rasterization onto the frame
-      grid (&sect;<a href="#forward">3</a>) is the tool's job.</li>
+      grid (&sect;<a href="#forward">4</a>) is the tool's job.</li>
     <li><strong>Trace <var>y</var>.</strong> A measured &Delta;<var>F</var>/<var>F</var><sub>0</sub>
       time series on a dense, regular (but clock-jittered) frame grid; one column per
       region of interest (ROI).</li>
@@ -157,13 +171,13 @@
     <strong>Negative-lag content is retained, not discarded.</strong> A causal indicator
     fills the positive half and sits near zero on the negative side; genuine
     <em>negative-lag</em> energy encodes lead/lag structure between cells (or a
-    regularization artifact &mdash; &sect;<a href="#limits">11</a>). Retaining it turns
+    regularization artifact &mdash; &sect;<a href="#limits">12</a>). Retaining it turns
     the question from &ldquo;is there a kernel?&rdquo; into &ldquo;is there a kernel, and
     what is its coupling direction?&rdquo;
   </p>
 
   <!-- ===================================================================== -->
-  <h2 id="forward"><span class="num">3</span>The forward model (convolution)</h2>
+  <h2 id="forward"><span class="num">4</span>The forward model (convolution)</h2>
   <h3>Rasterization</h3>
   <p>
     Spike times are binned onto the frame grid before convolution. Two amplitude
@@ -196,7 +210,7 @@
   </p>
 
   <!-- ===================================================================== -->
-  <h2 id="recovery"><span class="num">4</span>Kernel recovery by deconvolution</h2>
+  <h2 id="recovery"><span class="num">5</span>Kernel recovery by deconvolution</h2>
   <h3>The commutativity trick</h3>
   <p>
     Because convolution commutes, <var>y</var> = <var>x</var> <span class="op">&otimes;</span> <var>k</var>
@@ -235,7 +249,7 @@
     MATLAB&rsquo;s <code>deconvreg</code> with its <em>default</em> Laplacian prior and <em>no</em>
     explicit parameter &mdash; the smoothing happens silently. <strong>Colonel Kernel makes
     &lambda; an explicit, adjustable control</strong>, because whether an apparent feature
-    survives across &lambda; is itself one of the four checks (&sect;<a href="#checks">7</a>).
+    survives across &lambda; is itself one of the four checks (&sect;<a href="#checks">8</a>).
     What was hidden becomes inspectable.
   </p>
   <div class="callout">
@@ -249,7 +263,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <h2 id="methods"><span class="num">5</span>Three parallel recovery methods</h2>
+  <h2 id="methods"><span class="num">6</span>Three parallel recovery methods</h2>
   <p>
     Kernel recovery runs as <strong>three methods in parallel</strong>. None is
     authoritative; <strong>the spread between them is the diagnostic</strong> &mdash; when the
@@ -299,7 +313,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <h2 id="sta"><span class="num">6</span>Spike-triggered averaging (validation partner)</h2>
+  <h2 id="sta"><span class="num">7</span>Spike-triggered averaging (validation partner)</h2>
   <p>
     Every deconvolution is read against an <strong>independent</strong> spike-triggered average
     (STA): the mean trace snippet in a symmetric window around each isolated spike. STA assumes
@@ -330,7 +344,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <h2 id="checks"><span class="num">7</span>The four goodness-of-fit checks</h2>
+  <h2 id="checks"><span class="num">8</span>The four goodness-of-fit checks</h2>
   <p>
     Recovery <em>always returns something</em>. The scientific question is whether that something
     is meaningful, and the tool surfaces four checks so the human can judge:
@@ -399,7 +413,7 @@
   </p>
 
   <!-- ===================================================================== -->
-  <h2 id="regions"><span class="num">8</span>Regional analysis</h2>
+  <h2 id="regions"><span class="num">9</span>Regional analysis</h2>
   <p>
     A recording may span several experimental epochs (baseline, drug wash-in, high-K&#8314;, etc.).
     A kernel recovered over the <strong>whole</strong> multi-region signal is
@@ -433,7 +447,7 @@
   </p>
 
   <!-- ===================================================================== -->
-  <h2 id="multiroi"><span class="num">9</span>The multi-ROI phenomenon</h2>
+  <h2 id="multiroi"><span class="num">10</span>The multi-ROI phenomenon</h2>
   <p>
     An input file carries several calcium-trace columns. The first is the default targeted cell, but
     it is only a default highlight &mdash; recovery runs against <strong>every</strong> trace column,
@@ -455,7 +469,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <h2 id="numerics"><span class="num">10</span>Numerical conventions &amp; reproducibility</h2>
+  <h2 id="numerics"><span class="num">11</span>Numerical conventions &amp; reproducibility</h2>
   <p>These conventions make sample counts and lag alignment reproducible against the reference pipeline:</p>
   <ul>
     <li><strong>Odd, symmetric kernel.</strong> <var>W</var> = round(<var>win</var>/<code>dt</code>);
@@ -490,7 +504,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <h2 id="limits"><span class="num">11</span>Limitations and caveats</h2>
+  <h2 id="limits"><span class="num">12</span>Limitations and caveats</h2>
   <ul>
     <li><strong>Baseline tilt / Laplacian low-frequency blindness.</strong> The free-vector recovery can
       ride a slow baseline that tilts opposite the reference kernel, producing a whole-window correlation
@@ -499,7 +513,7 @@
       evidence against the kernel. Read peak agreement over a narrow window around the peak, not raw
       whole-window correlation, as the headline.</li>
     <li><strong>The parametric foil is linear.</strong> Departure from it can indicate nonlinear coupling
-      rather than decoupling (&sect;<a href="#methods">5</a>).</li>
+      rather than decoupling (&sect;<a href="#methods">6</a>).</li>
     <li><strong>Drift is modeled minimally, not measured.</strong> The shape-regularized method&rsquo;s drift
       basis protects the kernel but over-claims the drift itself; it is not a trustworthy baseline-drift
       estimate.</li>
@@ -511,29 +525,16 @@
   </ul>
 
   <!-- ===================================================================== -->
-  <h2 id="privacy"><span class="num">12</span>Data-handling &amp; privacy</h2>
-  <p>
-    Colonel Kernel runs <strong>entirely in the browser</strong>. All computation &mdash; rasterization,
-    convolution, FFT, deconvolution, STA &mdash; is client-side; there is no backend. The application makes
-    <strong>no third-party network requests</strong> (no CDNs, fonts, analytics, or error reporting): every
-    library, font, and asset is bundled and served same-origin. A strict Content-Security-Policy
-    (<code>connect-src 'none'; default-src 'self'</code>) is injected into the shipped artifact and enforces
-    the no-egress guarantee at the browser level; this reference page carries the same policy. Consequently a
-    researcher&rsquo;s unpublished trace data <strong>never leaves their machine</strong>, and the claim is
-    auditable (DevTools &rarr; Network &rarr; reload &rarr; only same-origin requests). No user data is
-    persisted beyond explicit, user-controlled file open/download.
-  </p>
-
-  <!-- ===================================================================== -->
   <h2 id="cite"><span class="num">13</span>How to cite</h2>
   <p>
     If Colonel Kernel supports an analysis in your work, please cite the tool and this reference. Adapt the
     author/venue fields to your context:
   </p>
-  <div class="cite-box">Colonel Kernel: a client-side instrument for ground-truth calcium-indicator
-kernel recovery. Methods &amp; Mathematical Reference, version 1.0, 2026.
+  <div class="cite-box">DeFazio, R. A. Colonel Kernel: a client-side instrument for ground-truth
+calcium-indicator kernel recovery. Methods &amp; Mathematical Reference, version 1.0, 2026.
 Retrieved from &lt;application URL&gt;/methods.html</div>
-  <div class="cite-box">@software{colonel_kernel_2026,
+  <div class="cite-box">@software{defazio_colonel_kernel_2026,
+  author = {DeFazio, R. A.},
   title  = {Colonel Kernel: client-side calcium-indicator kernel recovery},
   note   = {Methods &amp; Mathematical Reference, v1.0},
   year   = {2026},
@@ -545,17 +546,22 @@ Retrieved from &lt;application URL&gt;/methods.html</div>
   <ol class="refs">
     <li>Spike inference &mdash; the inverse problem in the opposite direction, addressed by dedicated
       method families that run outside this tool:
-      <cite>CASCADE</cite> (supervised deep learning trained on ground truth),
-      <cite>MLspike</cite> (model-based Bayesian MAP inference over a biophysical generative model with
-      drifting baseline and indicator nonlinearities), and
-      <cite>OASIS</cite> (fast convex autoregressive sparse inference). Colonel Kernel deliberately does
+      <a href="https://github.com/HelmchenLabSoftware/Cascade" target="_blank" rel="noopener"><cite>CASCADE</cite></a>
+      (supervised deep learning trained on ground truth; Rupprecht et al., Helmchen lab),
+      <a href="https://github.com/MLspike/spikes" target="_blank" rel="noopener"><cite>MLspike</cite></a>
+      (model-based Bayesian MAP inference over a biophysical generative model with
+      drifting baseline and indicator nonlinearities; Deneux et al.), and
+      <a href="https://github.com/j-friedrich/OASIS" target="_blank" rel="noopener"><cite>OASIS</cite></a>
+      (fast convex autoregressive sparse inference; Friedrich et al.). Colonel Kernel deliberately does
       <em>not</em> assume the generative model these tools rely on.</li>
     <li>Regularized deconvolution &mdash; MATLAB <cite>deconvreg</cite> (constrained least squares with a
       default Laplacian smoothness prior), the lab routine this tool ports and makes explicit.</li>
     <li>Related interactive demonstrators &mdash; <cite>phiresky/convolution-demo</cite> (client-side 1D
       forward convolution) and <cite>CNN Explainer</cite> (Svelte + D3, fully in-browser), which validate
       the stack and the in-browser, no-backend architecture.</li>
-    <li>Project decision records &mdash; the Architecture Decision Records (ADRs) and <cite>FOUNDATIONS</cite>
+    <li>Project decision records &mdash; the
+      <a href="https://github.com/syncytium2/colonel_kernel/tree/master/docs/adr" target="_blank" rel="noopener">Architecture Decision Records (ADRs)</a>
+      and <a href="https://github.com/syncytium2/colonel_kernel/blob/master/FOUNDATIONS.md" target="_blank" rel="noopener"><cite>FOUNDATIONS</cite></a>
       document that this reference summarizes are maintained alongside the source and are the authoritative
       account of each individual decision.</li>
   </ol>
