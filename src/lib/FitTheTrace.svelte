@@ -42,6 +42,21 @@
   let uAmp = $state(0.1);
   let celebrateToken = $state(0);
 
+  // timer: how long you take to fit the trace (live during play, frozen on reveal)
+  let elapsedMs = $state(0);
+  let yourTimeMs = $state(0);
+  let timerStart = 0;
+  $effect(() => {
+    const _seed = roundSeed; // restart on each new round
+    if (phase !== 'play') return;
+    timerStart = performance.now();
+    elapsedMs = 0;
+    const id = setInterval(() => (elapsedMs = performance.now() - timerStart), 100);
+    return () => clearInterval(id);
+  });
+  const fmtTime = (ms) =>
+    !Number.isFinite(ms) ? '—' : ms < 1000 ? ms.toFixed(ms < 10 ? 1 : 0) + ' ms' : (ms / 1000).toFixed(1) + ' s';
+
   function sampleOnLag(kernel) {
     const win = Math.max(1, Math.round(WIN_S / grid.dt));
     const len = 2 * win + 1;
@@ -101,6 +116,7 @@
   }
 
   function reveal() {
+    yourTimeMs = performance.now() - timerStart;
     phase = 'revealed';
     if (Number.isFinite(userR2) && userR2 >= GOOD_FIT) celebrateToken += 1;
   }
@@ -166,6 +182,7 @@
       <div class="score you">
         <div class="k">Your fit (R²)</div>
         <div class="v">{pctR2(userR2)}</div>
+        <div class="t">⏱ {fmtTime(phase === 'play' ? elapsedMs : yourTimeMs)}</div>
       </div>
       <div class="score">
         <div class="k">Spikes placed</div>
@@ -271,6 +288,7 @@
   .score .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text); }
   .score .v { font-family: var(--mono); font-size: 30px; color: var(--text-h); margin-top: 4px; font-variant-numeric: tabular-nums; }
   .score .v small { font-size: 13px; color: var(--text); }
+  .score .t { font-family: var(--mono); font-size: 12px; color: var(--text); margin-top: 4px; font-variant-numeric: tabular-nums; }
   .verdict { margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 14px; line-height: 1.45; border: 1px solid var(--border); }
   .verdict.good { background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border-color: var(--accent-border); color: var(--text-h); }
   .verdict.ok { background: var(--code-bg); color: var(--text-h); }

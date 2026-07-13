@@ -42,6 +42,21 @@
   let userSpikes = $state([]);
   let celebrateToken = $state(0);
 
+  // timer: how long you take to infer the spikes (live during play, frozen on reveal)
+  let elapsedMs = $state(0);
+  let yourTimeMs = $state(0);
+  let timerStart = 0;
+  $effect(() => {
+    const _seed = roundSeed; // restart on each new round
+    if (phase !== 'play') return;
+    timerStart = performance.now();
+    elapsedMs = 0;
+    const id = setInterval(() => (elapsedMs = performance.now() - timerStart), 100);
+    return () => clearInterval(id);
+  });
+  const fmtTime = (ms) =>
+    !Number.isFinite(ms) ? '—' : ms < 1000 ? ms.toFixed(ms < 10 ? 1 : 0) + ' ms' : (ms / 1000).toFixed(1) + ' s';
+
   const sliceGrid = (full, zeroIndex) => {
     const r = new Float64Array(grid.n);
     for (let i = 0; i < grid.n; i++) r[i] = full[zeroIndex + i] ?? 0;
@@ -96,6 +111,7 @@
   const clearSpikes = () => (userSpikes = []);
 
   function reveal() {
+    yourTimeMs = performance.now() - timerStart;
     phase = 'revealed';
     if (match.f1 >= GOOD_F1) celebrateToken += 1;
   }
@@ -155,10 +171,12 @@
       <div class="score you">
         <div class="k">Reconstruction (R²)</div>
         <div class="v">{pctR2(userR2)}</div>
+        <div class="t">⏱ {fmtTime(phase === 'play' ? elapsedMs : yourTimeMs)}</div>
       </div>
       <div class="score" class:hidden={phase !== 'revealed'}>
         <div class="k">Spike match (F1)</div>
         <div class="v">{phase === 'revealed' ? pct(match.f1) : '·····'}</div>
+        <div class="t">{phase === 'revealed' ? match.matched + ' hits · ' + match.falsePos + ' false' : '·····'}</div>
       </div>
     </div>
 
@@ -256,6 +274,7 @@
   .score.hidden { opacity: 0.6; }
   .score .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text); }
   .score .v { font-family: var(--mono); font-size: 30px; color: var(--text-h); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .score .t { font-family: var(--mono); font-size: 12px; color: var(--text); margin-top: 4px; font-variant-numeric: tabular-nums; }
   .verdict { margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 14px; line-height: 1.45; border: 1px solid var(--border); }
   .verdict.good { background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border-color: var(--accent-border); color: var(--text-h); }
   .verdict.ok { background: var(--code-bg); color: var(--text-h); }

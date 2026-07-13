@@ -363,9 +363,14 @@
     // DATA-time (snapped to editSnapDt). Reads the live spikeTimesForEdit each event.
     let editDown = null, editMove = null, editUp = null;
     if (editable) {
-      let dragIdx = -1;
+      // Click vs. drag: a plain click ALWAYS adds (so you can place spikes right next
+      // to each other), and only an actual drag moves a spike. The nearest spike is a
+      // candidate to drag, resolved only once the pointer travels past EDIT_DRAG_MIN.
+      const EDIT_DRAG_MIN = 4; // px
+      let grab = -1, pressed = false, moved = false, dx0 = 0, dy0 = 0;
       const overX = (e) => e.clientX - plot.over.getBoundingClientRect().left;
       const snap = (x) => (editSnapDt ? Math.round(x / editSnapDt) * editSnapDt : x);
+      const dataX = (e) => snap(plot.posToVal(overX(e), 'x'));
       const nearest = (e) => {
         const px = overX(e);
         let best = -1, bestD = editHitPx;
@@ -376,15 +381,27 @@
         return best;
       };
       editDown = (e) => {
-        const idx = nearest(e);
-        if (e.shiftKey) { if (idx >= 0 && onSpikeRemove) onSpikeRemove(idx); return; }
-        if (idx >= 0) dragIdx = idx; // grab existing to drag
-        else if (onSpikeAdd) onSpikeAdd(snap(plot.posToVal(overX(e), 'x'))); // add new
+        pressed = true;
+        moved = false;
+        dx0 = e.clientX;
+        dy0 = e.clientY;
+        grab = nearest(e); // only used if this press becomes a drag
       };
       editMove = (e) => {
-        if (dragIdx >= 0 && onSpikeMove) onSpikeMove(dragIdx, snap(plot.posToVal(overX(e), 'x')));
+        if (!pressed) return;
+        if (!moved && Math.hypot(e.clientX - dx0, e.clientY - dy0) >= EDIT_DRAG_MIN) moved = true;
+        if (moved && grab >= 0 && onSpikeMove) onSpikeMove(grab, dataX(e));
       };
-      editUp = () => { dragIdx = -1; };
+      editUp = (e) => {
+        if (!pressed) return;
+        pressed = false;
+        if (moved) { grab = -1; return; } // was a drag — the move is already applied
+        // a CLICK: shift-click removes the nearest; a plain click ADDS (never blocked by a
+        // nearby spike). To move, drag; to remove, shift-click.
+        if (e.shiftKey) { if (grab >= 0 && onSpikeRemove) onSpikeRemove(grab); }
+        else if (onSpikeAdd) onSpikeAdd(dataX(e));
+        grab = -1;
+      };
       plot.over.style.cursor = 'crosshair';
       plot.over.addEventListener('mousedown', editDown);
       window.addEventListener('mousemove', editMove);
