@@ -2,6 +2,7 @@
   import Plot from './lib/Plot.svelte';
   import Tab2 from './lib/Tab2.svelte';
   import Shell from './lib/Shell.svelte';
+  import Tab3 from './lib/Tab3.svelte';
   import {
     makeGrid,
     rasterize,
@@ -15,10 +16,15 @@
     mulberry32,
   } from './lib/core/index.js';
 
-  // --- tab selection (initial tab honors #tab2 for direct/screenshot links) ---
-  let tab = $state(
-    typeof location !== 'undefined' && location.hash.replace('#', '') === 'tab2' ? 2 : 1,
-  );
+  // --- tab selection (initial tab honors #tab1/#tab2/#tab3 for direct/screenshot links) ---
+  function initialTab() {
+    if (typeof location === 'undefined') return 1;
+    const h = location.hash.replace('#', '');
+    if (h === 'tab3') return 3;
+    if (h === 'tab2') return 2;
+    return 1;
+  }
+  let tab = $state(initialTab());
 
   // --- controls (FOUNDATIONS §11) ---
   // Surfaced by default: place spikes, shape the kernel, see the output.
@@ -211,6 +217,7 @@
   <nav class="tabs">
     <button class:active={tab === 1} onclick={() => (tab = 1)}>1 · Convolution</button>
     <button class:active={tab === 2} onclick={goToTab2} title="loads the current Tab 1 signal for recovery">2 · Kernel recovery</button>
+    <button class:active={tab === 3} onclick={() => (tab = 3)} title="naive spike inference — honest illustration (in development)">3 · Spike inference</button>
     <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
     <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
       {wide ? '▥ Fit width' : '▤ Full width'}
@@ -219,6 +226,19 @@
 
   {#if tab === 2}
     <Tab2 {wide} {handoff} />
+  {:else if tab === 3}
+    <Tab3
+      {wide}
+      {grid}
+      {kernel}
+      {kernelDisplay}
+      {kernelXRange}
+      traceTimes={outTimes}
+      traceValues={noisyOut ?? outValues}
+      {gridTimes}
+      {rasterSamples}
+      spikeCount={raster.placed}
+    />
   {:else}
     <Shell {wide}>
       <!-- LEFT RAIL — tools (was the top controls card; folded into the 20% rail). -->

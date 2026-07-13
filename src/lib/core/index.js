@@ -7,6 +7,11 @@ export { convolveLinear, convolveOnGrid } from './convolve.js';
 // kernel diagnostics that judge a recovered kernel (ADR-0014).
 export { SIGMA_COHORT_TYPICAL, NOISE_LEVEL_MAX, sigmaForLevel, addAWGN, mulberry32, gaussian } from './noise.js';
 export { nextPow2, circularConvolve, deconvolveCircular, extractSymmetric, recoverKernel } from './deconvolve.js';
+// Tab 3 (honest illustration, FOUNDATIONS §2): naive spike inference — the SAME
+// regularized deconvolution as Tab 2, pointed the other way (recover the input
+// spikes given the trace + an ASSUMED kernel). Deliberately unclamped so the
+// failure (ringing, negative lobes) shows.
+export { inferSpikes, kernelToCircularPsf, inferenceReport } from './infer-spikes.js';
 // Constrained-parametric recovery (ADR-0021 method 2): causal double-exponential fit,
 // a PARALLEL method to the free-vector recoverKernel above (never replaces it).
 export {
