@@ -9,7 +9,7 @@ export { SIGMA_COHORT_TYPICAL, NOISE_LEVEL_MAX, sigmaForLevel, addAWGN, mulberry
 export { nextPow2, circularConvolve, deconvolveCircular, extractSymmetric, recoverKernel } from './deconvolve.js';
 // "Beat the Colonel" challenge scoring (game modes): reconstruction R² + a seeded
 // Poisson spike generator. Pure, SheetJS-free.
-export { rSquared, poissonSpikes, spikeMatch } from './challenge.js';
+export { rSquared, poissonSpikes, spikeMatch, peakPickSpikes } from './challenge.js';
 // Tab 3 (honest illustration, FOUNDATIONS §2): naive spike inference — the SAME
 // regularized deconvolution as Tab 2, pointed the other way (recover the input
 // spikes given the trace + an ASSUMED kernel). Deliberately unclamped so the

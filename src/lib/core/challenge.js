@@ -70,6 +70,35 @@ export function spikeMatch(guessed, truth, tolS = 0.3) {
 }
 
 /**
+ * Peak-pick discrete spike times from a continuous signal (the machine's naive
+ * spike inference: deconvolution → peaks). Keeps local maxima at or above
+ * minHeight, enforcing a minimum separation (taller peaks win). Returns times (s).
+ * @param {ArrayLike<number>} signal
+ * @param {number} dt sample interval (s)
+ * @param {{ minHeight?: number, minSepS?: number, t0?: number }} [opts]
+ * @returns {number[]}
+ */
+export function peakPickSpikes(signal, dt, { minHeight = 0, minSepS = 0, t0 = 0 } = {}) {
+  const n = signal.length;
+  const minSep = Math.max(0, Math.round(minSepS / dt));
+  const cand = [];
+  for (let i = 1; i < n - 1; i++) {
+    if (signal[i] >= minHeight && signal[i] >= signal[i - 1] && signal[i] > signal[i + 1]) cand.push(i);
+  }
+  cand.sort((a, b) => signal[b] - signal[a]); // tallest first
+  const used = new Uint8Array(n);
+  const chosen = [];
+  for (const i of cand) {
+    let ok = true;
+    for (let j = Math.max(0, i - minSep); j <= Math.min(n - 1, i + minSep); j++) {
+      if (used[j]) { ok = false; break; }
+    }
+    if (ok) { chosen.push(i); used[i] = 1; }
+  }
+  return chosen.sort((a, b) => a - b).map((i) => t0 + i * dt);
+}
+
+/**
  * Seeded Poisson spike train over [0, durationS): exponential inter-spike
  * intervals with mean 1/rateHz. Returns event times (seconds), ascending.
  * @param {() => number} rand a seeded uniform generator in [0,1)

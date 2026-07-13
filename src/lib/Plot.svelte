@@ -41,6 +41,9 @@
     // STA is pre-aligned onto the kernel lag grid, NaN outside its ±window).
     ys2 = null,
     color2 = 'var(--accent)',
+    // Render the ys2 overlay as BARS (default is a line). Used for the spike
+    // comparison (your spikes up, true spikes down) — high-contrast, one plot.
+    ys2Bars = false,
     // ADR-0026: fill the parent's height (co-equal flex plot bands) instead of a
     // fixed pixel height; measured from the container and kept in sync on resize.
     fill = false,
@@ -133,7 +136,11 @@
         : { stroke, width: 2 };
     // second overlaid line series (kernel/STA share one x and one y scale).
     const series2 =
-      ys2 != null ? { points: { show: false }, stroke: resolveColor(color2), width: 2 } : null;
+      ys2 != null
+        ? ys2Bars
+          ? { points: { show: false }, stroke: resolveColor(color2), fill: resolveColor(color2), paths: uPlot.paths.bars({ size: barSize, align: 0 }) }
+          : { points: { show: false }, stroke: resolveColor(color2), width: 2 }
+        : null;
     const hooks = {};
     const drawClear = [];
     // ADR-0027: region background shading, drawn first so it sits BEHIND the data. Reads the
