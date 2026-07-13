@@ -98,3 +98,38 @@ code {
   color: var(--text-h);
   background: var(--code-bg);
 }
+
+/* Print: when the summary report is open (SummaryReport flags <html>), print ONLY
+   that report — hide the rest of the app, drop the on-screen toolbar/overlay chrome,
+   and let the white .page flow onto the sheet. A plain Ctrl+P with no report open is
+   untouched (the html.printing-report guard). Part of the summaries & export feature. */
+@media print {
+  html.printing-report body * {
+    visibility: hidden;
+  }
+  html.printing-report .summary-report,
+  html.printing-report .summary-report * {
+    visibility: visible;
+  }
+  html.printing-report .summary-report {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+    background: #fff;
+    padding: 0;
+    display: block;
+  }
+  html.printing-report .summary-report .no-print {
+    display: none !important;
+  }
+  html.printing-report .summary-report .page {
+    width: auto;
+    margin: 0;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  /* keep each region block whole across page breaks */
+  html.printing-report .summary-report .block {
+    break-inside: avoid;
+  }
+}
