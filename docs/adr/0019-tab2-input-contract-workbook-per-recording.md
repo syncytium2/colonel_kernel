@@ -63,7 +63,9 @@ The recording is exported **whole and untrimmed** — the **complete recording, 
 regions are **not** split into files; the workbook carries region **markers** only. Reading xlsx is
 therefore on the **v1 critical path** — the app must read xlsx to load real data — so a local xlsx
 parser (e.g. SheetJS) is a **v1 dependency, self-hosted/bundled** per FOUNDATIONS §6 (no CDN). Used
-**read-only**.
+**read-only**. *(The install **source** for that dependency — pin the maintained SheetJS CDN tarball,
+not the frozen `npm install xlsx` (0.18.5) — is corrected in
+[ADR-0036](0036-sheetjs-install-from-maintained-tarball.md); the library choice here is unchanged.)*
 
 ### 2. The workbook — three sheets
 

@@ -1,0 +1,27 @@
+# Dependabot — version-update + security PRs for the registry packages.
+# Covers everything EXCEPT `xlsx`, which is pinned to a cdn.sheetjs.com tarball
+# (ADR-0036): Dependabot cannot track URL/tarball dependencies, so the
+# dep-freshness workflow (.github/workflows/dep-freshness.yml) covers that one.
+# Between the two, all 9 packages are watched.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Roll minor+patch bumps of the dev/build tooling into one PR to cut noise;
+      # majors still come as individual PRs so they get individual review.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Keep the workflow's own actions (checkout, setup-node) current too.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
