@@ -8,6 +8,13 @@ A client-side 1D convolution / deconvolution tool for calcium imaging — a teac
 
 This is ROI 1 of a real paired recording — the cleanest spike/calcium coupling in the dataset. The red ticks are 140 action potentials; the blue trace is the calcium signal. Even here, the relationship is not one-to-one: the large transient near 780 s has no matching burst of spikes, and through 400–700 s the spikes continue while the calcium response shrinks. Colonel Kernel exists to **measure** this relationship — to recover the kernel that links spikes to calcium, or to show when no single kernel does — not to assume the two are coupled. (See [FOUNDATIONS](FOUNDATIONS.md) §3–4.)
 
+## Dependency health (team process)
+
+Two standing checks — **Defense** (no known-vulnerable dependency) and **Up-to-date** (no silently
+frozen dependency) — are part of the dev process, enforced by `npm audit`, Dependabot, and a
+freshness workflow. See [docs/DEPENDENCY_HEALTH.md](docs/DEPENDENCY_HEALTH.md). It is written to be
+adopted verbatim by the sibling Vite/Svelte project.
+
 ## Recommended IDE Setup
 
 [VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
