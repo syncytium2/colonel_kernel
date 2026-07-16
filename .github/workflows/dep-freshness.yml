@@ -1,0 +1,74 @@
+name: dependency-freshness
+
+# Weekly check that (1) the pinned SheetJS tarball has no newer release on
+# cdn.sheetjs.com and (2) `npm audit` is clean. SheetJS is pinned to a CDN tarball
+# (ADR-0036), so Dependabot cannot see it — this workflow is its substitute.
+# It only OPENS/UPDATES a tracking issue; it never edits the dependency.
+#
+# Runs on GitHub's runners (not the shipped app), so FOUNDATIONS §6 no-egress does
+# not apply — reaching npm/cdn.sheetjs.com here is expected and fine.
+#
+# NOTE: scheduled workflows fire only from the DEFAULT branch. This becomes active
+# once merged to master; use the "Run workflow" button (workflow_dispatch) to test.
+
+on:
+  schedule:
+    - cron: '0 14 * * 1'   # Mondays 14:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install from lockfile
+        run: npm ci --ignore-scripts
+
+      - name: npm audit (production deps)
+        id: audit
+        run: |
+          set +e
+          npm audit --omit=dev --json > audit.json
+          total=$(node -p "try{require('./audit.json').metadata.vulnerabilities.total}catch(e){0}")
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          echo "npm audit total (prod) vulnerabilities: $total"
+
+      - name: SheetJS freshness probe
+        id: sheetjs
+        run: bash scripts/check-sheetjs.sh
+
+      - name: Open or update tracking issue
+        if: steps.audit.outputs.total != '0' || steps.sheetjs.outputs.newer != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body="Automated weekly dependency check flagged something to review:
+
+          - **npm audit vulnerabilities (prod):** ${{ steps.audit.outputs.total }}
+          - **Pinned SheetJS:** ${{ steps.sheetjs.outputs.pinned }}
+          - **Newer SheetJS on cdn.sheetjs.com:** ${{ steps.sheetjs.outputs.newer || 'none' }}
+
+          If a newer SheetJS exists, bump the tarball URL in \`package.json\` per **ADR-0036**
+          (do NOT reinstall from npm), then run \`npm install\` + \`npm run xlsx-acceptance\` and open a PR.
+          If audit is non-zero, review the advisory and bump/replace accordingly.
+
+          _Opened by \`.github/workflows/dep-freshness.yml\`._"
+          existing=$(gh issue list --state open --label dep-freshness --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh label create dep-freshness --color ededed --description "Automated dependency freshness checks" 2>/dev/null || true
+            gh issue create \
+              --title "chore(deps): SheetJS/dependency check needs attention" \
+              --body "$body" \
+              --label dep-freshness
+          fi
