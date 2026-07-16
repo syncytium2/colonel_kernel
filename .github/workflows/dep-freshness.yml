@@ -33,14 +33,14 @@ jobs:
       - name: Install from lockfile
         run: npm ci --ignore-scripts
 
-      - name: npm audit (production deps)
+      - name: npm audit (all deps, prod + dev)
         id: audit
         run: |
           set +e
-          npm audit --omit=dev --json > audit.json
+          npm audit --json > audit.json
           total=$(node -p "try{require('./audit.json').metadata.vulnerabilities.total}catch(e){0}")
           echo "total=$total" >> "$GITHUB_OUTPUT"
-          echo "npm audit total (prod) vulnerabilities: $total"
+          echo "npm audit total (prod + dev) vulnerabilities: $total"
 
       - name: SheetJS freshness probe
         id: sheetjs
@@ -53,7 +53,7 @@ jobs:
         run: |
           body="Automated weekly dependency check flagged something to review:
 
-          - **npm audit vulnerabilities (prod):** ${{ steps.audit.outputs.total }}
+          - **npm audit vulnerabilities (prod + dev):** ${{ steps.audit.outputs.total }}
           - **Pinned SheetJS:** ${{ steps.sheetjs.outputs.pinned }}
           - **Newer SheetJS on cdn.sheetjs.com:** ${{ steps.sheetjs.outputs.newer || 'none' }}
 
