@@ -42,6 +42,23 @@ __pycache__/
 # Local scratch working prompts (never committed)
 TAB1_NOISE_PROMPT.md
 
+# Relics of copying MATLAB source into this tree while porting it to Vite/Svelte.
+# The canonical copies live in the `interface2` repo (APViewer is its own project
+# on branch ap-summary-pdf); the copies here were byte-identical leftovers and are
+# deleted. These guard rules keep the port from silently re-dropping them into the
+# SCM view. (The DELIBERATE MATLAB reference — TDdeconvStack.m, aCa98_batch_APs.m,
+# spikeTriggeredAverage.m — stays tracked as the Tab 2 source-of-truth.)
+MATLAB CODE/APViewer/
+MATLAB CODE/minBarF2.m
+
+# Local Claude Code settings — machine-specific (absolute worktree paths, a
+# personal permission allow-list). Not shared-team content.
+.claude/settings.json
+.claude/settings.local.json
+
+# Local working notes — scratch area, kept out of the repo.
+docs/notes/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
