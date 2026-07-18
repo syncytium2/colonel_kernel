@@ -34,6 +34,15 @@ Researchers' unpublished data must never leave their machine.
 
 Never add analytics, telemetry, CDN links, or third-party fonts at any point.
 
+**The host can inject third-party scripts we never wrote.** Cloudflare Web Analytics silently
+injected its beacon into our HTML at the edge for over a week. The CSP blocked it, so no data
+ever left — but "we added no third-party code" is not sufficient to guarantee §6. Two defenses
+are in place: `public/_headers` sets `no-transform` on the HTML routes (Cloudflare cannot rewrite
+a response it may not transform), and `npm run deploy` fails if a beacon appears on `/` or
+`/methods`. That injection was **user-agent gated** — a plain `curl` saw clean HTML while real
+browsers got the script. When checking for third-party requests, ask as a browser
+(`npm run screenshot` against the live URL, or `curl -H 'User-Agent: Mozilla/5.0 …'`).
+
 ## Repository data hygiene (non-negotiable)
 
 The privacy rule above governs the running app. This governs the repository itself:
