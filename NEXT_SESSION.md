@@ -45,11 +45,13 @@ archive — those pointers are stale.
   color by **method**. Not a find-replace — pick the canonical scheme first. Cheapest shared
   win is region hues + the STA / actual-vs-predicted colors. Detail in the
   [archive](docs/archive/NEXT_SESSION-history-2026-07-08.md) under "align trace color schemes".
-- **Cloudflare Web Analytics — disable it in the dashboard.** Cloudflare injects
-  `static.cloudflareinsights.com/beacon.min.js` at the edge. Our CSP **blocks** it, so no data
-  leaves and the posture holds — but it is a blocked third-party attempt and a console error on
-  every load, against §6 spirit. Not in our code; only the zone setting fixes it. Still present
-  as of 2026-07-18.
+- ~~**Cloudflare Web Analytics beacon.**~~ **Resolved 2026-07-18**, in-repo rather than via the
+  dashboard: [`public/_headers`](public/_headers) sets `no-transform` on the HTML routes, and
+  Cloudflare cannot inject into a response it may not transform. The live console is now clean on
+  both `/` and `/methods`, and `npm run deploy` fails if any third-party beacon reappears.
+  **Optional follow-up:** also set it to Disable in the dashboard (account → Web Analytics →
+  Manage site) for defense in depth — the two are independent. Note the injection is
+  **user-agent gated**, so verify as a browser, never with a plain curl.
 - **Deploy model.** Still manual (`npm run deploy`). Auto-deploy on push to `master` remains
   undecided — WIP lands on `master` often, so it would want a `deploy` branch or a build gate.
 

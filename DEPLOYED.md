@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-07-18 18:10 UTC |
-| **Commit** | `9e03c1b` — Merge branch 'fix/block-edge-beacon-injection' |
+| **Deployed at** | 2026-07-18 18:12 UTC |
+| **Commit** | `b0e5ce0` — Deploy gate: fail if a third-party beacon reaches visitors |
 | **Bundle** | `assets/index-ElvyHc5r.js` |
-| **Worker version** | `6cb9081e-2594-4533-aa09-544768a2ad3b` |
+| **Worker version** | `535bde61-762b-4061-bea8-b1265929a282` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
