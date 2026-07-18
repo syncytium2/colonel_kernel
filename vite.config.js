@@ -16,6 +16,37 @@ function gitDate(cmd, fallback) {
 const BUILD_BORN = gitDate('git log --max-parents=0 --format=%cs', '2026-06-21')
 const BUILD_UPDATED = gitDate('git log -1 --format=%cs', '')
 
+// In a shallow clone HEAD has no parents in the truncated graph, so
+// `--max-parents=0` returns HEAD's date and the Born line silently renders the
+// build date. This shipped once (deployed 2026-07-16 read "Born 2026-07-16").
+// The dates cannot be checked against a live source — the CSP forbids it — so
+// the build environment's git history is the only source of truth. Refuse to
+// produce an artifact from a history that cannot supply it.
+function assertFullHistoryOnBuild() {
+  return {
+    name: 'assert-full-history-on-build',
+    apply: 'build',
+    buildStart() {
+      let shallow = false
+      try {
+        shallow = execSync('git rev-parse --is-shallow-repository', {
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).toString().trim() === 'true'
+      } catch {
+        return // no git at all: gitDate's fallbacks already cover this
+      }
+      if (shallow) {
+        throw new Error(
+          'Shallow clone: the Tab 0 "Born" date would be wrong (got ' +
+            BUILD_BORN + ', expected the root-commit date). ' +
+            'Build from a full clone, or run `git fetch --unshallow`. ' +
+            'In CI, set actions/checkout fetch-depth: 0.'
+        )
+      }
+    },
+  }
+}
+
 // Production CSP (FOUNDATIONS §6 / ADR-0008). It must hold on the shipped
 // static artifact, but it breaks Vite's dev server: the HMR websocket trips
 // `connect-src 'none'` and Vite's JS-injected dev styles trip `default-src
@@ -44,7 +75,7 @@ function injectCspOnBuild() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [svelte(), injectCspOnBuild()],
+  plugins: [svelte(), injectCspOnBuild(), assertFullHistoryOnBuild()],
   define: {
     __BUILD_BORN__: JSON.stringify(BUILD_BORN),
     __BUILD_UPDATED__: JSON.stringify(BUILD_UPDATED),
