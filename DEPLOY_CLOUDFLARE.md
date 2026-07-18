@@ -12,31 +12,39 @@ there), which is what lets the Worker custom domain work directly (§3).
 - **Live (workers.dev):** https://colonel-kernel.tonydefazio.workers.dev
 - **Node 22** (`.nvmrc`); `wrangler` is a devDependency (`npx wrangler …`).
 
-## 1. Deploy runbook (manual — copy/paste)
-
-Deploy the current branch's build. Ship from `master` after merging (don't deploy
-a WIP branch).
+## 1. Deploy runbook — `npm run deploy`
 
 ```bash
 cd ~/Documents/colonel_kernel
-
-# 1) clean production build (strict CSP injected at build time by the Vite plugin)
-rm -rf dist && npm run build
-
-# 2) privacy gate — the built HTML MUST carry the CSP (FOUNDATIONS §6). Abort if missing.
-grep -q "connect-src 'none'" dist/index.html && echo "CSP OK" || echo "CSP MISSING — DO NOT DEPLOY"
-
-# 3) deploy dist/ to the colonel-kernel Worker
-npx wrangler deploy
-
-# 4) CONFIRM THE DEPLOY TOOK — the live asset hash must match the local build.
-#    (wrangler prints "No updated asset files to upload" when its content-addressed
-#     store already has the blobs; that is benign — this check is the real confirmation.)
-LOCAL=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html)
-echo "local:  $LOCAL"
-echo "live :  $(curl -s https://kernel.tonydefazio.com/ | grep -o 'assets/index-[A-Za-z0-9_-]*\.js' | head -1)"
-# the two lines must match. (also check colonel-kernel.tonydefazio.workers.dev if desired)
+npm run deploy                # full deploy
+npm run deploy -- --dry-run   # everything except the upload
 ```
+
+That is the whole runbook. It used to live here as copy/paste prose, which let each
+session improvise its own variant — that is how a shallow-clone build put a wrong
+Tab 0 "Born" date into production on 2026-07-16. The steps now live in
+[`scripts/deploy.sh`](scripts/deploy.sh) so they cannot drift from what actually runs.
+
+What it does, and why each gate exists:
+
+1. **Preflight** — refuses a shallow clone (the Tab 0 "Born" date is baked from
+   `git log --max-parents=0`, which returns HEAD in a truncated history), refuses a
+   non-`master` branch (WIP lands on `master` often; ship after merging), and refuses a
+   dirty tree (so `DEPLOYED.md` records a real commit).
+2. **Core tests** — 217 checks.
+3. **Clean build** — `rm -rf dist && npm run build`; the strict CSP is injected at build
+   time by the Vite plugin (ADR-0008).
+4. **Gates** — the shipped HTML must carry `connect-src 'none'` (FOUNDATIONS §6), and the
+   true root-commit date must be baked into the bundle.
+5. **Deploy** — `npx wrangler deploy`.
+6. **Verify** — polls both URLs until they serve the new bundle hash, then confirms the CSP
+   on the live response.
+7. **Record** — writes [`DEPLOYED.md`](DEPLOYED.md). Commit it.
+
+Two non-failures the script already handles: `wrangler` printing **"No updated asset files
+to upload"** is benign (its content-addressed store already has the blobs — the hash check
+is the real confirmation), and the live `index.html` can serve a **stale edge-cached copy
+for up to ~a minute** after upload, which is why step 6 polls instead of checking once.
 
 First-ever run prompts a browser OAuth login to Cloudflare; the token is cached
 after that. `wrangler deploy` prints the live URL and a Version ID.
@@ -74,12 +82,13 @@ intentionally unrestricted for HMR — ADR-0008).
 
 ## Notes — deploy model (a live decision, see NEXT_SESSION)
 
-- **Deploys are MANUAL** (`npm run build` + `npx wrangler deploy`). Nothing
-  auto-deploys on push.
+- **Deploys are MANUAL** — you run `npm run deploy`. Nothing auto-deploys on push.
 - Optional future change: connect the repo in Cloudflare (Workers & Pages →
   `colonel-kernel` → **Builds → Connect to Git**) so pushes to `master`
   auto-build + deploy. Weigh against the fact that WIP lands on `master` often —
-  auto-deploy would want a `deploy` branch or a build gate first.
+  auto-deploy would want a `deploy` branch or a build gate first. Note that
+  Cloudflare's builder clones **shallow**, so it would need `fetch-depth: 0`
+  equivalent or the build guard will (correctly) reject it.
 - No unpublished data ships: all of `data/` (except `data/README.md`), plus
   `darkroom/` and `exports/`, is gitignored and never enters the build
   (repo-hygiene rule).
