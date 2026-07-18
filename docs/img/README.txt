@@ -8,6 +8,20 @@ the data/*.mat and darkroom/ gitignore guards.
 
 Do NOT gitignore or delete this as if it were stray reference data. It is canon.
 
+SCOPE WIDENED 2026-07-18 — NOW SHIPS IN THE APP. A copy lives at
+src/lib/assets/roi1_trace.png and opens Tab 0 ("The problem, in one recording"),
+so this figure is no longer confined to a private repo: on deploy it is served
+publicly from kernel.tonydefazio.com to anyone who visits. The author confirmed
+(2026-07-18) that the data is his to show.
+
+This is the ONLY unpublished-data figure that leaves the repo. The other in-app
+figure (methods_explainer) is synthetic. Before adding any further real-data
+figure to the app, get the same explicit confirmation and record it here — the
+app is public even though the repo is not, and that distinction is easy to lose.
+
+Keep the two copies in sync (docs/img/ for the README, src/lib/assets/ for the
+bundle); Vite only bundles what is under src/.
+
 methods_explainer.{pdf,png} is a plain-language, graphics-first teaching figure —
 "Four ways to ask if there is a calcium kernel" (free-vector / parametric / shaped
 / STA). Its curves are SYNTHETIC/illustrative (no unpublished data), so unlike
