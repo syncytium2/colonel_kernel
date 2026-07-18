@@ -5,17 +5,17 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-07-18 18:12 UTC |
-| **Commit** | `b0e5ce0` — Deploy gate: fail if a third-party beacon reaches visitors |
+| **Deployed at** | 2026-07-18 18:14 UTC |
+| **Commit** | `32cf989` — Docs: beacon resolved; record that hosts can inject scripts we never wro |
 | **Bundle** | `assets/index-ElvyHc5r.js` |
-| **Worker version** | `535bde61-762b-4061-bea8-b1265929a282` |
+| **Worker version** | `2302da08-027c-48b1-9cd6-ca115388e823` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
-the live response, Tab 0 "Born" date baked from the true root commit, and both
-URLs serving the bundle above.
+the live response, Tab 0 "Born" date baked from the true root commit, both URLs
+serving the bundle above, and **no third-party beacon on `/` or `/methods`**
+(checked with a browser user-agent — the injection is UA-gated and invisible to
+a plain curl).
 
-The one expected console error on the live site is
-`static.cloudflareinsights.com/beacon.min.js` being **blocked by CSP**. That is
-Cloudflare Web Analytics injecting at the edge, not our code — the block is proof
-the no-egress posture holds. Disabling it in the dashboard is an open item.
+The live console should be **clean**. Any third-party script request is a §6
+regression, not an expected warning.
