@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-07-18 13:54 UTC |
-| **Commit** | `8ae8d22` — Merge branch 'docs/handoff-and-deploy-hygiene': executable deploy runboo |
+| **Deployed at** | 2026-07-18 18:10 UTC |
+| **Commit** | `9e03c1b` — Merge branch 'fix/block-edge-beacon-injection' |
 | **Bundle** | `assets/index-ElvyHc5r.js` |
-| **Worker version** | `6d1cb887-7c91-4a8c-98a3-74fdddf1b145` |
+| **Worker version** | `6cb9081e-2594-4533-aa09-544768a2ad3b` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on

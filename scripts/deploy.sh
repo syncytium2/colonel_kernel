@@ -100,6 +100,19 @@ curl -s --max-time 15 "$CUSTOM_URL/" | grep -q "Content-Security-Policy" ||
   fail "live HTML is missing the CSP meta tag"
 echo "  live CSP confirmed"
 
+# No third-party script may reach a visitor (FOUNDATIONS §6). Cloudflare Web
+# Analytics injects its beacon into HTML at the edge; public/_headers blocks that
+# with `no-transform`. The injection is USER-AGENT GATED — a plain curl does not
+# see it, which is why it went unnoticed for over a week — so ask as a browser.
+BROWSER_UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+for route in "/" "/methods"; do
+  hits="$(curl -sL --max-time 15 -H "User-Agent: $BROWSER_UA" -H 'Accept: text/html' \
+    "$CUSTOM_URL$route" | grep -c 'cloudflareinsights' || true)"
+  [[ "$hits" == "0" ]] ||
+    fail "third-party beacon injected into $route — check public/_headers survived the build, and Web Analytics in the Cloudflare dashboard"
+done
+echo "  no third-party beacon on / or /methods"
+
 # ---------------------------------------------------------------- record
 # Deploy state used to live only in Cloudflare, so a new session could only
 # learn what was live by curling and comparing hashes. Write it down.
