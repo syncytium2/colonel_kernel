@@ -28,6 +28,13 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
 - **Deploy hygiene (2026-07-18)** — `npm run deploy` now executes the whole runbook with
   gates; a shallow-clone build guard in [vite.config.js](vite.config.js) closes the bug that
   shipped a wrong Tab 0 "Born" date; [DEPLOYED.md](DEPLOYED.md) records what is live.
+- **Tab 0 leads with the problem (2026-07-18)** — the ROI 1 premise figure (real paired
+  recording, 140 AP ticks over the calcium trace) now opens Tab 0 above everything but the
+  title, with prose naming the two decoupling episodes. Previously Tab 0 opened with the
+  four-methods explainer, answering a question the visitor had not been shown. Same figure and
+  framing the README leads with; matches FOUNDATIONS §3–4. **This is the only unpublished-data
+  figure that ships in the public app** — consent widened and the rule for any future one is
+  recorded in [docs/img/README.txt](docs/img/README.txt).
 
 Core suite: **217 passing**. Deployed state: see [DEPLOYED.md](DEPLOYED.md).
 
