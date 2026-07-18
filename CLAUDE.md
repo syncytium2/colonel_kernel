@@ -64,4 +64,28 @@ version control. Don't conflate them.
 
 - **`FOUNDATIONS.md`** — settled foundations and the reasoning behind them. Read first every session. Not a task list. This file wins until deliberately edited.
 - **ADRs** — record individual decisions and changes. When an ADR changes a settled point, update `FOUNDATIONS.md` to match so the two never disagree.
-- **`NEXT_SESSION.md`** (or similar) — the immediate working state and next actions.
+- **`NEXT_SESSION.md`** — the immediate working state and next actions. **Keep it short:** one
+  dated state block, one next action, and the open items. When it stops matching `git log`,
+  fix it or archive it. A 900-line version of this file once drifted 28 commits behind and
+  accumulated three contradictory "RESUME HERE" pointers, so parallel sessions each picked a
+  different stale one and proceeded confidently. Superseded history goes to `docs/archive/`
+  and is background only — never current state.
+- **`DEPLOYED.md`** — what is actually live (commit, bundle hash, worker version). Written by
+  `npm run deploy`; never edit by hand. Before assuming the deployed app is stale, read it.
+
+## Deploying (non-negotiable)
+
+**Deploy only via `npm run deploy`**, from a **full clone** on **`master`** with a clean tree.
+The script is the runbook — it gates on those preconditions, runs the tests, builds clean,
+verifies the CSP is in the shipped HTML, checks the Tab 0 "Born" date was baked from the true
+root commit, deploys, polls past Cloudflare's edge cache until both URLs serve the new bundle,
+and records the result in `DEPLOYED.md`. `npm run deploy -- --dry-run` does everything but upload.
+
+Do not hand-roll `npm run build && npx wrangler deploy`. Improvised deploys are what put a
+wrong Tab 0 "Born" date into production on 2026-07-16: the build ran in a shallow clone, where
+`git log --max-parents=0` returns HEAD instead of the root commit. `vite.config.js` now refuses
+to build from a shallow clone at all.
+
+Two things that look like failures but are not: `wrangler` printing "No updated asset files to
+upload" is benign, and the live `index.html` can serve a stale copy from Cloudflare's edge cache
+for up to ~a minute after upload — the script polls through both.
