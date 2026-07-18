@@ -81,6 +81,12 @@ version control. Don't conflate them.
   and is background only — never current state.
 - **`DEPLOYED.md`** — what is actually live (commit, bundle hash, worker version). Written by
   `npm run deploy`; never edit by hand. Before assuming the deployed app is stale, read it.
+- **Cross-project practice** — `<Dropbox>/Richard DeFazio/team_webapp_practice/`. Lessons that
+  apply to more than one of my web apps (this one and `fireflies`), so a fix found here isn't
+  rediscovered there. Distinct from the `team_colonel_kernel/` data bus: no contract, no
+  fixtures, just portable practice. **Mirror, not master** — a lesson's canonical home is this
+  repo; that folder holds a distillation. When you learn something here that would still be true
+  in a repo with none of this science, add it there too.
 
 ## Deploying (non-negotiable)
 
