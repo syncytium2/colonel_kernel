@@ -74,7 +74,7 @@ archive — those pointers are stale.
 **Needs Tony's eyeball (figure gate, [ADR-0018](docs/adr/0018-figure-gate-policy.md)):**
 
 - **▶ Careful kernel walkthrough — SCHEDULE THIS.** A *quick* baseline-only human review is
-  recorded in [docs/notes/kernel-review-baseline-2026-07-19.md](docs/notes/kernel-review-baseline-2026-07-19.md):
+  recorded in [docs/reviews/kernel-review-baseline-2026-07-19.md](docs/reviews/kernel-review-baseline-2026-07-19.md):
   8 recordings with usable baseline kernels (80, 151, 181, 209, 233, 235, 237, 272). The careful
   pass is still owed — all regions, verdict written down per slice as it is made.
   **Its main purpose: rule out a clerical error putting the wrong ROI in the "targeted" (ROI 1)
