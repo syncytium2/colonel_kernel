@@ -73,6 +73,15 @@ archive — those pointers are stale.
 
 **Needs Tony's eyeball (figure gate, [ADR-0018](docs/adr/0018-figure-gate-policy.md)):**
 
+- **▶ Careful kernel walkthrough — SCHEDULE THIS.** A *quick* baseline-only human review is
+  recorded in [docs/notes/kernel-review-baseline-2026-07-19.md](docs/notes/kernel-review-baseline-2026-07-19.md):
+  8 recordings with usable baseline kernels (80, 151, 181, 209, 233, 235, 237, 272). The careful
+  pass is still owed — all regions, verdict written down per slice as it is made.
+  **Its main purpose: rule out a clerical error putting the wrong ROI in the "targeted" (ROI 1)
+  column.** The screen finds a plausible kernel in a *non-ROI-1* column for 7 of those 8. That
+  could be a mislabel, a real non-targeted-ROI kernel, or the screen under-calling dense-firing
+  recordings — they need separating. A mislabel would be an upstream MATLAB-export provenance
+  fault, so it is a shared-bus question, not a colonel_kernel-only fix.
 - **File-98 three-region case.** ADR-0028 mode-removal is merged but the 3-region rendering is
   ungated: confirm regions shade/label correctly, the kernel band shows regional-only, and
   double-click zoom + current-region behave.
