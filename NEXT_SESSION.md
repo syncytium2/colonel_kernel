@@ -71,17 +71,42 @@ archive — those pointers are stale.
   yes/no, cap, short-region skip-vs-flag, high-K⁺ exception — then each repo's ADR references it.
   Do not author a third rule here. Full diagnosis in the archive.
 
+**Raised by the 2026-07-20 MLspike kernel export — full record in
+[docs/reviews/kernel-export-mlspike-2026-07-20.md](docs/reviews/kernel-export-mlspike-2026-07-20.md):**
+
+- **▶ Method 2 fits only 1 of the 8 human-identified kernels.** `pm_fit_quality` is `good` for
+  `20250925_233` only; 5 failed (4 with R² ≤ 0, 2 railed at the `tau_rise` bound, 237
+  non-converged), 2 poor. A double exponential is the standard forward model in this
+  literature and ours fits one of eight recordings a human says visibly contain kernels.
+  Too rigid a model, baseline tilt defeating the objective, or bad initialization — unknown.
+  **The most substantive open science item on this list.**
+- **STA vs deconvolution amplitude disagree bidirectionally** — STA higher on 3 of 7, lower on
+  4, spanning 0.43× to 10.5×. Not an offset that can be corrected for. Two methods that should
+  agree on per-spike amplitude do not, and it is undiagnosed.
+- **`20260130_272` and `20250807_181` have acausal ratio > 1** (2.14, 2.36) — more recovered
+  energy before the spike than after, which is physically impossible. Both are on the human
+  list, so the eyeball and the diagnostic disagree; not yet adjudicated.
+- **λ-stability sweep never run for the 8.** `a_robust` was handed over as the recommended
+  amplitude at `lambda = 0.002` with `stability: false`. Cheap to run; ADR-0004 wants λ visible.
+- **No ADR records the no-saturation assumption.** Grep of all 37 ADRs for "saturation" is
+  empty; ADR-0006 is linear-vs-*circular*, a different claim. An early draft of the handoff
+  cited it wrongly. Either an ADR or a FOUNDATIONS line should state the linear-response
+  assumption.
+- **ROI-1 labelling is CLOSED for these 8** — Tony confirmed 2026-07-20 they are ROI 1. What
+  remains is the *screen's* disagreement (it calls ROI 1 plausible for only `20241004_80`; six
+  of the rest find nothing anywhere; for `209`/`235` it never examined baseline). That is a
+  screen problem now, not a provenance one.
+
 **Needs Tony's eyeball (figure gate, [ADR-0018](docs/adr/0018-figure-gate-policy.md)):**
 
 - **▶ Careful kernel walkthrough — SCHEDULE THIS.** A *quick* baseline-only human review is
   recorded in [docs/reviews/kernel-review-baseline-2026-07-19.md](docs/reviews/kernel-review-baseline-2026-07-19.md):
   8 recordings with usable baseline kernels (80, 151, 181, 209, 233, 235, 237, 272). The careful
   pass is still owed — all regions, verdict written down per slice as it is made.
-  **Its main purpose: rule out a clerical error putting the wrong ROI in the "targeted" (ROI 1)
-  column.** The screen finds a plausible kernel in a *non-ROI-1* column for 7 of those 8. That
-  could be a mislabel, a real non-targeted-ROI kernel, or the screen under-calling dense-firing
-  recordings — they need separating. A mislabel would be an upstream MATLAB-export provenance
-  fault, so it is a shared-bus question, not a colonel_kernel-only fix.
+  **The ROI-1 mislabel worry that framed this is CLOSED** (Tony confirmed 2026-07-20 these are
+  ROI 1); the walkthrough's remaining purpose is coverage of the other regions, plus deciding
+  whether the eyeball or the acausal-ratio diagnostic wins on `272` and `181` (see the
+  2026-07-20 block above).
 - **File-98 three-region case.** ADR-0028 mode-removal is merged but the 3-region rendering is
   ungated: confirm regions shade/label correctly, the kernel band shows regional-only, and
   double-click zoom + current-region behave.
