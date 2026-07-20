@@ -81,6 +81,9 @@ version control. Don't conflate them.
   and is background only — never current state.
 - **`DEPLOYED.md`** — what is actually live (commit, bundle hash, worker version). Written by
   `npm run deploy`; never edit by hand. Before assuming the deployed app is stale, read it.
+- **`docs/doc_review_process.md`** — the **murderboard**: the anti-slop review process any
+  document deliverable runs through before delivery. Vendored from `syncytium2/murderboard`
+  (see ADR-0037); do not edit the vendored copy — update by re-copying upstream.
 - **Cross-project practice** — `<Dropbox>/Richard DeFazio/team_webapp_practice/`. Lessons that
   apply to more than one of my web apps (this one and `fireflies`), so a fix found here isn't
   rediscovered there. Distinct from the `team_colonel_kernel/` data bus: no contract, no
@@ -104,3 +107,21 @@ to build from a shallow clone at all.
 Two things that look like failures but are not: `wrangler` printing "No updated asset files to
 upload" is benign, and the live `index.html` can serve a stale copy from Cloudflare's edge cache
 for up to ~a minute after upload — the script polls through both.
+
+## Document deliverables — run the murderboard first (anti-slop)
+
+When asked for a **document** deliverable — a methods/spec write-up, an explainer, a report,
+a figure **or its caption**, or a human-facing handoff — do **not** hand over a first draft.
+Draft it, then run the review process in [`docs/doc_review_process.md`](docs/doc_review_process.md)
+(scale the reviewer team to stakes — full team for a spec, a single self-review pass for a
+caption), apply the fixes, and deliver the corrected document **plus a short review report**
+naming any residual `⚠` flags. A deliverable with unresolved `⚠` is not "done."
+
+`FOUNDATIONS.md` remains the source of truth; the murderboard is a *process* aid and never
+overrides it — if a review finding conflicts with FOUNDATIONS, flag the conflict.
+
+When a reviewer needs a paper, use `tools/fetch_paper.py` (open-access hosts only) with
+`MURDERBOARD_LIT` pointing at your literature library: `--have` checks the library before
+downloading, `--need` flags anything paywalled/unreachable for a human to fetch. It is a
+**dev-time** reviewer aid — never imported by the app — so FOUNDATIONS §6 (no runtime egress)
+is untouched.
