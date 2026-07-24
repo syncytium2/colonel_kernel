@@ -51,9 +51,9 @@ TAB1_NOISE_PROMPT.md
 MATLAB CODE/APViewer/
 MATLAB CODE/minBarF2.m
 
-# Local Claude Code settings — machine-specific (absolute worktree paths, a
-# personal permission allow-list). Not shared-team content.
-.claude/settings.json
+# Machine-specific Claude Code settings (personal permission grants, absolute
+# worktree paths). The shared baseline .claude/settings.json IS tracked — it wires
+# the vendored SessionStart hook — so only the per-machine local overrides are ignored.
 .claude/settings.local.json
 
 # Local working notes — scratch area, kept out of the repo.
