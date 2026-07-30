@@ -51,9 +51,17 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
 
 Core suite: **217 passing**, plus `npm run template-acceptance`.
 
-**The live site is behind.** [DEPLOYED.md](DEPLOYED.md) records `66abde3` (2026-07-18); `master`
-is at `30c990b` (2026-07-20), and the 2026-07-30 work above is not committed yet. Nothing here
+**The live site is behind.** The 2026-07-30 work above is committed and pushed, but the
+deployed bundle predates the two-panel premise figure and the README rewrite. Nothing here
 reaches users until `npm run deploy` runs.
+
+**History was rewritten on 2026-07-30.** A live, zoomable Tab 0 figure was built and reverted
+the same day; reverting removed the file but left the ROI 1 recording in git history, so it was
+stripped with `git-filter-repo` and force-pushed. Verified: master's tree hash is unchanged, all
+233 commits are present with identical authors, dates and subjects, and exactly 2 commit trees
+differ — the two that carried the blob. **Every commit SHA from 2026-07-18 onward changed**, so
+any SHA you have written down or bookmarked from before that day is dead. If another clone of
+this repo exists anywhere, it must be re-cloned, not pulled.
 
 ## ▶ Next action — Tony's call
 
