@@ -50,6 +50,76 @@ def load(csv_path):
     return times, roi1, spikes
 
 
+def render_two_panel(times, roi1, spikes, out_path, zoom=(400.0, 700.0)):
+    """Full recording on top, a zoomed window below, on ONE shared dF/F₀ axis.
+
+    The second panel is the whole reason this figure needs two: the 400–700 s stretch
+    where spikes keep coming and the calcium response collapses is a few pixels wide in
+    the full view, so the figure could not show the evidence for its own claim. Zooming
+    it out into its own panel does that statically — no per-sample data has to leave the
+    repo for a reader to see it (repo hygiene, CLAUDE.md).
+
+    The y-limits are SHARED across both panels deliberately. Letting the lower panel
+    autoscale would redraw a collapsed response as healthy signal — amplitude is the
+    argument, and ADR-0024/0029 already reject display scaling that misleads about
+    magnitude.
+    """
+    lo, hi = min(roi1), max(roi1)
+    span = hi - lo
+    band_h = span * 0.06
+    gap = span * 0.04
+    base = lo - gap - band_h
+    ylim = (base - span * 0.03, hi + span * 0.06)
+
+    fig, axes = plt.subplots(
+        2, 1, figsize=(13.2, 6.6), dpi=100, gridspec_kw={"hspace": 0.42}
+    )
+
+    zi = [i for i, t in enumerate(times) if zoom[0] <= t <= zoom[1]]
+    zt = [times[i] for i in zi]
+    zy = [roi1[i] for i in zi]
+    zs = [s for s in spikes if zoom[0] <= s <= zoom[1]]
+
+    for ax, (t, y, sp, xlim, title) in zip(
+        axes,
+        [
+            (
+                times,
+                roi1,
+                spikes,
+                (times[0], times[-1]),
+                f"ROI 1 trace ({len(times)} samp @10Hz) + {len(spikes)} spikes (red ticks)",
+            ),
+            (
+                zt,
+                zy,
+                zs,
+                zoom,
+                f"zoom {zoom[0]:.0f}–{zoom[1]:.0f} s — {len(zs)} spikes, "
+                "calcium response nearly gone (same dF/F0 scale)",
+            ),
+        ],
+    ):
+        ax.vlines(sp, base, base + band_h, color=TICK_COLOR, linewidth=1.0)
+        ax.plot(t, y, color=TRACE_COLOR, linewidth=0.8)
+        ax.set_xlim(*xlim)
+        ax.set_ylim(*ylim)
+        ax.set_xlabel("time (s)")
+        ax.set_ylabel("dF/F0")
+        ax.set_title(title, fontsize=11)
+
+    # Mark on the full view where the lower panel comes from, so the two panels read as
+    # one figure rather than two unrelated plots.
+    axes[0].axvspan(zoom[0], zoom[1], color="#f0a800", alpha=0.13, zorder=0)
+
+    # subplots_adjust, not tight_layout: the shaded zoom marker is an axes-spanning
+    # artist that tight_layout cannot measure, and it warns and mis-packs.
+    fig.subplots_adjust(left=0.075, right=0.985, top=0.93, bottom=0.09, hspace=0.42)
+    fig.savefig(out_path)
+    plt.close(fig)
+    return len(times), len(spikes)
+
+
 def render(times, roi1, spikes, out_path, ticks="bottom"):
     lo, hi = min(roi1), max(roi1)
     span = hi - lo
@@ -85,40 +155,28 @@ def render(times, roi1, spikes, out_path, ticks="bottom"):
     return len(times), len(spikes)
 
 
-def emit_json(times, roi1, spikes, out_path):
-    """Emit the trace for the app's interactive Tab 0 figure.
-
-    The time axis is stored as t0 + i*dt rather than 10,673 explicit floats: the export
-    is regular to 1e-6 s, a ten-thousandth of a frame, so reconstructing it is exact at
-    any resolution anyone can see and it halves the payload.
-
-    NOTE this file IS the recording, not a picture of it — see the header and
-    docs/img/README.txt. Emitting it is a consent decision, not a build step.
-    """
-    import json
-
-    dt = (times[-1] - times[0]) / (len(times) - 1)
-    payload = {
-        "source": "APs_v1_20241004_80 region 1, ROI 1",
-        "t0": round(times[0], 6),
-        "dt": round(dt, 9),
-        "n": len(times),
-        "y": [round(v, 5) for v in roi1],
-        "spikes": [round(s, 3) for s in spikes],
-    }
-    with open(out_path, "w") as fh:
-        json.dump(payload, fh, separators=(",", ":"))
-    return len(times), len(spikes)
+# DELIBERATELY NOT PROVIDED: a mode that emits the per-sample trace as CSV/JSON for the
+# app to plot interactively. It was built on 2026-07-30 and reverted the same day —
+# shipping it would publish the recording itself (not a picture of it) from a public URL,
+# which is the line CLAUDE.md's repo-hygiene section draws and which the two-panel figure
+# above makes unnecessary. If that ever gets revisited it is a consent decision involving
+# everyone with a claim on the recording, not a flag on this script.
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--csv", default=str(DEFAULT_CSV))
+    ap.add_argument(
+        "--panels",
+        choices=["two", "one"],
+        default="two",
+        help="two = full recording + zoomed window (the canon figure); one = full only",
+    )
     ap.add_argument("--ticks", choices=["bottom", "top"], default="bottom")
     ap.add_argument(
-        "--json",
-        metavar="OUT.json",
-        help="also emit the trace as JSON for the app's interactive figure",
+        "--zoom",
+        default="400,700",
+        help="zoom window for the lower panel, 'start,end' in seconds",
     )
     ap.add_argument("-o", "--out", default=str(REPO / "darkroom" / "roi1_trace_new.png"))
     args = ap.parse_args()
@@ -132,12 +190,13 @@ def main():
         )
 
     times, roi1, spikes = load(csv_path)
-    n, k = render(times, roi1, spikes, args.out, ticks=args.ticks)
-    print(f"{args.out}  ({n} samples, {k} spikes, ticks={args.ticks})")
-    if args.json:
-        emit_json(times, roi1, spikes, args.json)
-        size = pathlib.Path(args.json).stat().st_size
-        print(f"{args.json}  ({size/1024:.1f} kB)")
+    if args.panels == "two":
+        z0, z1 = (float(v) for v in args.zoom.split(","))
+        n, k = render_two_panel(times, roi1, spikes, args.out, zoom=(z0, z1))
+        print(f"{args.out}  ({n} samples, {k} spikes, two panels, zoom {z0:.0f}-{z1:.0f} s)")
+    else:
+        n, k = render(times, roi1, spikes, args.out, ticks=args.ticks)
+        print(f"{args.out}  ({n} samples, {k} spikes, ticks={args.ticks})")
 
 
 if __name__ == "__main__":
