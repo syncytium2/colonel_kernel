@@ -134,20 +134,21 @@
     <h3>Three rules that will bite you</h3>
     <ul>
       <li>
-        <strong>Numbers must be numbers.</strong> A data cell formatted as text will not
-        read. A missing sample is an <em>empty</em> cell, not a zero and not the word NaN.
+        <strong>Numbers must be numbers.</strong> Anything the spreadsheet can't hand over
+        as a number — units inside the cell, stray text, a locale decimal comma — reads as
+        missing. A missing sample should be an <em>empty</em> cell, never a zero.
       </li>
       <li>
         <strong>One clock for everything.</strong> Trace times, spike times and region
-        bounds are all seconds from the start of the experiment, where t = 0 is the moment
-        recording began.
+        bounds are all seconds on one axis, where t = 0 is the moment recording began.
       </li>
       <li>
         <strong>Region names change how a region is analyzed.</strong> A name containing
-        <code>baseline</code> is measured from the end of the period backwards; one
-        containing <code>high K</code> or <code>hiK</code> is used whole. <em>Any other
-        name</em> is treated as a drug wash-in and has its first two minutes trimmed
-        before analysis.
+        <code>baseline</code> analyzes the <strong>last 20 minutes</strong> of the period;
+        one containing <code>high K</code> or <code>hiK</code> uses the whole period.
+        <em>Any other name</em> is treated as a drug wash-in — the first 2 minutes are
+        dropped, then up to 20 minutes analyzed. Regions under 12 minutes are flagged but
+        still analyzed, and all three numbers are adjustable in Tab 2.
       </li>
     </ul>
 
