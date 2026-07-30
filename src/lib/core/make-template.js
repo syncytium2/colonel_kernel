@@ -14,10 +14,11 @@
 // consistent with what the tool claims to recover and stays correct if the kernel
 // builders change. Seeded, so every download is byte-identical.
 //
-// NO SheetJS here — this module only emits plain arrays and text, so it stays in the
-// main bundle at negligible cost. The .xlsx writer that consumes `templateSheets()`
-// lives in make-template-xlsx.js and is dynamically imported (FOUNDATIONS §6 code-split,
-// same rule load-xlsx.js follows).
+// NO SheetJS here — this module only emits plain arrays and text. It is still reached by
+// dynamic import (see template-download.js) so it lands in its own chunk rather than the
+// entry bundle; the .xlsx writer that consumes `templateSheets()` lives in
+// make-template-xlsx.js, which carries SheetJS and follows the same rule load-xlsx.js
+// establishes (FOUNDATIONS §6 code-split).
 
 import { makeGrid } from './timebase.js';
 import { rasterize } from './rasterize.js';
@@ -37,6 +38,7 @@ import {
   TRUE_KERNEL,
   TRUE_PEAK,
   ROI2_GAIN,
+  ROI_COUNT,
   SEED,
 } from './template-facts.js';
 
@@ -149,8 +151,9 @@ function instructionSheet(rec) {
     [],
     ['THE THREE SHEETS'],
     ['trace', 'REQUIRED. Column "time" (seconds) + one column per ROI. One row per frame.'],
-    ['', 'time must start at 0 (experiment onset) and strictly increase. Do not store dt —'],
-    ['', 'the app derives it from time. The FIRST ROI column is treated as the targeted cell.'],
+    ['', 'time is seconds from the start of the recording and must strictly increase.'],
+    ['', 'Do not store the frame interval — the app derives it. Whichever ROI column comes'],
+    ['', 'FIRST positionally is treated as the targeted cell, whatever its header says.'],
     ['spikes', 'REQUIRED. One column, header must be exactly "spikes". Action-potential times'],
     ['', 'in seconds, on the SAME clock as trace.time. Any length — it does not have to'],
     ['', 'match the frame count, and must never be padded to match it.'],
@@ -159,15 +162,19 @@ function instructionSheet(rec) {
     ['', 'the whole recording is analyzed as one region.'],
     [],
     ['RULES THAT WILL BITE YOU'],
-    ['Numbers', 'Every data cell must be a NUMBER, not text. A missing sample is an EMPTY cell.'],
+    ['Numbers', 'Every data cell must be a NUMBER. Anything the spreadsheet cannot give as a'],
+    ['', 'number — units in the cell, stray text, a locale decimal comma — reads as missing.'],
+    ['', 'A missing sample should be an EMPTY cell, never a zero.'],
     ['Clock', 'trace.time, spikes and start_s/end_s all share one zero-based clock.'],
     ['Region names', 'The name selects how the region is windowed. A name containing "baseline"'],
-    ['', 'is anchored to the end of the period; "high K" or "hiK" is used whole; ANY OTHER'],
-    ['', 'name is treated as a drug wash-in and has its first 2 minutes trimmed.'],
+    ['', 'analyzes the LAST 20 MINUTES of the period; "high K" or "hiK" uses the whole'],
+    ['', 'period; ANY OTHER name is treated as a drug wash-in — first 2 minutes dropped,'],
+    ['', 'then up to 20 minutes analyzed. Under 12 minutes is flagged but still analyzed.'],
+    ['', 'All three numbers are adjustable in Tab 2. Matching ignores case and punctuation.'],
     ['Sheet names', 'Matched case-insensitively, so "Trace" and "trace" both work.'],
     [],
     ['ABOUT THE EXAMPLE DATA IN THIS FILE'],
-    ['', `Synthetic, not a real recording. ${rec.times.length} frames at ${RATE_HZ} Hz (${DURATION_S} s), ${rec.spikes.length} spikes, 2 ROIs.`],
+    ['', `Synthetic, not a real recording. ${rec.times.length} frames at ${RATE_HZ} Hz (${DURATION_S} s), ${rec.spikes.length} spikes, ${ROI_COUNT} ROIs.`],
     ['', `roi1 = the spikes convolved with a calcium kernel (tau_rise ${TRUE_KERNEL.tauRise} s,`],
     ['', `tau_decay ${TRUE_KERNEL.tauDecay} s, peak ${TRUE_PEAK} dF/F0) plus noise at sigma ${NOISE_SIGMA}.`],
     ['', 'roi2 is the same cell driven more weakly. Those are the numbers Tab 2 should recover.'],

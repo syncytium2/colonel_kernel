@@ -64,9 +64,11 @@ realization, not a copy.
 Ground truth: `calcium` kernel, `tau_rise` 0.15 s, `tau_decay` 0.5 s, peak 0.1 dF/F₀,
 noise at `SIGMA_COHORT_TYPICAL` (0.0024, [ADR-0015](0015-harness-noise-model.md)). The
 seed is fixed, so the trace is reproducible and the download is byte-identical in
-practice — 155,413 bytes .xlsx / 29,333 bytes .csv **as of SheetJS 0.20.3**. No test
-asserts byte-identity, and a SheetJS bump ([ADR-0036](0036-sheetjs-install-from-maintained-tarball.md)
-makes those deliberate) will move the .xlsx figure without changing the data.
+practice — 156,176 bytes .xlsx / 29,333 bytes .csv at the time of writing. No test asserts
+byte-identity, and the .xlsx figure moves without the *data* changing whenever the
+instructions sheet is reworded or SheetJS is bumped
+([ADR-0036](0036-sheetjs-install-from-maintained-tarball.md) makes those deliberate). Treat
+it as indicative, not as a checksum.
 
 Where the constants come from, so none of them is a bare magic number:
 

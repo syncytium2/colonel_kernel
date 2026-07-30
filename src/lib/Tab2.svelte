@@ -974,8 +974,9 @@
           <p>
             A workbook needs a <code>trace</code> sheet (<code>time</code> + one column per
             ROI), a <code>spikes</code> sheet of AP times in seconds, and an optional
-            <code>metadata</code> sheet of regions. All cells numeric, one shared clock
-            starting at 0.
+            <code>metadata</code> sheet of regions. Every data cell a number, one shared
+            clock starting at 0. Region <em>names</em> pick the analysis window — see
+            Tab 0 for the full rules.
           </p>
           <p>
             Start from the template —
