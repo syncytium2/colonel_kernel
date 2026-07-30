@@ -17,6 +17,7 @@
   // diagnostic; the human reads it (ADR-0014 / ADR-0018).
   import Plot from './Plot.svelte';
   import Shell from './Shell.svelte';
+  import { downloadTemplateXlsx, downloadTemplateCsv } from './template-download.js';
   import {
     loadCsv,
     rasterize,
@@ -102,6 +103,32 @@
 
   let recording = $state(null); // LoadedRecording (xlsx, has .regions) or LoadedRegion (csv) — the loaded file
   let xlsxApi = $state(null); // load-xlsx fns stashed after dynamic import (keeps SheetJS code-split, §6)
+
+  // --- input template offered on the empty dropzone (ADR-0019 §5) ---
+  // Same files Tab 0 hands out; the shared module is the single source so the two can
+  // never drift. The xlsx writer is dynamically imported inside it, so SheetJS stays
+  // code-split even when the template is offered on a tab that has not loaded a file.
+  let tplXlsx = $state('idle');
+  let tplError = $state(null);
+  async function getTemplateXlsx() {
+    if (tplXlsx === 'working') return;
+    tplXlsx = 'working';
+    tplError = null;
+    try {
+      await downloadTemplateXlsx();
+    } catch (e) {
+      tplError = String(e && e.message ? e.message : e);
+    }
+    tplXlsx = 'idle';
+  }
+  async function getTemplateCsv() {
+    tplError = null;
+    try {
+      await downloadTemplateCsv();
+    } catch (e) {
+      tplError = String(e && e.message ? e.message : e);
+    }
+  }
 
   // --- per-recording summary + Save-as-PDF (summaries & export, Phase 1) ---
   let showSummary = $state(false);
@@ -874,7 +901,11 @@
   ondrop={onDrop}
 >
   {#if !recording}
-    <div class="dropzone" class:dragging role="button" tabindex="0">
+    <!-- Not role="button": this is a drop TARGET with no click handler, and the false
+         role made assistive tech announce the entire panel — spec paragraph and all —
+         as one button label. The real control is the file input inside, which is now
+         focusable (see .filebtn input in the styles) instead of display:none. -->
+    <div class="dropzone" class:dragging>
       <p>Drop a recording (.xlsx) or region CSV here, or</p>
       <label class="filebtn">
         choose a file
@@ -882,6 +913,25 @@
       </label>
       {#if fileName}<p class="fname">{fileName}</p>{/if}
       {#if error}<p class="error">Could not load: {error}</p>{/if}
+      <!-- The dropzone used to name two extensions and stop, leaving the schema
+           documented only in ADR-0016/0019 — which a visitor has never read. State the
+           shape here, where someone is standing when they need it, and offer the
+           template as a working starting point rather than a spec to implement. -->
+      <p class="dz-spec">
+        A workbook needs a <code>trace</code> sheet (<code>time</code> + one column per
+        ROI), a <code>spikes</code> sheet of action-potential times in seconds, and an
+        optional <code>metadata</code> sheet of regions. A CSV needs
+        <code>time</code>, <code>spikes</code> and one or more ROI columns in one file.
+      </p>
+      <p class="dz-actions">
+        New here? Start from the template —
+        <button type="button" class="dz-dl" onclick={getTemplateXlsx}>{tplXlsx === 'working' ? 'preparing…' : 'workbook (.xlsx)'}</button>
+        <span class="dz-sep">·</span>
+        <button type="button" class="dz-dl" onclick={getTemplateCsv}>CSV</button>
+        <br />It is a small working recording: drop it straight back in to see the whole
+        loop before you use your own data.
+      </p>
+      {#if tplError}<p class="error">Could not build the template: {tplError}</p>{/if}
     </div>
   {:else if !displayAnalyzable}
     <!-- ADR-0022: no APs in the whole recording — a policy SKIP, not a fit (and not an error). -->
@@ -915,6 +965,27 @@
             <input type="file" accept=".csv,.xlsx,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
           </label>
         </div>
+        <!-- Entering Tab 2 by the nav auto-loads the Tab 1 handoff, so a user who wants
+             their OWN recording lands here and never sees the empty dropzone where the
+             format is explained. This fold is that guidance on the path people actually
+             take. Collapsed by default so it costs the analyze view nothing. -->
+        <details class="ownfile">
+          <summary>Loading your own recording?</summary>
+          <p>
+            A workbook needs a <code>trace</code> sheet (<code>time</code> + one column per
+            ROI), a <code>spikes</code> sheet of AP times in seconds, and an optional
+            <code>metadata</code> sheet of regions. All cells numeric, one shared clock
+            starting at 0.
+          </p>
+          <p>
+            Start from the template —
+            <button type="button" class="dz-dl" onclick={getTemplateXlsx}>{tplXlsx === 'working' ? 'preparing…' : '.xlsx'}</button>
+            <span class="dz-sep">·</span>
+            <button type="button" class="dz-dl" onclick={getTemplateCsv}>.csv</button>
+            — it is a working recording, so you can load it as-is first.
+          </p>
+          {#if tplError}<p class="error">Could not build the template: {tplError}</p>{/if}
+        </details>
         {#if error}<p class="error">{error}</p>{/if}
 
         <!-- Per-recording summary → Save as PDF (summaries & export). xlsx w/ regions only. -->
@@ -1512,8 +1583,22 @@
     font-weight: 500;
     font-size: 13px;
   }
+  /* Same reason as .filebtn input — hidden, not removed from the tab order. */
   .filebtn-sm input {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  .filebtn-sm:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 4px;
   }
   .dropzone {
     border: 1.5px dashed var(--border);
@@ -1536,9 +1621,76 @@
     color: var(--accent);
     font-weight: 500;
   }
+  /* Visually hidden but still FOCUSABLE. `display: none` removed the input from the
+     tab order entirely, which left no keyboard path to load a file at all — the label
+     is not focusable and the dropzone has no key handler. Clipping keeps the styled
+     label as the visual affordance while the real control stays reachable. */
   .filebtn input {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
   }
+  .filebtn:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+  .dz-spec,
+  .dz-actions {
+    margin: 14px auto 0 !important;
+    max-width: 62ch;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .dz-spec code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  .dz-actions { padding-top: 12px; border-top: 1px solid var(--border); }
+  .dz-dl {
+    font: inherit;
+    font-size: 13.5px;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .dz-dl:hover { text-decoration: underline; }
+  .dz-sep { opacity: 0.5; margin: 0 4px; }
+
+  /* rail fold: the input contract, on the path a user actually takes to load a file */
+  .ownfile summary {
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-h);
+  }
+  .ownfile p {
+    margin: 8px 0 0;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text);
+  }
+  .ownfile code {
+    font-family: var(--mono);
+    font-size: 0.92em;
+    background: var(--code-bg);
+    padding: 0 3px;
+    border-radius: 3px;
+  }
+  .ownfile .dz-dl { font-size: 12px; }
   .fname {
     margin-top: 8px !important;
     font-family: var(--mono);

@@ -11,7 +11,8 @@
     "test:core": "node src/lib/core/core.test.mjs",
     "machinery-check": "node src/lib/core/machinery-check.mjs",
     "xlsx-acceptance": "node src/lib/core/xlsx-acceptance.mjs",
-    "screenshot": "node scripts/screenshot.mjs"
+    "screenshot": "node scripts/screenshot.mjs",
+    "template-acceptance": "node src/lib/core/template-acceptance.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
