@@ -22,6 +22,41 @@ app is public even though the repo is not, and that distinction is easy to lose.
 Keep the two copies in sync (docs/img/ for the README, src/lib/assets/ for the
 bundle); Vite only bundles what is under src/.
 
+SCOPE WIDENED AGAIN 2026-07-30 — THE RECORDING ITSELF NOW SHIPS, NOT JUST A PLOT
+OF IT. src/lib/assets/roi1_trace.json carries the per-sample dF/F0 (10,673
+samples, stored as t0 + i*dt) and the 140 spike times, so Tab 0's premise figure
+is a live, x-zoomable plot instead of a picture. Tony's explicit call, 2026-07-30,
+made knowing the difference: a PNG is lossy and not machine-readable back to the
+source, whereas this JSON IS the recording and is downloadable by anyone who
+visits kernel.tonydefazio.com.
+
+The reason it was worth it: the figure's whole claim is that spikes and calcium
+correspond only SOMETIMES, and the 400-700 s decoupling stretch is a few pixels
+wide in a static render. Zoomed, you can count 55 spikes against a dozen small
+transients. The static PNG could not carry its own argument.
+
+This crosses the "never raw or near-raw data" line in CLAUDE.md's repo-hygiene
+section, which now records the same exception. It is ONE named recording, not a
+general relaxation — any further per-sample data leaving the repo needs its own
+explicit decision, recorded here.
+
+The PNG copies remain: docs/img/roi1_trace.png for the README (GitHub cannot
+render the interactive version) and src/lib/assets/roi1_trace.png as the in-app
+"Open the rendered figure" fallback and the accessible still. Both are now
+rendered with the spike ticks BELOW the trace (Tony's call, 2026-07-30), so the
+eye drops from a tick up into the transient it caused.
+
+GENERATOR (new 2026-07-30): scripts/dataset-summary/roi1_trace.py — tracked, the
+same pattern methods_explainer.py follows. It renders the PNG and emits the JSON
+from the gitignored exports/APs_v1_20241004_80__region1.csv. The original
+2026-06-23 render was an ad-hoc script that was never kept, so the canon figure
+had no reproducible source; regenerating it meant reverse-engineering the plot
+from the PNG. Re-render with:
+
+  darkroom/venv/bin/python scripts/dataset-summary/roi1_trace.py \
+      --ticks bottom -o docs/img/roi1_trace.png --json src/lib/assets/roi1_trace.json
+  cp docs/img/roi1_trace.png src/lib/assets/roi1_trace.png
+
 methods_explainer.{pdf,png} is a plain-language, graphics-first teaching figure —
 "Four ways to ask if there is a calcium kernel" (free-vector / parametric / shaped
 / STA). Its curves are SYNTHETIC/illustrative (no unpublished data), so unlike

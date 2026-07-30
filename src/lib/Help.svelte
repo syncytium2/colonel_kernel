@@ -14,6 +14,11 @@
   // SheetJS import and two blob downloads), and Help.svelte is otherwise pure prose.
   import BringYourData from './BringYourData.svelte';
 
+  // The premise figure, live and x-zoomable (was a static PNG). Its own component
+  // because it ships the real ROI-1 recording as data — see the consent note in its
+  // header and in docs/img/README.txt.
+  import PremiseFigure from './PremiseFigure.svelte';
+
   // That section reads best late — after the problem, the tabs and the first run — but
   // measured at 1000px wide it starts ~80% down a 3365px page, which is a long scroll for
   // the most actionable thing here. This jump sits with the tab cards, where a reader who
@@ -30,14 +35,6 @@
   // on Tab 0 so naive users meet it up front instead of hunting for it behind a
   // modal. Imported as a bundled, same-origin URL (CSP-safe, no egress).
   import methodsSvg from './assets/methods_explainer.svg?url';
-
-  // The premise figure — ROI 1 of a real paired recording, the same plot the repo
-  // README leads with. It opens Tab 0 because the problem should be the first
-  // thing a visitor meets: spikes and calcium correspond only SOMETIMES, and
-  // FOUNDATIONS §3–4 treats that discrepancy as the project's core premise, not
-  // an artifact. Real (unpublished) data, shown with the author's consent — see
-  // docs/img/README.txt. Bundled same-origin like the explainer (CSP-safe).
-  import roi1Trace from './assets/roi1_trace.png?url';
 
   // Relative link (not root-absolute) so it resolves correctly under any base
   // path, and opens in a new tab so the reader keeps their place in the app.
@@ -81,20 +78,15 @@
       the dataset. The red ticks are 140 action potentials; the blue trace is the calcium
       signal. Watch what happens as it goes on.
     </p>
-    <figure class="fig">
-      <a href={roi1Trace} target="_blank" rel="noopener" title="Open full size in a new tab">
-        <img src={roi1Trace} alt="ROI 1 of a real paired recording: 140 action potentials shown as red ticks above a blue calcium trace. Early on, each spike has a matching calcium transient. Across 400–700 seconds the spikes continue while the calcium response shrinks. Near 780 seconds a large calcium transient occurs with no matching spikes." />
-      </a>
-      <figcaption>
-        Real data, ROI 1. Even here the relationship is not one-to-one.
-        <a href={roi1Trace} target="_blank" rel="noopener">Open full size ↗</a>
-      </figcaption>
-    </figure>
+    <PremiseFigure />
     <p class="plain">
       Early on, nearly every spike has its own calcium bump. But from about
-      <strong>400 to 700 s</strong> the spikes keep coming while the calcium response fades &mdash;
-      and near <strong>780 s</strong> there is a large calcium transient with no matching spikes
-      at all. Calcium without action potentials; action potentials without calcium.
+      <strong>400 to 700 s</strong> the spikes keep coming while the calcium response fades
+      toward the noise &mdash; <em>zoom into that stretch</em> and the transients that look
+      like a solid band from here turn out to be mostly absent. Then near
+      <strong>790 s</strong> a handful of spikes produce a transient roughly five times
+      larger than anything else in the recording, while comparable clusters minutes earlier
+      produced a fraction of it.
     </p>
     <p class="plain">
       That is the problem this tool exists for. Colonel Kernel <strong>measures</strong> the
