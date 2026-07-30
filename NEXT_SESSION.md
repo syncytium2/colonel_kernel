@@ -1,6 +1,6 @@
 # NEXT_SESSION
 
-**Working state as of 2026-07-18.** Short by design. Read
+**Working state as of 2026-07-30.** Short by design. Read
 [`FOUNDATIONS.md`](FOUNDATIONS.md) first (canonical), then this.
 
 > **Rule for this file:** one dated state block, one next action, and a list of
@@ -35,14 +35,41 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   framing the README leads with; matches FOUNDATIONS §3–4. **This is the only unpublished-data
   figure that ships in the public app** — consent widened and the rule for any future one is
   recorded in [docs/img/README.txt](docs/img/README.txt).
+- **User data access + input template (2026-07-30)** — the app never told anyone what file it
+  wants. Tab 0 gained a **"Bring your own recording"** section (contract, the rules that bite,
+  two template downloads); the same guidance is on Tab 2's dropzone and in its rail, which is
+  where users actually land since the nav auto-loads the Tab 1 handoff. The template is a
+  **working example recording** — drop it back in and a kernel comes out — synthesized
+  in-browser from core, never committed.
+  [ADR-0038](docs/adr/0038-input-template-working-example-recording.md); discharges the
+  deliverable ADR-0019 §5 had reserved as TBD. Guarded by `npm run template-acceptance`.
+  Same pass fixed Tab 2 having **no keyboard path to load a file**.
+- **Interactive-demo review (2026-07-30)** — all four tabs driven in a browser at four widths;
+  findings in [docs/reviews/interactive-demos-2026-07-30.md](docs/reviews/interactive-demos-2026-07-30.md).
+  The math is untouched; everything found is interaction/layout. Highest-severity items are
+  listed under "▶ Next action" below.
 
-Core suite: **217 passing**. Deployed state: see [DEPLOYED.md](DEPLOYED.md).
+Core suite: **217 passing**, plus `npm run template-acceptance`.
+
+**The live site is behind.** [DEPLOYED.md](DEPLOYED.md) records `66abde3` (2026-07-18); `master`
+is at `30c990b` (2026-07-20), and the 2026-07-30 work above is not committed yet. Nothing here
+reaches users until `npm run deploy` runs.
 
 ## ▶ Next action — Tony's call
 
-There is no single obvious next slice; the last feature push (Challenges) closed cleanly.
-**Pick one of the open items below and name it here.** Do not infer a next action from the
-archive — those pointers are stale.
+The 2026-07-30 review produced a ranked list; **the top four are small, local, and independent**
+(full detail and repro in the review doc):
+
+1. **A scored round can be rewritten after it is scored.** Beat the Colonel's sliders stay live
+   after reveal (0.760 → −1.000 while the tally still says `Ties 1`); Guess the spikes' `clear`
+   is enabled post-reveal and rewrites 42% F1 → 0%.
+2. **Plot bands collapse 206 px → 18 px at ≤900 px**, a cliff at the breakpoint.
+3. **Toggling a challenge destroys a loaded recording** — Tab 2 unmounts and silently reloads
+   the synthetic handoff.
+4. **Deep-linking `#tab2` gives a blank tab**; the tab is never written back to the URL.
+
+**Pick one and name it here.** Do not infer a next action from the archive — those pointers
+are stale.
 
 ## Open items
 
@@ -74,7 +101,7 @@ archive — those pointers are stale.
 **Raised by the 2026-07-20 MLspike kernel export — full record in
 [docs/reviews/kernel-export-mlspike-2026-07-20.md](docs/reviews/kernel-export-mlspike-2026-07-20.md):**
 
-- **▶ Method 2 fits only 1 of the 8 human-identified kernels.** `pm_fit_quality` is `good` for
+- **Method 2 fits only 1 of the 8 human-identified kernels.** `pm_fit_quality` is `good` for
   `20250925_233` only; 5 failed (4 with R² ≤ 0, 2 railed at the `tau_rise` bound, 237
   non-converged), 2 poor. A double exponential is the standard forward model in this
   literature and ours fits one of eight recordings a human says visibly contain kernels.
@@ -99,7 +126,7 @@ archive — those pointers are stale.
 
 **Needs Tony's eyeball (figure gate, [ADR-0018](docs/adr/0018-figure-gate-policy.md)):**
 
-- **▶ Careful kernel walkthrough — SCHEDULE THIS.** A *quick* baseline-only human review is
+- **Careful kernel walkthrough — SCHEDULE THIS.** A *quick* baseline-only human review is
   recorded in [docs/reviews/kernel-review-baseline-2026-07-19.md](docs/reviews/kernel-review-baseline-2026-07-19.md):
   8 recordings with usable baseline kernels (80, 151, 181, 209, 233, 235, 237, 272). The careful
   pass is still owed — all regions, verdict written down per slice as it is made.
