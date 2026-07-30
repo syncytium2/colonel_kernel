@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-07-18 21:03 UTC |
-| **Commit** | `66abde3` — Merge branch 'tab0-problem-figure': Tab 0 leads with the ROI 1 premise f |
-| **Bundle** | `assets/index-UrC-ilpf.js` |
-| **Worker version** | `13540af9-4d94-4860-9f61-9ee30e11688a` |
+| **Deployed at** | 2026-07-30 19:32 UTC |
+| **Commit** | `332b617` — Merge branch 'docs/readme-rewrite': a README for researchers, not scaffo |
+| **Bundle** | `assets/index-BulypMdU.js` |
+| **Worker version** | `d38e1e39-d9a6-4f16-a106-b3c4e09e96e0` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
