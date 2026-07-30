@@ -59,6 +59,15 @@ researchers' unpublished data must never be committed.
   `docs/img/README.txt`. `docs/img/roi1_trace.png` is the existing precedent. A
   derived figure is a plot, never raw or near-raw data (no full traces as CSV/JSON,
   no per-sample dumps).
+- **ONE named exception to that last clause (2026-07-30, Tony's explicit call):**
+  `src/lib/assets/roi1_trace.json` — the ROI 1 recording itself, per-sample dF/F₀ plus
+  the 140 spike times — is committed and **served publicly**, so Tab 0's premise figure
+  can be zoomed. A static plot cannot carry that figure's argument: the 400–700 s
+  decoupling stretch is a few pixels wide until you can zoom into it. This is a
+  **specific, recorded decision about one recording**, not a general relaxation. Any
+  further per-sample data leaving the repo needs the same explicit decision, recorded in
+  `docs/img/README.txt` the same way. The default remains: no raw traces, no per-sample
+  dumps.
 - **Before any push, confirm no `data/` or `darkroom/` content is staged or tracked**
   (`git ls-files data/ darkroom/` must be empty) and that the only tracked binaries
   under `docs/img/` are consented figures.
