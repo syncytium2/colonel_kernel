@@ -9,6 +9,22 @@
   // buttons drop the reader straight into Tab 1 / Tab 2.
   let { onNavigate } = $props();
 
+  // "Bring your own recording" — the input contract, the template download, and the
+  // quick start. Its own component because it owns real behaviour (a code-split
+  // SheetJS import and two blob downloads), and Help.svelte is otherwise pure prose.
+  import BringYourData from './BringYourData.svelte';
+
+  // That section reads best late — after the problem, the tabs and the first run — but
+  // measured at 1000px wide it starts ~80% down a 3365px page, which is a long scroll for
+  // the most actionable thing here. This jump sits with the tab cards, where a reader who
+  // already has data is deciding where to go.
+  function jumpToOwnData() {
+    const el = document.getElementById('bring-your-own');
+    if (!el) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }
+
   // The "help document" — the four-methods explainer figure. Same asset the
   // Tab 2 "?" modal uses (src/lib/assets/methods_explainer.svg), surfaced here
   // on Tab 0 so naive users meet it up front instead of hunting for it behind a
@@ -169,19 +185,27 @@
         </span>
       </div>
     </div>
+    <p class="jump">
+      Already have a recording of your own?
+      <button class="inline-link" onclick={jumpToOwnData}>See what the file needs to look like ↓</button>
+    </p>
   </section>
 
   <section class="plain steps">
     <h2>Your first run in 30 seconds</h2>
     <ol>
       <li>Open <button class="inline-link" onclick={() => onNavigate?.(1)}>Tab 1</button>
-        and hit <strong>↻ random</strong> to scatter some spikes.</li>
+        and hit <strong>↻ random 0.1 Hz</strong> to scatter some spikes.</li>
       <li>Try different <strong>kernel</strong> shapes and sliders — see the output trace update live.</li>
       <li>Nudge <strong>Measurement noise</strong> up to make it look like real data.</li>
       <li>Jump to <button class="inline-link" onclick={() => onNavigate?.(2)}>Tab 2</button>
-        to recover the kernel from that signal, or load your own recording.</li>
+        to recover the kernel from that signal.</li>
+      <li>Ready for real data? Take the template below, drop it into Tab 2 to watch the
+        loop work, then paste your own recording over it.</li>
     </ol>
   </section>
+
+  <BringYourData {onNavigate} />
 
   <section class="reassure">
     <div class="r-icon" aria-hidden="true">🔒</div>
@@ -345,6 +369,12 @@
   .c-title { font-size: 18px; font-weight: 650; color: var(--text-h); }
   .c-body { font-size: 14.5px; line-height: 1.5; color: var(--text); }
   .c-go { margin-top: auto; font-size: 14px; font-weight: 600; color: var(--accent); }
+
+  .jump {
+    margin: 14px 0 0;
+    font-size: 15px;
+    color: var(--text);
+  }
 
   /* --- steps --- */
   .steps ol { margin: 0; padding-left: 22px; }

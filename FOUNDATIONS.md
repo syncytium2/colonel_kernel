@@ -408,7 +408,10 @@ cell (§4); non-finite trace samples are the literal `NaN`; the pre-trim `timing
 (the app applies the `mod(k,2)` trim, §13). Confirmed against real exported files.
 
 > **Layout replaced by [ADR-0019](docs/adr/0019-tab2-input-contract-workbook-per-recording.md)
-> (proposed).** The ragged single-CSV layout silently truncated when `nSpikes > nFrames` (file-250
+> (Accepted 2026-06-25 for the core contract, frozen at bus v1.0; open tails remain, and its
+> §6 CSV tail was never implemented —
+> [ADR-0038](docs/adr/0038-input-template-working-example-recording.md) §4).**
+> The ragged single-CSV layout silently truncated when `nSpikes > nFrames` (file-250
 > senktide, −64.8%). The contract moves to **one xlsx workbook per recording** — a `trace` sheet
 > (`time, roi1..roiN`, the whole untrimmed recording in zero-based recording time (one
 > shared t=0 origin at experiment onset)), an
@@ -442,6 +445,23 @@ cell (§4); non-finite trace samples are the literal `NaN`; the pre-trim `timing
 > recording ran), so consumers **must not assume `end_s ≤ tEnd`**. Open-ended `inf` ends fall back to
 > `max(timing)` — a representability exception, not a clamp. The app windows analysis to spikes
 > regardless, so the overhang is cosmetic for analysis.
+
+> **Users are now told the format in the app, and handed a working template
+> ([ADR-0038](docs/adr/0038-input-template-working-example-recording.md)).** The schema above
+> previously existed only in these docs — nothing in the UI stated it, so a researcher with a
+> trace and a spike list had to reverse-engineer it from a dropzone label. Tab 0 now carries a
+> **"Bring your own recording"** section (what the app needs, the three sheets, the rules that
+> bite) and the same guidance sits on Tab 2's dropzone and in its rail. The **template is a
+> working example recording**, not an empty skeleton: downloading it and dropping it back in
+> recovers a kernel, so a user can watch the format succeed before risking their own data. It is
+> synthesized in-browser from the app's own core and never committed (§6 / repo hygiene).
+> This discharges the template deliverable ADR-0019 §5 reserved as TBD.
+>
+> Two cautions that section makes explicit, because both are silent failures otherwise:
+> region **names** select the ADR-0035 analysis window (an unrecognized name is treated as a
+> drug wash-in and loses its first 2 minutes), and the **CSV path carries no region table**, so
+> a CSV is always analyzed as a single region. ADR-0038 §4 also records that ADR-0019 §6's
+> two-file paired CSV path was never implemented — the app reads ADR-0016's single rectangle.
 
 **MATLAB origin:** source data lives in MATLAB v7.3 (HDF5) structures (`k_sta_store`). A CSV path now
 exists: **`scripts/mat2csv.py`** — a tracked, *offline* converter that reads the processed
@@ -575,17 +595,24 @@ These do not block scaffolding, but should be settled deliberately:
 5. **Linear vs circular convolution — SETTLED.** **Linear** convolution (zero-padded) is the
    convention everywhere; circular is kept only as a teaching illustration of "what FFT does
    naively, and why we zero-pad to avoid it." See [ADR-0006](docs/adr/0006-linear-convolution.md).
-6. **CSV layout convention — SETTLED.** The sparse spike column vs dense trace columns is resolved:
-   one CSV per region (`time`, `spikes`, `roi1..roiN`, ragged spikes), confirmed against real
-   exported files produced by `scripts/mat2csv.py`. See [ADR-0016](docs/adr/0016-csv-input-layout.md).
+6. **CSV layout convention — SETTLED, then narrowed.** [ADR-0016](docs/adr/0016-csv-input-layout.md)
+   fixed the columns (`time`, ragged `spikes`, `roi1..roiN`), confirmed against real exported files
+   from `scripts/mat2csv.py`, and that is **still what `loadCsv` reads**. What changed is the
+   container: the canonical input moved to the ADR-0019 **per-recording workbook** (§5 above), and
+   CSV survives only as a no-spreadsheet fallback — single-region, since a CSV has nowhere to put a
+   region table. ADR-0019 §6 specified a two-file CSV replacement that **was never implemented**;
+   [ADR-0038](docs/adr/0038-input-template-working-example-recording.md) §4 records that divergence,
+   and the shipped CSV template targets the layout the app actually reads.
 
 > **Status of this list:** with rasterization (1, via ADR-0001) and linear-vs-circular (5, via
 > ADR-0006) now settled — and the kernel-source and sample-rate questions resolved by ADR-0003 and
 > ADR-0002 respectively — the **original four open questions are closed**. The remaining live items
 > are the *later-surfaced* ones: the deconvolution numerical route ([ADR-0004](docs/adr/0004-tab2-deconvolution-method.md)),
 > and the kernel global/tab-local detail plus the per-tab disclosure layout (§11.4). Item 6 (CSV
-> layout) is now **also settled** ([ADR-0016](docs/adr/0016-csv-input-layout.md)) — a real exported
-> file exists via `scripts/mat2csv.py`.
+> layout) is **settled but narrowed** — ADR-0016's columns still describe what `loadCsv` reads,
+> while the canonical container is now the ADR-0019 workbook and ADR-0019 §6's two-file CSV
+> replacement was never built ([ADR-0038](docs/adr/0038-input-template-working-example-recording.md) §4).
+> Read item 6 above, not this sentence, for the current position.
 
 ---
 

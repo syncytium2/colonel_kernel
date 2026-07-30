@@ -164,6 +164,12 @@ per-region override in seconds) is unchanged from the bullets above — only the
 and writers. Two enforcement mechanisms, both noted:
 - **Field / new users:** fidelity is enforced by a **provided template workbook** with columns
   pre-typed numeric. This template is a **separate v1 deliverable — reserved / TBD** in this ADR.
+  *(**DELIVERED 2026-07-30** — [ADR-0038](0038-input-template-working-example-recording.md).
+  The template is a **working example recording** generated in-browser, not an empty skeleton;
+  it emits numeric cells by construction, and `npm run template-acceptance` round-trips it
+  through the real loaders. The contract below is unchanged — ADR-0038 records only how the
+  template realizing it is built. Note ADR-0038 §4: **§6's two-file CSV path was never
+  implemented**, and the app still reads ADR-0016's single rectangle.)*
 - **MATLAB re-export:** no template — the **writer code must emit numeric cells and empty-cell
   NaN**. A code-level requirement to be **confirmed in the re-export prompt and verified in the
   generated writer** (see Consequences / sequencing).
@@ -174,6 +180,14 @@ CSV remains **tolerated** for users without xlsx: a **trace CSV** (`time, roi1�
 **spikes CSV** (`spikes`), **two files, lengths decoupled, padding still banned**. Pairing is by the
 UI (assign which file is trace, which is spikes); a **headerless** one-column spikes CSV is
 **tolerated only on the CSV / UI-pairing path** (the xlsx `spikes` sheet still requires its header).
+
+> ⚠ **NOT IMPLEMENTED — divergence recorded 2026-07-30
+> ([ADR-0038](0038-input-template-working-example-recording.md) §4).** No two-file pairing
+> UI was ever built. `loadCsv` reads a **single rectangle** (`time`, `spikes`, one-or-more
+> ROI columns in one header row — [ADR-0016](0016-csv-input-layout.md)'s layout), and
+> `handleFiles` takes `fileList[0]` only. The shipped CSV template targets the implemented
+> single-file layout. Whether to build this paragraph or amend it to ratify the single
+> rectangle is **open**; the xlsx path above (primary, and what real data uses) is unaffected.
 The CSV path has **no metadata sheet**, so CSV-path region metadata falls to the OPEN container
 (below) — which **does not block v1**, because the re-export of Tony's own data is **xlsx** and
 carries regions in its `metadata` sheet.
