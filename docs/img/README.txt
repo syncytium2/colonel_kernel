@@ -22,29 +22,31 @@ app is public even though the repo is not, and that distinction is easy to lose.
 Keep the two copies in sync (docs/img/ for the README, src/lib/assets/ for the
 bundle); Vite only bundles what is under src/.
 
-SCOPE WIDENED AGAIN 2026-07-30 — THE RECORDING ITSELF NOW SHIPS, NOT JUST A PLOT
-OF IT. src/lib/assets/roi1_trace.json carries the per-sample dF/F0 (10,673
-samples, stored as t0 + i*dt) and the 140 spike times, so Tab 0's premise figure
-is a live, x-zoomable plot instead of a picture. Tony's explicit call, 2026-07-30,
-made knowing the difference: a PNG is lossy and not machine-readable back to the
-source, whereas this JSON IS the recording and is downloadable by anyone who
-visits kernel.tonydefazio.com.
+REDRAWN 2026-07-30 — TWO PANELS, TICKS BELOW THE TRACE. The figure is now:
+top, the full recording with the 400-700 s window shaded; bottom, that window
+enlarged on the SAME dF/F0 scale, where 54 action potentials are followed by
+almost no calcium. Spike ticks moved from above the trace to below it, so the eye
+drops from a tick up into the transient it caused.
 
-The reason it was worth it: the figure's whole claim is that spikes and calcium
-correspond only SOMETIMES, and the 400-700 s decoupling stretch is a few pixels
-wide in a static render. Zoomed, you can count 55 spikes against a dozen small
-transients. The static PNG could not carry its own argument.
+The shared y-scale is deliberate. Letting the lower panel autoscale would redraw a
+collapsed response as healthy signal, and amplitude is the figure's whole argument
+(same principle as ADR-0024/0029: display scaling must not mislead about
+magnitude).
 
-This crosses the "never raw or near-raw data" line in CLAUDE.md's repo-hygiene
-section, which now records the same exception. It is ONE named recording, not a
-general relaxation — any further per-sample data leaving the repo needs its own
-explicit decision, recorded here.
+CONSIDERED AND REJECTED THE SAME DAY — A LIVE, ZOOMABLE VERSION. It was built and
+worked: src/lib/assets/roi1_trace.json carried the per-sample dF/F0 and the 140
+spike times, and Tab 0 plotted it with drag-to-zoom. It was reverted before ever
+being deployed, because it meant publishing the RECORDING rather than a picture of
+one — machine-readable, downloadable by anyone, and impossible to withdraw once
+served. The second panel above gets the same argument across with nothing
+published. Tony's call, and the deciding factor was that the recording is not his
+alone to release. Do NOT rebuild the interactive version without re-opening that
+conversation.
 
-The PNG copies remain: docs/img/roi1_trace.png for the README (GitHub cannot
-render the interactive version) and src/lib/assets/roi1_trace.png as the in-app
-"Open the rendered figure" fallback and the accessible still. Both are now
-rendered with the spike ticks BELOW the trace (Tony's call, 2026-07-30), so the
-eye drops from a tick up into the transient it caused.
+(The reverted file also carried "APs_v1_20241004_80 region 1, ROI 1" and a t0 of
+65.0108 in its payload — the internal recording ID, the acquisition date, and the
+offset into the parent recording. Worth remembering if per-sample data is ever
+prepared again: strip identifying metadata, zero-base the clock.)
 
 GENERATOR (new 2026-07-30): scripts/dataset-summary/roi1_trace.py — tracked, the
 same pattern methods_explainer.py follows. It renders the PNG and emits the JSON
@@ -54,7 +56,7 @@ had no reproducible source; regenerating it meant reverse-engineering the plot
 from the PNG. Re-render with:
 
   darkroom/venv/bin/python scripts/dataset-summary/roi1_trace.py \
-      --ticks bottom -o docs/img/roi1_trace.png --json src/lib/assets/roi1_trace.json
+      --panels two -o docs/img/roi1_trace.png
   cp docs/img/roi1_trace.png src/lib/assets/roi1_trace.png
 
 methods_explainer.{pdf,png} is a plain-language, graphics-first teaching figure —

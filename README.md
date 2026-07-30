@@ -8,15 +8,17 @@ nothing uploaded.
 
 ## Why this tool exists
 
-![ROI 1 of a real paired spike/calcium recording: 140 spike ticks over the calcium trace](docs/img/roi1_trace.png)
+![Two panels of ROI 1 from a real paired recording. Top: the full 1067-second recording, a blue calcium trace with 140 action potentials as red ticks below it, and the 400 to 700 second window shaded. Bottom: that window enlarged on the same dF/F0 scale, where 54 spikes are followed by calcium transients barely above the noise.](docs/img/roi1_trace.png)
 
 This is ROI 1 of a real paired recording, imaged at 10 Hz — the cleanest spike/calcium
 coupling in the dataset. The red ticks are 140 action potentials; the blue trace is the
-calcium signal in dF/F₀. Even here, the relationship is not one-to-one: through 400–700 s
-the spikes keep coming while the calcium response shrinks toward the noise, and near 790 s
-a handful of spikes produce a transient five times larger than anything else in the
-recording — while comparable spike clusters minutes earlier produced responses a fraction
-of that size.
+calcium signal in dF/F₀. Even here the relationship is not one-to-one.
+
+The lower panel is the shaded window enlarged, **on the same dF/F₀ scale** — so the
+flatness is real and not a change of axis. Across those 300 seconds the cell fires 54
+times and the calcium response has all but vanished. Then near 790 s a handful of spikes
+produce a transient five times larger than anything else in the recording, while
+comparable clusters minutes earlier produced a fraction of that.
 
 Colonel Kernel exists to **measure** this relationship — to recover the kernel that links
 spikes to calcium, or to show when no single kernel does — rather than to assume the two
