@@ -11,10 +11,16 @@ about the science.
 Because the input is synthetic, this figure carries no disclosure cost — which is the
 entire reason it exists. See docs/img/README.txt.
 
-Two panels, one shared dF/F0 scale:
-  top    — the whole simulated recording, AP-independent events marked
-  bottom — a window holding BOTH a spike-driven event and an AP-independent one, so the
-           contrast is visible side by side rather than asserted in a caption
+Three panels, one shared dF/F0 scale throughout:
+  top          — the whole simulated recording, AP-independent events marked
+  bottom left  — a NARROW AP-independent event in context
+  bottom right — a SLOW one
+
+The bottom row exists because the two AP-independent morphologies look nothing like each
+other, and neither looks like the AP-linked transient. One panel could only ever show one
+of them, which would read as a single artifact rather than as "these are not the same
+process." Each zoom keeps a spike-driven event in frame, so the comparison is on-figure
+rather than asserted in the caption.
 """
 
 import argparse
@@ -82,19 +88,20 @@ def main():
     base = lo - gap - band_h
     ylim = (base - span * 0.03, hi + span * 0.08)
 
-    # Zoom on the LARGEST AP-independent event — the one whose absence of spikes is most
-    # striking — with enough context either side to catch a real spike-driven event too.
-    big = max(events, key=lambda e: e["amp"])
-    z0, z1 = big["atS"] - args.zoom_pad, big["atS"] + args.zoom_pad
-    zi = [i for i, tt in enumerate(t) if z0 <= tt <= z1]
-    zt = [t[i] for i in zi]
-    zy = [y[i] for i in zi]
-    zs = [s for s in spikes if z0 <= s <= z1]
+    # One zoom per morphology — the biggest example of each, so the pair shows how
+    # different they are rather than repeating one shape twice.
+    def biggest(shape):
+        of_shape = [e for e in events if e.get("shape") == shape]
+        return max(of_shape, key=lambda e: e["amp"]) if of_shape else None
 
-    fig, axes = plt.subplots(2, 1, figsize=(13.2, 6.6), dpi=100)
+    picks = [e for e in (biggest("narrow"), biggest("slow")) if e is not None]
 
+    fig = plt.figure(figsize=(13.2, 7.4), dpi=100)
+    gs = fig.add_gridspec(2, len(picks) or 1, height_ratios=[1.0, 0.95], hspace=0.46, wspace=0.16)
+
+    ax_top = fig.add_subplot(gs[0, :])
     draw(
-        axes[0],
+        ax_top,
         t,
         y,
         spikes,
@@ -103,33 +110,45 @@ def main():
         (t[0], t[-1]),
         ylim,
         f"Simulated recording — {len(spikes)} action potentials in "
-        f"{len(d['clusters'])} clusters of 1–5 (red ticks), plus "
-        f"{len(events)} calcium events with no action potentials (marked)",
+        f"{len(d['clusters'])} bursts of 1–5 (red ticks), plus "
+        f"{len(events)} calcium events with no action potentials (shaded)",
     )
     for e in events:
-        axes[0].axvspan(e["atS"] - 6, e["atS"] + 14, color=MARK_COLOR, alpha=0.16, zorder=0)
+        ax_top.axvspan(e["atS"] - 6, e["atS"] + 14, color=MARK_COLOR, alpha=0.16, zorder=0)
 
-    draw(
-        axes[1],
-        zt,
-        zy,
-        zs,
-        base,
-        band_h,
-        (z0, z1),
-        ylim,
-        f"zoom {z0:.0f}–{z1:.0f} s — the tall transient has no spike beneath it, "
-        "while the smaller ones each sit under a cluster (same dF/F0 scale)",
-    )
-    axes[1].axvspan(big["atS"] - 6, big["atS"] + 14, color=MARK_COLOR, alpha=0.16, zorder=0)
+    label = {
+        "narrow": "tall, brief, near-symmetric",
+        "slow": "medium rise, very slow decay",
+    }
+    for col, e in enumerate(picks):
+        pad = args.zoom_pad if e.get("shape") == "narrow" else args.zoom_pad * 1.6
+        z0, z1 = e["atS"] - pad * 0.45, e["atS"] + pad
+        zi = [i for i, tt in enumerate(t) if z0 <= tt <= z1]
+        ax = fig.add_subplot(gs[1, col])
+        draw(
+            ax,
+            [t[i] for i in zi],
+            [y[i] for i in zi],
+            [s for s in spikes if z0 <= s <= z1],
+            base,
+            band_h,
+            (z0, z1),
+            ylim,
+            f"no-AP event, {label.get(e.get('shape'), e.get('shape'))} "
+            f"— {z0:.0f}–{z1:.0f} s",
+        )
+        ax.axvspan(e["atS"] - 2, e["atS"] + pad * 0.75, color=MARK_COLOR, alpha=0.16, zorder=0)
+        if col > 0:
+            ax.set_ylabel("")
 
-    fig.subplots_adjust(left=0.075, right=0.985, top=0.93, bottom=0.09, hspace=0.42)
+    fig.subplots_adjust(left=0.065, right=0.985, top=0.935, bottom=0.08)
     fig.savefig(args.out)
     plt.close(fig)
 
     print(
         f"{args.out}  ({d['n']} samples, {len(spikes)} APs, "
-        f"{len(events)} AP-independent events, zoom {z0:.0f}-{z1:.0f} s)"
+        f"{len(events)} AP-independent events, "
+        f"zooms: {', '.join(e.get('shape', '?') for e in picks)})"
     )
 
 

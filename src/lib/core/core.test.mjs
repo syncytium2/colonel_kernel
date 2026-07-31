@@ -35,7 +35,7 @@ import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './nois
 import { loadCsv } from './load-csv.js';
 import { spikeTriggeredAverage } from './sta.js';
 import * as XLSX from 'xlsx';
-import { simulatePremise, SIM } from './premise-sim.js';
+import { simulatePremise, SIM, EVENT_SHAPES } from './premise-sim.js';
 import { loadWorkbook, windowRegion, regionsOf, regionViewToLoadedRegion, regionType, regionAnalysisWindow, SOLUTION_DELAY_S, REGION_MIN_S, REGION_MAX_S } from './load-xlsx.js';
 import { recoverRegion, spikeSufficiency } from './region-recovery.js';
 
@@ -855,6 +855,44 @@ ok('spikeSufficiency: at/above floor → sufficient', spikeSufficiency(25, 0.2, 
   ok('premise-sim: seeded output is reproducible',
     again.spikes.join(',') === sim.spikes.join(',') &&
     again.calcium.every((v, i) => v === sim.calcium[i]));
+}
+
+{
+  const sim = simulatePremise();
+  // Two DISTINCT morphologies, neither matching the AP-linked transient. The figure's
+  // claim is that these are not the same process, so shape is load-bearing: if the
+  // narrow one stopped being symmetric or the slow one stopped trailing, the figure
+  // would quietly start arguing something weaker.
+  {
+    const halfWidths = (atS) => {
+      const i0 = Math.round(atS / sim.dt);
+      let pk = -Infinity, ipk = i0;
+      for (let i = Math.max(0, i0 - 200); i < Math.min(sim.apIndependent.length, i0 + 600); i++) {
+        if (sim.apIndependent[i] > pk) { pk = sim.apIndependent[i]; ipk = i; }
+      }
+      let up = 0, dn = 0;
+      for (let i = ipk; i >= 0; i--) if (sim.apIndependent[i] < pk / 2) { up = (ipk - i) * sim.dt; break; }
+      for (let i = ipk; i < sim.apIndependent.length; i++) if (sim.apIndependent[i] < pk / 2) { dn = (i - ipk) * sim.dt; break; }
+      return { up, dn };
+    };
+    ok('premise-sim: every event names a defined shape',
+      sim.independentEvents.every((e) => EVENT_SHAPES[e.shape] !== undefined));
+
+    const narrow = sim.independentEvents.find((e) => e.shape === 'narrow');
+    const slow = sim.independentEvents.find((e) => e.shape === 'slow');
+    ok('premise-sim: both morphologies are present', narrow !== undefined && slow !== undefined);
+
+    const hn = halfWidths(narrow.atS);
+    const hs = halfWidths(slow.atS);
+    ok('premise-sim: the narrow event is near-symmetric',
+      hn.dn / hn.up < 1.35 && hn.dn / hn.up > 0.75, `up ${hn.up}s / down ${hn.dn}s`);
+    ok('premise-sim: the narrow event is brief',
+      hn.up + hn.dn < 4, `full width at half max ${(hn.up + hn.dn).toFixed(1)}s`);
+    ok('premise-sim: the slow event decays far longer than it rises',
+      hs.dn / hs.up > 3, `up ${hs.up}s / down ${hs.dn}s`);
+    ok('premise-sim: the slow event outlasts the narrow one several times over',
+      hs.dn > hn.dn * 4, `slow ${hs.dn}s vs narrow ${hn.dn}s`);
+  }
 }
 
 // --- summary ----------------------------------------------------------------
