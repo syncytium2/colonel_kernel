@@ -73,20 +73,28 @@ Implementation notes that matter:
 
 - **λ is an explicit, user-visible control, not a silent default.** The recovered kernel
   genuinely depends on it, so hiding it would hide the uncertainty it represents. The app
-  sweeps λ across decades and reports whether peak lag and amplitude are *stable* across the
-  sweep — an unstable answer is reported as unstable.
+  sweeps λ over three decades (0.002 → 3.0, 13 geometric steps) and reports the **range** of
+  peak lag and peak amplitude across that sweep. A wide range *is* the instability — the tool
+  shows the numbers and does not label them, consistent with the stance below.
 - **Signals are zero-padded to a power of two** for the FFT; recovery is circular, matching
   the reference pipeline.
 - **Negative lags are retained deliberately.** The kernel is extracted as a symmetric ±window
-  around zero lag ([ADR-0009](adr/0009-centered-symmetric-lag-explicit-zero-index.md)).
-  Energy appearing *before* the spike is physically impossible, so its presence is a built-in
-  diagnostic that the fit has gone wrong — an acausal ratio above 1 says so numerically.
+  around zero lag ([ADR-0009](adr/0009-centered-symmetric-lag-explicit-zero-index.md)), because
+  kernel position encodes **coupling direction** — a neighbouring cell that leads the targeted
+  one puts energy at negative lag, and cropping to the causal half would silently discard that.
+  Acausal energy is reported as a ratio (Σ negative-lag² / Σ causal²) and is deliberately
+  **not** thresholded: FOUNDATIONS §4 is explicit that it is not one thing. It can be genuine
+  lead/lag structure *or* a regularization artifact — the reference `deconvreg` kernel carries
+  an acausal pedestal of ≈ −0.006 that is purely a convention effect. Telling the two apart is
+  a human judgement, which is a large part of why λ stays visible.
 
 ### Three recovery methods, plus a model-free cross-check
 
-Recovery runs **three independent methods** over the same data
+Recovery runs **three parallel methods** over the same data
 ([ADR-0021](adr/0021-kernel-recovery-three-parallel-methods.md)), against a fourth estimate
-that assumes no model at all:
+that assumes no model at all. They are not fully independent — method 3 extends method 1's
+penalty structure and shares its λ — which is why the STA, which shares no machinery with any
+of them, is the one that matters as a check:
 
 1. **Free-vector** — the regularized deconvolution above, unconstrained in shape.
 2. **Parametric** — a constrained double-exponential fit; fails loudly when it cannot fit.
@@ -123,13 +131,16 @@ science is separable from the UI.
 
 Beyond unit tests:
 
-- **Acceptance runs** round-trip real `.xlsx` and `.csv` files through the *production*
-  loaders rather than mocks, then recover a kernel and check it against known values.
+- **Acceptance runs** put real files through the *production* loaders rather than mocks:
+  three golden `.xlsx` workbooks exercise the ingest spine, and a generated template is
+  round-tripped end to end — loaded, windowed, and a kernel recovered and checked against the
+  values it was built from.
 - **A ground-truth loop.** Tab 1 synthesizes a trace from a kernel you chose; Tab 2 recovers
   it. The instrument can be checked against a known answer — which is the whole reason the
   teaching tab and the analysis tab live in one application.
-- **Headless browser checks** drive the built artifact for layout geometry, interaction and
-  third-party request auditing, measuring the live DOM rather than trusting CSS.
+- **Headless browser checks** (Playwright) drive the app end to end — dropping a real workbook
+  through the file input and failing on any console or page error. Third-party request auditing
+  runs separately, at deploy time, against the live response.
 
 ---
 
@@ -138,8 +149,9 @@ Beyond unit tests:
 **The CSP is injected at build time** by a Vite plugin, into the built HTML only
 ([ADR-0008](adr/0008-csp-build-time-injection.md)). The dev server stays relaxed so HMR
 works; the shipped artifact carries `connect-src 'none'; default-src 'self'` and is locked
-down on any static host. The policy is strong enough that a same-origin `fetch()` from the
-page is refused — verified by having one blocked.
+down on any static host. The policy is strong enough that even a same-origin `fetch()` is
+refused — the same rule is what breaks Vite's HMR websocket in development, which is exactly
+why it is injected at build time only.
 
 **The build refuses to run in a shallow clone.** `git log --max-parents=0` returns `HEAD` in a
 truncated graph, which once baked a wrong provenance date into production. The failure mode is
