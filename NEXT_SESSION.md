@@ -1,6 +1,6 @@
 # NEXT_SESSION
 
-**Working state as of 2026-07-30.** Short by design. Read
+**Working state as of 2026-07-31.** Short by design. Read
 [`FOUNDATIONS.md`](FOUNDATIONS.md) first (canonical), then this.
 
 > **Rule for this file:** one dated state block, one next action, and a list of
@@ -28,13 +28,11 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
 - **Deploy hygiene (2026-07-18)** — `npm run deploy` now executes the whole runbook with
   gates; a shallow-clone build guard in [vite.config.js](vite.config.js) closes the bug that
   shipped a wrong Tab 0 "Born" date; [DEPLOYED.md](DEPLOYED.md) records what is live.
-- **Tab 0 leads with the problem (2026-07-18)** — the ROI 1 premise figure (real paired
-  recording, 140 AP ticks over the calcium trace) now opens Tab 0 above everything but the
-  title, with prose naming the two decoupling episodes. Previously Tab 0 opened with the
-  four-methods explainer, answering a question the visitor had not been shown. Same figure and
-  framing the README leads with; matches FOUNDATIONS §3–4. **This is the only unpublished-data
-  figure that ships in the public app** — consent widened and the rule for any future one is
-  recorded in [docs/img/README.txt](docs/img/README.txt).
+- **Tab 0 leads with the problem (2026-07-18, figure since replaced)** — Tab 0 opens with
+  the premise figure rather than the four-methods explainer, which had been answering a
+  question the visitor had not been shown. The *framing* stands; the figure itself is now
+  simulated (see 2026-07-31 below), so the "only unpublished-data figure that ships" note
+  that used to sit here no longer applies — **nothing unpublished ships at all.**
 - **User data access + input template (2026-07-30)** — the app never told anyone what file it
   wants. Tab 0 gained a **"Bring your own recording"** section (contract, the rules that bite,
   two template downloads); the same guidance is on Tab 2's dropzone and in its rail, which is
@@ -44,24 +42,39 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   [ADR-0038](docs/adr/0038-input-template-working-example-recording.md); discharges the
   deliverable ADR-0019 §5 had reserved as TBD. Guarded by `npm run template-acceptance`.
   Same pass fixed Tab 2 having **no keyboard path to load a file**.
-- **Interactive-demo review (2026-07-30)** — all four tabs driven in a browser at four widths;
-  findings in [docs/reviews/interactive-demos-2026-07-30.md](docs/reviews/interactive-demos-2026-07-30.md).
-  The math is untouched; everything found is interaction/layout. Highest-severity items are
-  listed under "▶ Next action" below.
+- **Interactive-demo review (2026-07-30)** — all four tabs driven in a browser at four
+  widths; findings in
+  [docs/reviews/interactive-demos-2026-07-30.md](docs/reviews/interactive-demos-2026-07-30.md).
+  The math is untouched; everything found is interaction/layout. The top four are listed
+  under "▶ Next action" and **none of them are fixed yet.**
+- **README rewritten (2026-07-30)** — two thirds of it was unedited `create-vite`
+  boilerplate. Now leads with what the tool does and does not do, the input contract, and
+  the privacy posture. The murderboard caught three format claims that were wrong *and had
+  shipped in the app copy too* — most seriously the region-name rules, which omitted the
+  20-minute analysis cap.
+- **[docs/technical_overview.md](docs/technical_overview.md) (2026-07-31)** — standalone
+  write-up of the architecture, the deconvolution math and the build gates, for readers
+  arriving from outside. An independent verification pass caught six wrong claims in the
+  first draft, one of which contradicted FOUNDATIONS §4 on acausal energy.
+- **The premise figure is now SIMULATED, and zoomable (2026-07-31)** — the significant
+  change of these two days. `src/lib/core/premise-sim.js` models the phenomenon instead of
+  reproducing a recording: AP-linked calcium summing linearly from bursts of 1–5 spikes,
+  plus three calcium events with no spikes beneath them, in two morphologies (tall/brief/
+  symmetric via a gaussian; medium-rise/12-s-decay via the calcium builder). Built from the
+  app's own primitives, so the model cannot drift from the tool. 16 tests guard it.
+  Because it is synthetic the figure could then be made **live and x-zoomable** — two
+  co-registered bands, drag or jump-button to zoom, y pinned so amplitudes stay comparable —
+  which is the capability a real-data version was reverted for on 2026-07-30.
 
-Core suite: **217 passing**, plus `npm run template-acceptance`.
+Core suite: **233 passing**, plus `npm run template-acceptance`.
+Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-07-31.**
 
-**The live site is behind.** The 2026-07-30 work above is committed and pushed, but the
-deployed bundle predates the two-panel premise figure and the README rewrite. Nothing here
-reaches users until `npm run deploy` runs.
-
-**History was rewritten on 2026-07-30.** A live, zoomable Tab 0 figure was built and reverted
-the same day; reverting removed the file but left the ROI 1 recording in git history, so it was
-stripped with `git-filter-repo` and force-pushed. Verified: master's tree hash is unchanged, all
-233 commits are present with identical authors, dates and subjects, and exactly 2 commit trees
-differ — the two that carried the blob. **Every commit SHA from 2026-07-18 onward changed**, so
-any SHA you have written down or bookmarked from before that day is dead. If another clone of
-this repo exists anywhere, it must be re-cloned, not pulled.
+**History was rewritten on 2026-07-31 (dated 07-30 in the commits).** The reverted
+interactive figure had left the ROI 1 recording in git history, so it was stripped with
+`git-filter-repo` and force-pushed. Verified: master's tree hash unchanged, all 233 commits
+present with identical authors/dates/subjects, exactly 2 trees differing. **Every commit SHA
+from 2026-07-18 onward changed** — any SHA written down before that is dead, and any other
+clone must be **re-cloned, not pulled.**
 
 ## ▶ Next action — Tony's call
 
@@ -96,6 +109,32 @@ are stale.
   **user-agent gated**, so verify as a browser, never with a plain curl.
 - **Deploy model.** Still manual (`npm run deploy`). Auto-deploy on push to `master` remains
   undecided — WIP lands on `master` often, so it would want a `deploy` branch or a build gate.
+
+**Raised by the 2026-07-30/31 work:**
+
+- **The simulation models calcium-without-spikes, but not spikes-without-calcium.** Every
+  burst in `premise-sim.js` still gets its proportional transient. The real recording's other
+  finding — the stretch where spiking continues and the response collapses — is not modelled.
+  A gain envelope over part of the trace would cover it, in the same file.
+- **The 780 s claim still stands in canon and in the citable document.** FOUNDATIONS §3 and
+  `public/methods.html` both say the large transient near 780 s has "no matching spikes"; the
+  figure shows red ticks at its onset (zoom kept at `darkroom/_shots/roi1_zoom780.png` while
+  that directory survives). The phenomenon is real but looks like *disproportion*, not
+  absence. **The app no longer repeats it** — Tab 0's figure is simulated — but `/methods` is
+  served publicly and still does. Per ADR-0018 the eyeball adjudicates, so this is Tony's
+  call, not a patch.
+- **The site is not indexed at all** — `site:kernel.tonydefazio.com` returns nothing. Causes,
+  in order: no inbound links anywhere (the biggest by far; the UMich experts page or a GitHub
+  profile README would fix it), a landing page whose pre-JS body is `<div id="app"></div>`,
+  `<title>colonel_kernel</title>` as the search-result headline, no meta description, no
+  sitemap, never submitted. Note Cloudflare injects a `robots.txt` we did not write — it
+  permits search and blocks AI crawlers, which is benign, but it is host-injected and
+  invisible to the repo, exactly like the beacon was. A `public/robots.txt` would make the
+  policy ours.
+- **Tab 2's multi-region path is still UNREVIEWED.** `data/` is gitignored, so the demo review
+  never loaded a real multi-region workbook: region shading, double-click region selection,
+  the regional kernel band and the summary PDF export are unexercised. Overlaps the File-98
+  three-region item below.
 
 **Cross-team (not a colonel_kernel-only ADR):**
 

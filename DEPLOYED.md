@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-07-31 19:02 UTC |
-| **Commit** | `b90ec55` — Merge branch 'feat/premise-event-morphologies': two shapes for the AP-in |
-| **Bundle** | `assets/index-BHhMDxms.js` |
-| **Worker version** | `f2d19e99-72fb-48f8-a853-e255907cafa5` |
+| **Deployed at** | 2026-07-31 20:19 UTC |
+| **Commit** | `8cf4bec` — Merge branch 'feat/premise-figure-zoomable': live zoomable premise figur |
+| **Bundle** | `assets/index-B6WZ9LJr.js` |
+| **Worker version** | `f96cfa9c-49f2-484d-9bf4-e64fe0e3293b` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
