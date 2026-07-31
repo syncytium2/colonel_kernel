@@ -14,16 +14,14 @@
   // SheetJS import and two blob downloads), and Help.svelte is otherwise pure prose.
   import BringYourData from './BringYourData.svelte';
 
-  // The premise figure. It opens Tab 0 because the problem should be the first thing a
-  // visitor meets: spikes and calcium correspond only SOMETIMES, and FOUNDATIONS §3–4
-  // treats that discrepancy as the project's core premise, not an artifact.
+  // The premise figure — live and x-zoomable. It opens Tab 0 because the problem should
+  // be the first thing a visitor meets: spikes and calcium correspond only SOMETIMES, and
+  // FOUNDATIONS §3–4 treats that discrepancy as the project's core premise, not an artifact.
   //
-  // SIMULATED, as of 2026-07-31 — it was ROI 1 of a real paired recording until then.
-  // The model is src/lib/core/premise-sim.js, built from the app's own convolution
-  // primitives: AP-linked calcium summing linearly from clusters of 1–5 spikes, plus
-  // three calcium events with no spikes under them. No unpublished data ships any more,
-  // which is what makes an interactive version of this figure possible at all.
-  import premiseFig from './assets/premise_sim.png?url';
+  // Its own component because it owns real behaviour (two co-registered zoomable bands).
+  // The trace is SIMULATED and generated in the browser, so no data ships — which is what
+  // makes an interactive version possible at all; see src/lib/core/premise-sim.js.
+  import PremiseFigure from './PremiseFigure.svelte';
 
   // That section reads best late — after the problem, the tabs and the first run — but
   // measured at 1000px wide it starts ~80% down a 3365px page, which is a long scroll for
@@ -84,16 +82,7 @@
       one. The red ticks are action potentials, arriving in bursts of one to five; the blue
       trace is the calcium signal.
     </p>
-    <figure class="fig">
-      <a href={premiseFig} target="_blank" rel="noopener" title="Open full size in a new tab">
-        <img src={premiseFig} alt="Three panels of a simulated recording. Top: 139 action potentials in 46 bursts of one to five, shown as red ticks beneath a blue calcium trace, with three calcium events shaded. Bottom left: one shaded event enlarged, a tall brief symmetric transient with no action potentials beneath it, next to an ordinary burst. Bottom right: another, rising more slowly and decaying for most of a minute, with a later burst riding on its tail." />
-      </a>
-      <figcaption>
-        <strong>Simulated</strong>, not a recording &mdash; the same model the tool assumes,
-        plus three violations of it. All panels share one dF/F₀ scale.
-        <a href={premiseFig} target="_blank" rel="noopener">Open full size ↗</a>
-      </figcaption>
-    </figure>
+    <PremiseFigure />
     <p class="plain">
       Every burst stamps down the same shape once per spike, so a five-spike burst makes a
       transient about five times a single spike's. That is the whole assumption this tool
@@ -102,11 +91,12 @@
       is bigger than anything the spikes produced.
     </p>
     <p class="plain">
-      Look at the shapes of those three, in the lower panels. One is tall, brief and
-      symmetric &mdash; up and down at the same rate. Another rises more slowly and then
-      takes most of a minute to fall, with a later burst riding on its decaying tail.
-      Neither looks like the spike-driven transients around them, and that is the tell:
-      whatever produced them, it was not an action potential.
+      <strong>Zoom in on one</strong> &mdash; drag across the trace, or use the jump buttons
+      &mdash; and look at its shape. One is tall, brief and symmetric, up and down at the
+      same rate. Another rises more slowly and then takes most of a minute to fall, with a
+      later burst riding on its decaying tail. Neither looks like the spike-driven transients
+      around them, and that is the tell: whatever produced them, it was not an action
+      potential.
     </p>
     <p class="plain">
       Real recordings do this. Hand that trace to a tool that assumes every calcium event
@@ -340,15 +330,17 @@
     box-sizing: border-box;
   }
   .fig a:hover img { border-color: var(--accent-border); }
+  /* Normal flow, NOT flex. This was `display: flex; gap: 12px`, which was fine while a
+     caption was just "sentence + link" — two flex items — but it makes every inline child
+     its own item, so any <strong>/<em> gets a 12px gap inserted before the punctuation
+     after it ("Simulated , not a recording"). The link keeps its separation via a margin
+     instead, which does not depend on the caption having exactly two children. */
   figcaption {
     margin-top: 8px;
     font-size: 13.5px;
     color: var(--text-muted, var(--text));
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
   }
-  figcaption a { font-weight: 600; }
+  figcaption a { font-weight: 600; margin-left: 10px; white-space: nowrap; }
 
   /* --- three-tab cards --- */
   .grid {
