@@ -59,14 +59,18 @@ researchers' unpublished data must never be committed.
   `docs/img/README.txt`. `docs/img/roi1_trace.png` is the existing precedent. A
   derived figure is a plot, never raw or near-raw data (no full traces as CSV/JSON,
   no per-sample dumps).
-- **That last clause was tested and held (2026-07-30).** A live, x-zoomable version of
-  Tab 0's premise figure was built and reverted the same day: it required shipping the
-  ROI 1 recording as per-sample JSON from the public site. The argument for it was real —
-  the 400–700 s decoupling stretch is a few pixels wide in a static render — but a
-  **two-panel figure** (full recording + that window enlarged on the same dF/F₀ scale)
-  makes the same point with nothing published. If per-sample data ever does need to
-  leave, it is a consent decision involving everyone with a claim on the recording, not
-  a technical one; the default stays no raw traces, no per-sample dumps.
+- **As of 2026-07-31 the app ships NO unpublished data at all.** Tab 0's premise figure is
+  now **simulated** (`src/lib/core/premise-sim.js`) — AP-linked calcium summing linearly
+  from clusters of 1–5 spikes, plus three calcium events with no spikes beneath them. It
+  models the phenomenon rather than reproducing a recording, so the consent question
+  disappears and the figure can be zoomed, shipped as per-sample data, or made interactive
+  freely.
+  The route here is worth knowing: a live zoomable version of the *real* figure was built
+  on 2026-07-30 and reverted the same day, because it meant publishing the recording from a
+  public URL. Simulating the phenomenon got the capability without the cost. **Reach for
+  that first** — when a figure needs to be richer than a static plot, model it before
+  considering whether to publish the data. The real ROI-1 figure is retained in `docs/img/`
+  as internal evidence and is no longer bundled.
 - **Before any push, confirm no `data/` or `darkroom/` content is staged or tracked**
   (`git ls-files data/ darkroom/` must be empty) and that the only tracked binaries
   under `docs/img/` are consented figures.
