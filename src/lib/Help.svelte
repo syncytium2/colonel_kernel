@@ -14,20 +14,16 @@
   // SheetJS import and two blob downloads), and Help.svelte is otherwise pure prose.
   import BringYourData from './BringYourData.svelte';
 
-  // The premise figure — ROI 1 of a real paired recording, the same plot the repo README
-  // leads with. It opens Tab 0 because the problem should be the first thing a visitor
-  // meets: spikes and calcium correspond only SOMETIMES, and FOUNDATIONS §3–4 treats that
-  // discrepancy as the project's core premise, not an artifact.
+  // The premise figure. It opens Tab 0 because the problem should be the first thing a
+  // visitor meets: spikes and calcium correspond only SOMETIMES, and FOUNDATIONS §3–4
+  // treats that discrepancy as the project's core premise, not an artifact.
   //
-  // It is a rendered PNG on purpose. A live, zoomable version was built on 2026-07-30 and
-  // reverted the same day: it required shipping the recording itself as per-sample data
-  // from a public URL, and the second panel of this figure makes the same argument without
-  // publishing anything. Do not "improve" this back into an interactive plot without
-  // re-opening that decision with everyone who has a claim on the recording.
-  //
-  // Real (unpublished) data, shown with the author's consent — see docs/img/README.txt.
-  // Bundled same-origin like the explainer (CSP-safe).
-  import roi1Trace from './assets/roi1_trace.png?url';
+  // SIMULATED, as of 2026-07-31 — it was ROI 1 of a real paired recording until then.
+  // The model is src/lib/core/premise-sim.js, built from the app's own convolution
+  // primitives: AP-linked calcium summing linearly from clusters of 1–5 spikes, plus
+  // three calcium events with no spikes under them. No unpublished data ships any more,
+  // which is what makes an interactive version of this figure possible at all.
+  import premiseFig from './assets/premise_sim.png?url';
 
   // That section reads best late — after the problem, the tabs and the first run — but
   // measured at 1000px wide it starts ~80% down a 3365px page, which is a long scroll for
@@ -82,29 +78,34 @@
 
   <!-- The problem, before any explanation of the tool. -->
   <section class="problem">
-    <h2>The problem, in one recording</h2>
+    <h2>The problem, in one trace</h2>
     <p class="plain">
-      This is a real paired recording &mdash; the <em>cleanest</em> spike/calcium coupling in
-      the dataset. The red ticks are 140 action potentials; the blue trace is the calcium
-      signal. Watch what happens as it goes on.
+      Here is what a well-behaved recording would look like, and what actually turns up in
+      one. The red ticks are action potentials, arriving in bursts of one to five; the blue
+      trace is the calcium signal.
     </p>
     <figure class="fig">
-      <a href={roi1Trace} target="_blank" rel="noopener" title="Open full size in a new tab">
-        <img src={roi1Trace} alt="Two panels of ROI 1 from a real paired recording. Top: the full 1067-second recording, a blue calcium trace with 140 action potentials as red ticks below it, and the 400 to 700 second window shaded. Bottom: that window enlarged on the same dF/F0 scale, where 54 spikes are followed by calcium transients so small they barely rise above the noise." />
+      <a href={premiseFig} target="_blank" rel="noopener" title="Open full size in a new tab">
+        <img src={premiseFig} alt="Two panels of a simulated recording. Top: 139 action potentials in 46 bursts of one to five, shown as red ticks beneath a blue calcium trace, with three calcium events highlighted. Bottom: one of those events enlarged on the same scale — a tall transient with no action potentials beneath it, between two smaller transients that each sit under a burst." />
       </a>
       <figcaption>
-        Real data, ROI 1. The lower panel is the shaded window, on the <em>same</em> dF/F₀
-        scale &mdash; so the flatness is real, not a change of axis.
-        <a href={roi1Trace} target="_blank" rel="noopener">Open full size ↗</a>
+        <strong>Simulated</strong>, not a recording &mdash; the same model the tool assumes,
+        plus three violations of it. Lower panel on the <em>same</em> dF/F₀ scale.
+        <a href={premiseFig} target="_blank" rel="noopener">Open full size ↗</a>
       </figcaption>
     </figure>
     <p class="plain">
-      Early on, nearly every spike has its own calcium bump. But from about
-      <strong>400 to 700 s</strong> the spikes keep coming while the calcium response fades
-      toward the noise &mdash; that is the lower panel: <strong>54 action potentials</strong>,
-      and almost nothing left in the calcium. Then near <strong>790 s</strong> a handful of
-      spikes produce a transient roughly five times larger than anything else in the
-      recording, while comparable clusters minutes earlier produced a fraction of it.
+      Every burst stamps down the same shape once per spike, so a five-spike burst makes a
+      transient about five times a single spike's. That is the whole assumption this tool
+      exists to test &mdash; and mostly it holds. But <strong>three</strong> of the calcium
+      events here have <em>no action potentials underneath them at all</em>, and the tallest
+      is bigger than anything the spikes produced. The lower panel is one of them, between
+      two ordinary bursts for comparison.
+    </p>
+    <p class="plain">
+      Real recordings do this. Hand that trace to a tool that assumes every calcium event
+      came from a spike, and it will happily return a kernel &mdash; one distorted by events
+      the spikes never caused.
     </p>
     <p class="plain">
       That is the problem this tool exists for. Colonel Kernel <strong>measures</strong> the

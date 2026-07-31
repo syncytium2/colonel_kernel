@@ -8,24 +8,26 @@ nothing uploaded.
 
 ## Why this tool exists
 
-![Two panels of ROI 1 from a real paired recording. Top: the full 1067-second recording, a blue calcium trace with 140 action potentials as red ticks below it, and the 400 to 700 second window shaded. Bottom: that window enlarged on the same dF/F0 scale, where 54 spikes are followed by calcium transients barely above the noise.](docs/img/roi1_trace.png)
+![Two panels of a simulated recording. Top: 139 action potentials in 46 bursts of one to five, shown as red ticks beneath a blue calcium trace, with three calcium events highlighted. Bottom: one of those events enlarged on the same dF/F0 scale — a tall transient with no action potentials beneath it, between two smaller transients that each sit under a burst.](docs/img/premise_sim.png)
 
-This is ROI 1 of a real paired recording, imaged at 10 Hz — the cleanest spike/calcium
-coupling in the dataset. The red ticks are 140 action potentials; the blue trace is the
-calcium signal in dF/F₀. Even here the relationship is not one-to-one.
+The red ticks are action potentials, arriving in bursts of one to five; the blue trace is
+the calcium signal. Every burst stamps down the same shape once per spike, so a five-spike
+burst produces a transient about five times a single spike's. That is the assumption this
+tool exists to test, and mostly it holds.
 
-The lower panel is the shaded window enlarged, **on the same dF/F₀ scale** — so the
-flatness is real and not a change of axis. Across those 300 seconds the cell fires 54
-times and the calcium response has all but vanished. Then near 790 s a handful of spikes
-produce a transient five times larger than anything else in the recording, while
-comparable clusters minutes earlier produced a fraction of that.
+But **three** of the calcium events here have *no action potentials underneath them at
+all*, and the tallest is larger than anything the spikes produced. The lower panel is one
+of them, on the **same dF/F₀ scale**, sitting between two ordinary bursts for comparison.
 
-Colonel Kernel exists to **measure** this relationship — to recover the kernel that links
-spikes to calcium, or to show when no single kernel does — rather than to assume the two
-are coupled. (See [FOUNDATIONS](FOUNDATIONS.md) §3–4.)
+Real recordings do this. Hand that trace to a tool that assumes every calcium event came
+from a spike and it will happily return a kernel — one distorted by events the spikes never
+caused. Colonel Kernel exists to **measure** the relationship instead: to recover the shape
+that links spikes to calcium, or to show that no single shape does. (See
+[FOUNDATIONS](FOUNDATIONS.md) §3–4.)
 
-<sub>Unpublished recording, plotted and shown with the author's permission — the only such
-figure in this repo. See [docs/img/README.txt](docs/img/README.txt).</sub>
+<sub>**Simulated**, not a recording — [`src/lib/core/premise-sim.js`](src/lib/core/premise-sim.js),
+built from the app's own convolution primitives and matched to a real recording's kernel and
+noise floor. **No unpublished data ships in this tool.**</sub>
 
 ## What's in it
 

@@ -35,6 +35,7 @@ import { sigmaForLevel, addAWGN, mulberry32, SIGMA_COHORT_TYPICAL } from './nois
 import { loadCsv } from './load-csv.js';
 import { spikeTriggeredAverage } from './sta.js';
 import * as XLSX from 'xlsx';
+import { simulatePremise, SIM } from './premise-sim.js';
 import { loadWorkbook, windowRegion, regionsOf, regionViewToLoadedRegion, regionType, regionAnalysisWindow, SOLUTION_DELAY_S, REGION_MIN_S, REGION_MAX_S } from './load-xlsx.js';
 import { recoverRegion, spikeSufficiency } from './region-recovery.js';
 
@@ -800,6 +801,61 @@ ok('recoverRegion: a 0-spike span is reported non-analyzable, NOT thrown (ADR-00
 })());
 ok('spikeSufficiency: below floor → not sufficient', spikeSufficiency(5, 0.1, 20).sufficient === false);
 ok('spikeSufficiency: at/above floor → sufficient', spikeSufficiency(25, 0.2, 20).sufficient === true);
+
+// --- premise simulation (Tab 0 figure) --------------------------------------
+// The model behind the public premise figure. Guarded because the figure makes a
+// scientific claim: AP-linked calcium sums linearly from clusters, and the
+// AP-independent events must sit where NO spike can explain them. If either stops
+// being true the figure quietly starts arguing something else.
+{
+  const sim = simulatePremise();
+  const max = (a) => a.reduce((m, v) => (v > m ? v : m), -Infinity);
+
+  ok('premise-sim: grid matches the declared rate and duration',
+    sim.calcium.length === SIM.rateHz * SIM.durationS);
+  ok('premise-sim: every cluster holds 1..max APs',
+    sim.clusters.every((c) => c.nAps >= 1 && c.nAps <= SIM.maxApsPerCluster));
+  ok('premise-sim: spike count equals the sum of cluster sizes',
+    sim.spikes.length === sim.clusters.reduce((n, c) => n + c.nAps, 0));
+  ok('premise-sim: spikes are sorted ascending',
+    sim.spikes.every((t, i) => i === 0 || t >= sim.spikes[i - 1]));
+
+  // Linear summation is the hypothesis the whole tool tests — a k-AP cluster must
+  // produce ~k times a single-AP transient, with no special-casing anywhere.
+  const peakNear = (arr, atS, winS) => {
+    const i0 = Math.max(0, Math.round(atS / sim.dt));
+    const i1 = Math.min(arr.length, i0 + Math.round(winS / sim.dt));
+    let m = -Infinity;
+    for (let i = i0; i < i1; i++) if (arr[i] > m) m = arr[i];
+    return m;
+  };
+  const one = sim.clusters.find((c) => c.nAps === 1);
+  const five = sim.clusters.find((c) => c.nAps === 5);
+  const p1 = peakNear(sim.apLinked, one.atS, 8);
+  const p5 = peakNear(sim.apLinked, five.atS, 10);
+  ok('premise-sim: a 1-AP cluster peaks at the per-AP amplitude',
+    Math.abs(p1 - SIM.apAmp) < SIM.apAmp * 0.05, `got ${p1.toFixed(4)}`);
+  ok('premise-sim: a 5-AP cluster sums well above a 1-AP one',
+    p5 > p1 * 3.5 && p5 < p1 * 5.2, `1AP ${p1.toFixed(4)}, 5AP ${p5.toFixed(4)}`);
+
+  // The figure's entire argument: these events have no spike under them.
+  const clear = sim.independentEvents.every((e) =>
+    sim.spikes.every((t) => Math.abs(t - e.atS) > 4 * SIM.tauDecay));
+  ok('premise-sim: every AP-independent event sits clear of all spikes', clear);
+  ok('premise-sim: the AP-independent peak exceeds any AP-linked one',
+    max(sim.apIndependent) > max(sim.apLinked),
+    `indep ${max(sim.apIndependent).toFixed(4)} vs linked ${max(sim.apLinked).toFixed(4)}`);
+  ok('premise-sim: calcium is the sum of both sources plus noise',
+    sim.calcium.every((v, i) =>
+      Math.abs(v - (sim.apLinked[i] + sim.apIndependent[i])) < SIM.sigma * 8));
+
+  // Byte-stability: the figure is regenerated from this, so a drifting seed would
+  // silently change a published image.
+  const again = simulatePremise();
+  ok('premise-sim: seeded output is reproducible',
+    again.spikes.join(',') === sim.spikes.join(',') &&
+    again.calcium.every((v, i) => v === sim.calcium[i]));
+}
 
 // --- summary ----------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);
