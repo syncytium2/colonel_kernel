@@ -86,11 +86,11 @@
     </p>
     <figure class="fig">
       <a href={premiseFig} target="_blank" rel="noopener" title="Open full size in a new tab">
-        <img src={premiseFig} alt="Two panels of a simulated recording. Top: 139 action potentials in 46 bursts of one to five, shown as red ticks beneath a blue calcium trace, with three calcium events highlighted. Bottom: one of those events enlarged on the same scale — a tall transient with no action potentials beneath it, between two smaller transients that each sit under a burst." />
+        <img src={premiseFig} alt="Three panels of a simulated recording. Top: 139 action potentials in 46 bursts of one to five, shown as red ticks beneath a blue calcium trace, with three calcium events shaded. Bottom left: one shaded event enlarged, a tall brief symmetric transient with no action potentials beneath it, next to an ordinary burst. Bottom right: another, rising more slowly and decaying for most of a minute, with a later burst riding on its tail." />
       </a>
       <figcaption>
         <strong>Simulated</strong>, not a recording &mdash; the same model the tool assumes,
-        plus three violations of it. Lower panel on the <em>same</em> dF/F₀ scale.
+        plus three violations of it. All panels share one dF/F₀ scale.
         <a href={premiseFig} target="_blank" rel="noopener">Open full size ↗</a>
       </figcaption>
     </figure>
@@ -99,8 +99,14 @@
       transient about five times a single spike's. That is the whole assumption this tool
       exists to test &mdash; and mostly it holds. But <strong>three</strong> of the calcium
       events here have <em>no action potentials underneath them at all</em>, and the tallest
-      is bigger than anything the spikes produced. The lower panel is one of them, between
-      two ordinary bursts for comparison.
+      is bigger than anything the spikes produced.
+    </p>
+    <p class="plain">
+      Look at the shapes of those three, in the lower panels. One is tall, brief and
+      symmetric &mdash; up and down at the same rate. Another rises more slowly and then
+      takes most of a minute to fall, with a later burst riding on its decaying tail.
+      Neither looks like the spike-driven transients around them, and that is the tell:
+      whatever produced them, it was not an action potential.
     </p>
     <p class="plain">
       Real recordings do this. Hand that trace to a tool that assumes every calcium event

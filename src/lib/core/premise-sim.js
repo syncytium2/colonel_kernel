@@ -36,6 +36,29 @@ import { buildKernel } from './kernels.js';
 import { convolveOnGrid } from './convolve.js';
 import { addAWGN, mulberry32 } from './noise.js';
 
+/**
+ * Morphologies for AP-independent calcium events. Both were visible in the real ROI-1
+ * recording, and neither looks like the AP-linked transient (peak at 0.60 s, τ 2.7 s):
+ *
+ *   narrow — tall but brief and near-symmetric. Rise-to-peak 0.73 s against a 0.9 s decay,
+ *            so it goes up and comes back down at nearly the same rate and is over in ~5 s.
+ *   slow   — medium rise, very long tail. 2.7 s to peak, then a 12 s decay constant, so it
+ *            is still visibly elevated most of a minute later.
+ *
+ * The shape mismatch is not decoration: an event that does not fit the AP kernel is one a
+ * kernel fit cannot explain, which is what the tool's diagnostics are for.
+ */
+export const EVENT_SHAPES = {
+  // Gaussian, not a difference of exponentials: a double-exponential always leaves a tail
+  // longer than its rise, so it cannot be made symmetric no matter how the τ values are
+  // set. σ 0.9 s gives a ~2.1 s width at half height — tall, brief, and up and down at the
+  // same rate, which is what the real recording showed.
+  narrow: { kernel: 'gaussian', params: { sigma: 0.9 } },
+  // Same family as the AP kernel, pushed far from its parameters: 2.7 s to peak against a
+  // 12 s decay constant, so it is still elevated most of a minute later.
+  slow: { kernel: 'calcium', params: { tauRise: 1.0, tauDecay: 12 } },
+};
+
 /** Recording shape — matched to the real ROI-1 recording's length and frame rate. */
 export const SIM = {
   rateHz: 10,
@@ -55,18 +78,30 @@ export const SIM = {
   /** Cluster-onset jitter, in slot widths. >1 lets neighbours cross, so the train clumps. */
   jitterSlots: 1.7,
 
-  // The violation: kernel-shaped calcium with no spikes under it. Slower decay than the
-  // AP-linked events, as in the real recording.
+  // The violation: calcium with no spikes under it.
   //
-  // Amplitudes only — the TIMES are derived, not authored. An AP-independent event that
+  // These do NOT all share one shape, and that is the point. The real recording showed at
+  // least two morphologies, neither of which matches the AP-linked transient — see
+  // EVENT_SHAPES. A single shared shape made the figure read as one artifact stamped three
+  // times; carrying the real variety is what makes "this is not the same process" legible
+  // from the trace rather than only from the tick row.
+  //
+  // Amplitude and shape are authored; the TIMES are derived. An AP-independent event that
   // happens to land on a cluster reads as a coupled event with an implausible amplitude,
-  // which defeats the whole demonstration; hand-picked times get that wrong again the
-  // moment the seed changes. So each event is placed in one of the widest spike-free gaps
-  // (see placeInQuietGaps). Listed in chronological order.
-  independentTauDecay: 5.5,
-  independentAmps: [0.12, 0.26, 0.10],
-  /** Clear seconds required after an event before the next AP, so its decay is legible. */
-  independentClearS: 16,
+  // which defeats the whole demonstration, and hand-picked times get that wrong again the
+  // moment the seed changes. So each is placed in one of the widest spike-free gaps (see
+  // placeInQuietGaps). Listed in chronological order.
+  independentEvents: [
+    { amp: 0.14, shape: 'narrow' },
+    { amp: 0.26, shape: 'slow' },
+    { amp: 0.11, shape: 'narrow' },
+  ],
+  /**
+   * Seconds of spike-free space required either side of an event's ONSET, so its rise is
+   * unambiguously not spike-driven. The DECAY may overlap later spiking — the slow
+   * morphology trails for a minute and did exactly that in the real recording.
+   */
+  independentClearS: 10,
 
   /** Measurement-noise floor from the ROI-1 reconnaissance (AWGN, σ in dF/F₀). */
   sigma: 0.0035,
@@ -122,32 +157,24 @@ export function simulatePremise(overrides = {}) {
   const apKernel = buildKernel('calcium', { tauRise: p.tauRise, tauDecay: p.tauDecay }, grid.dt, p.apAmp);
   const apLinked = convolveOnGrid(raster.samples, grid, apKernel).samples.slice(0, grid.n);
 
-  // --- AP-independent calcium: same shape, slower decay, no spikes ---------
+  // --- AP-independent calcium: per-event shape, no spikes ------------------
+  // Each event carries its own kernel now, so these are stamped individually rather than
+  // convolved as one impulse train. Stamping a causal kernel at an impulse IS that
+  // convolution, without building a length-n input per event.
   const independentEvents = placeInQuietGaps(spikes, p);
-  const indepRaster = rasterize(
-    independentEvents.map((e) => e.atS),
-    grid,
-    { amplitudeMode: 'unit' },
-  );
-  // Weight each impulse by its own amplitude before convolving, so one pass covers all three.
-  const weighted = new Float64Array(grid.n);
-  {
-    const src = indepRaster.samples;
-    let seen = 0;
-    for (let i = 0; i < grid.n; i++) {
-      if (src[i] > 0) {
-        weighted[i] = independentEvents[Math.min(seen, independentEvents.length - 1)].amp;
-        seen++;
-      }
+  const apIndependent = new Float64Array(grid.n);
+  for (const e of independentEvents) {
+    const shape = EVENT_SHAPES[e.shape];
+    if (!shape) throw new Error(`premise-sim: unknown event shape '${e.shape}'`);
+    // zeroIndex differs by family — 0 for the causal calcium kernel, centred for the
+    // gaussian — so the stamp offset below reads it rather than assuming.
+    const k = buildKernel(shape.kernel, shape.params, grid.dt, e.amp);
+    const i0 = Math.round((e.atS - grid.t0) / grid.dt);
+    for (let j = 0; j < k.samples.length; j++) {
+      const i = i0 + j - k.zeroIndex;
+      if (i >= 0 && i < grid.n) apIndependent[i] += k.samples[j];
     }
   }
-  const indepKernel = buildKernel(
-    'calcium',
-    { tauRise: p.tauRise, tauDecay: p.independentTauDecay },
-    grid.dt,
-    1, // amplitude carried per-impulse above
-  );
-  const apIndependent = convolveOnGrid(weighted, grid, indepKernel).samples.slice(0, grid.n);
 
   // --- sum + measurement noise ---------------------------------------------
   const clean = new Float64Array(grid.n);
@@ -181,7 +208,7 @@ export function simulatePremise(overrides = {}) {
  * @returns {{atS:number, amp:number}[]} chronological, amplitudes in the listed order
  */
 export function placeInQuietGaps(spikes, p) {
-  const n = p.independentAmps.length;
+  const n = p.independentEvents.length;
   const gaps = [];
   for (let i = 1; i < spikes.length; i++) {
     gaps.push({ from: spikes[i - 1], to: spikes[i], len: spikes[i] - spikes[i - 1] });
@@ -198,12 +225,14 @@ export function placeInQuietGaps(spikes, p) {
   }
 
   return chosen.map((g, i) => {
-    // Sit far enough past the preceding AP that its transient has decayed, and leave the
-    // required clear run before the next one so the slow decay is visible uninterrupted.
+    // Sit far enough past the preceding AP that its transient has decayed, and leave a
+    // clear run before the next one so the RISE is unambiguous. The tail is allowed to
+    // run into later spiking — the slow morphology trails for most of a minute, and did
+    // exactly that in the real recording.
     const earliest = g.from + 4 * p.tauDecay;
     const latest = g.to - p.independentClearS;
     const atS = latest > earliest ? (earliest + latest) / 2 : (g.from + g.to) / 2;
-    return { atS: round(atS, 2), amp: p.independentAmps[i] };
+    return { atS: round(atS, 2), ...p.independentEvents[i] };
   });
 }
 

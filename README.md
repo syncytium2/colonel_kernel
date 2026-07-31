@@ -8,7 +8,7 @@ nothing uploaded.
 
 ## Why this tool exists
 
-![Two panels of a simulated recording. Top: 139 action potentials in 46 bursts of one to five, shown as red ticks beneath a blue calcium trace, with three calcium events highlighted. Bottom: one of those events enlarged on the same dF/F0 scale — a tall transient with no action potentials beneath it, between two smaller transients that each sit under a burst.](docs/img/premise_sim.png)
+![Three panels of a simulated recording. Top: 139 action potentials in 46 bursts of one to five, shown as red ticks beneath a blue calcium trace, with three calcium events shaded. Bottom left: one shaded event enlarged, a tall brief symmetric transient with no action potentials beneath it, next to an ordinary burst. Bottom right: another, rising more slowly and decaying for most of a minute, with a later burst riding on its tail.](docs/img/premise_sim.png)
 
 The red ticks are action potentials, arriving in bursts of one to five; the blue trace is
 the calcium signal. Every burst stamps down the same shape once per spike, so a five-spike
@@ -16,8 +16,10 @@ burst produces a transient about five times a single spike's. That is the assump
 tool exists to test, and mostly it holds.
 
 But **three** of the calcium events here have *no action potentials underneath them at
-all*, and the tallest is larger than anything the spikes produced. The lower panel is one
-of them, on the **same dF/F₀ scale**, sitting between two ordinary bursts for comparison.
+all*, and the tallest is larger than anything the spikes produced. The lower panels enlarge
+two of them, on the **same dF/F₀ scale**. One is tall, brief and symmetric; the other rises
+slowly and takes most of a minute to fall, with a later burst riding on its decaying tail.
+Neither looks like the spike-driven transients beside them — which is the tell.
 
 Real recordings do this. Hand that trace to a tool that assumes every calcium event came
 from a spike and it will happily return a kernel — one distorted by events the spikes never
