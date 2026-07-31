@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-07-31 14:36 UTC |
-| **Commit** | `2c757ab` — Repair SHA references broken by the 2026-07-30 history rewrite |
-| **Bundle** | `assets/index-CES6bTdZ.js` |
-| **Worker version** | `78e28e6d-fb39-456b-95b8-67275cbc291a` |
+| **Deployed at** | 2026-07-31 18:45 UTC |
+| **Commit** | `738e898` — Merge branch 'feat/simulated-premise-figure': model the premise instead  |
+| **Bundle** | `assets/index-DswJcMVv.js` |
+| **Worker version** | `3f271b95-789b-46df-a929-ba32439f4a0d` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
