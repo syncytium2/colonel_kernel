@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-08-05 14:00 UTC |
-| **Commit** | `1dc5652` — Merge branch 'feat/unify-plot-palette': one color per plotted quantity |
-| **Bundle** | `assets/index-bujd3cEN.js` |
-| **Worker version** | `6ebe25ca-baf0-4904-ab29-d8dc9d634c20` |
+| **Deployed at** | 2026-08-05 16:41 UTC |
+| **Commit** | `4027029` — Merge branch 'feat/noise-default-kernel-key': noise on by default; kerne |
+| **Bundle** | `assets/index-DgPdt0ZH.js` |
+| **Worker version** | `e5231fad-a2ff-4f2c-a48b-99863effe6b4` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
