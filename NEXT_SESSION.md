@@ -79,8 +79,14 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   them the other way. Tab 0's *fixed* 136px raster could not be copied literally into a
   viewport-dividing shell — it inverted the priority at ~1100px — so the strip is a cap that
   shrinks with the trace. [ADR-0040](docs/adr/0040-tab1-band-order-follows-tab0.md).
-  **Open for Tony:** colors are still inconsistent across tabs (Tab 0 blue/red vs Tab 1
-  teal/neutral); deliberately not unified, since Tab 1's teal is named in the noise caption.
+- **One color per plotted quantity (2026-08-05)** — closes the color question the band-order
+  work left open. Plot colors were hex literals at seven call sites, so red had drifted into
+  three meanings (Tab 0 spikes, Tab 2's reconstruction, "you" in Guess the spikes) and two
+  collisions sat inside single views. Roles now live once in `app.css` as `--series-*`:
+  teal = data/target, red = what the machine produced, purple = what you control, ink =
+  spikes, gray+dashed = hidden truth. Validated for colorblind separation, not eyeballed.
+  Copy that named colors ("the red ticks…") is now position-based.
+  [ADR-0041](docs/adr/0041-plot-series-palette-one-color-per-quantity.md).
 
 Core suite: **237 passing**, plus `npm run template-acceptance`.
 Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-08-05.**
