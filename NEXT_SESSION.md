@@ -164,24 +164,21 @@ are stale.
   on adjacent grounds) but is strong as **predict-then-reveal, unscored**. **Open decision:**
   target visible while stamping (matching) or hidden until commit (prediction).
 
-- **The band that draws the x-axis is systematically short-changed** — it pays ~60–95px of
-  uPlot axis chrome out of an equal share, so the *container* split is not the *plot* split.
-  Measured live at 1600×1000: **Tab 2** trace 117px vs raster **86px** — and ADR-0026 promoted
-  that raster to *co-equal* on purpose, so this quietly under-delivers on a settled decision;
-  **Tab 1** output 198px vs raster **45px**, thinner than the ~76px Tab 0 gives its raster
-  (ADR-0040 set its 172px cap reasoning about the body, and has been annotated). Tab 3 is fixed
-  ([ADR-0043](docs/adr/0043-tab3-overlay-true-and-recovered-input.md)) with `flex: 1 1 60px` on
-  the axis band; the same one-line rule applies to both. Tab 2's needs an ADR-0026 intent check
-  first. **Measure `.u-over`, not the container**, after any band-proportion edit.
-
-- **Two `style-src-attr` CSP violations fire on Tab 2 in the built artifact.** Pre-existing (3
-  before the ADR-0042 pass, 2 after), and **nothing is actually broken** — all 25 styled
-  elements apply, every legend swatch renders, and the pages look right. They are console noise
-  from a transient inline-style application. Worth closing anyway: the strict CSP is a
-  FOUNDATIONS §6 guarantee, and a console full of expected violations is where a real one hides.
-  Note the dev server has **no CSP** (it is injected at build time, ADR-0008), so this is only
-  visible against `npm run preview` or the deployed site — and `npm run deploy` does not check
-  for console violations, only for third-party beacons.
+- ~~**The band that draws the x-axis is systematically short-changed.**~~ **Closed
+  2026-08-05** by [ADR-0045](docs/adr/0045-close-axis-tax-and-csp-style-attrs.md).
+  Live: Tab 1 167/**76**px, Tab 2 **101/101** (ADR-0026's co-equal raster delivered as
+  measured), Tab 3 123/119. The rule stands for new work: **measure `.u-over`, not the
+  container**, after any band-proportion edit.
+- ~~**Two `style-src-attr` CSP violations fire on Tab 2.**~~ **Closed 2026-08-05** by
+  [ADR-0045](docs/adr/0045-close-axis-tax-and-csp-style-attrs.md) — **2 → 0** live. Cause:
+  Svelte 5 clones static markup from an HTML *string*, so a literal `style="…"` in a
+  component is parsed as an inline style attribute and the strict CSP blocks it. Exactly
+  two existed. **Rule: never write a literal `style="…"` in a component** — invisible in
+  dev (the CSP is injected at build time) and silently unapplied in production; use a
+  class. Interpolated `style={…}` goes through CSSOM and is fine.
+- **`npm run deploy` does not gate on console CSP violations** — only on third-party
+  beacons. Catching the above needed a Playwright pass against `npm run preview` or the
+  live site. A cheap gate worth adding.
 
 **Raised by the 2026-07-30/31 work:**
 
