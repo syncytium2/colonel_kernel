@@ -829,6 +829,54 @@
     multiRegion && !!regionOverlays && (bandMode === 'all' || effectiveCurrentIdx == null),
   );
 
+  // Key for the kernel band. The band draws up to four curve kinds at once and had no legend
+  // at all, so a reader had to already know the conventions to read it. Derived from the SAME
+  // branch conditions and the SAME colors as kernelBand.series, so the key cannot drift from
+  // what is drawn. Which channel carries what changes with the mode, and the key follows: in
+  // all-regions mode hue carries the REGION and dash carries the curve type (so the swatches
+  // name regions and one note states the dash convention), while in single mode hue separates
+  // kernel from STA directly (ADR-0024).
+  const kernelKey = $derived.by(() => {
+    if (!kernelBand) return null;
+    const keys = [];
+    let note = '';
+    if (bandShowsAll) {
+      metaRegions.forEach((r, i) => {
+        if (!regionOverlays?.[i]) return;
+        keys.push({
+          label: r.name + (effectiveCurrentIdx === i ? ' · current' : ''),
+          color: regionColor(i),
+          dashed: false,
+        });
+      });
+      note =
+        'solid = kernel · dashed = STA' + (effectiveCurrentIdx != null ? ' · current = bold' : '');
+    } else if (analysis) {
+      const hue = hasRegions && effectiveCurrentIdx != null ? regionColor(effectiveCurrentIdx) : null;
+      if (!railedHidden) keys.push({ label: 'recovered kernel', color: hue ?? 'var(--series-you)', dashed: false });
+      // With a region hue the two curves share a color and separate by dash; without one they
+      // separate by color and the STA is drawn SOLID. The key has to say whichever is true.
+      keys.push({ label: 'STA', color: hue ?? '#e76f51', dashed: !!hue });
+    }
+    // The Tab 1 handoff's known kernel — the ground truth the recovery is judged against.
+    if (sourceKernel) keys.push({ label: 'source kernel', color: 'var(--series-truth)', dashed: true });
+    return keys.length ? { keys, note } : null;
+  });
+  // What is left in the summary's "kernel overlay" block once the swatches move out — so the
+  // header is not rendered above an empty row.
+  const overlayPeakNumbers = $derived(
+    !bandShowsAll && !!analysis && !railedHidden && !analysis.staEmpty,
+  );
+  const overlayRailedToggle = $derived(
+    !bandShowsAll && !!analysis && showRailed && method === 'parametric' && analysis.pm.railed.railed,
+  );
+  // A dashed swatch has to be drawn, not stroked: the <i> is a 3px bar, so the dash becomes a
+  // repeating gradient in the curve's own color.
+  const keySwatch = (k) =>
+    k.dashed
+      ? `background:repeating-linear-gradient(90deg, ${k.color} 0 4px, transparent 4px 7px)`
+      : `background:${k.color}`;
+
   // Reconstruction predicted overlay (current region) placed onto the WHOLE-recording timeline
   // at the region's offset, null elsewhere — so it aligns with the full recon trace. Null while
   // railed-hidden or when no region is current.
@@ -1217,30 +1265,23 @@
             </div>
             {/if}
         </div>
-        <!-- Kernel-overlay legend + peak readout — moved out of the square so the kernel PLOT
-             fills it (kernel is primary; keep it square + big). -->
-        {#if kernelBand}
+        <!-- Kernel-overlay NUMBERS. The swatch key that used to live here now sits under the
+             kernel square instead: a key has to be next to the figure it explains, and down
+             here it fell below the fold of the summary panel, so in practice the overlay had
+             no key at all. It had also drifted — it still named the kernel's old literal
+             purple after the series moved to a token. The numbers stay ("numbers; figures are
+             the instrument", ADR-0026), as does the railed-output toggle. -->
+        {#if kernelBand && !bandShowsAll && analysis && (overlayPeakNumbers || overlayRailedToggle)}
           <div class="overlay-legend">
             <div class="checks-h">kernel overlay</div>
             <div class="legend">
-              {#if bandShowsAll}
-                {#each metaRegions as r, i}
-                  <span class="key"><i style="background:{regionColor(i)}"></i>{r.name}{#if effectiveCurrentIdx === i} ·current{/if}</span>
-                {/each}
-                <span class="agree">solid = kernel · dashed = STA{#if effectiveCurrentIdx != null} · current = bold{/if}</span>
-              {:else if analysis}
-                {@const hue = hasRegions && effectiveCurrentIdx != null ? regionColor(effectiveCurrentIdx) : null}
-                {#if !railedHidden}<span class="key"><i style="background:{hue ?? '#7b2ff7'}"></i>recovered kernel</span>{/if}
-                <span class="key"><i style="background:{hue ?? '#e76f51'}"></i>STA{#if hue} (dashed){/if}</span>
-                {#if sourceKernel}<span class="key"><i style="background:var(--text)"></i>source kernel (Tab 1, dashed)</span>{/if}
-                {#if showRailed && method === 'parametric' && analysis.pm.railed.railed}
-                  <button class="linkbtn" onclick={() => (showRailed = false)}>Hide railed output</button>
-                {/if}
-                {#if !railedHidden && !analysis.staEmpty}
-                  <span class="agree">
-                    kernel peak {f(active.peakLagS, 2)} s · amp {f(method === 'parametric' ? active.peakAmp : active.peakAmpAdj)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
-                  </span>
-                {/if}
+              {#if overlayRailedToggle}
+                <button class="linkbtn" onclick={() => (showRailed = false)}>Hide railed output</button>
+              {/if}
+              {#if overlayPeakNumbers}
+                <span class="agree">
+                  kernel peak {f(active.peakLagS, 2)} s · amp {f(method === 'parametric' ? active.peakAmp : active.peakAmpAdj)} · STA peak {f(analysis.sta.staPeakLagS, 2)} s
+                </span>
               {/if}
             </div>
           </div>
@@ -1308,7 +1349,7 @@
         <div class="band-head">
           <span class="plot-label">
             {#if rasterMode === 'raw'}
-              spike raster — raw spike times{#if rawStems} ({rawStems.n} spikes){/if} · the §13 recovery input, un-binned
+              spike raster — raw spike times{#if rawStems}&nbsp;({rawStems.n} spikes){/if} · the §13 recovery input, un-binned
             {:else}
               spike raster — binned count per {(histo ? histo.windowS : histWinS).toFixed(2)} s bin · pinned [0, {histo ? histo.maxCount : 1}] (decoupling visibility){#if histo} · {#if histo.isFrameGrid}at the frame grid — this <strong>is</strong> the §13 recovery input{:else}drag to {displayRegion.grid.dt.toFixed(2)} s for the §13 recovery input{/if}{/if}
             {/if}
@@ -1403,6 +1444,14 @@
             {/key}
           {/if}
         </div>
+        {#if kernelKey}
+          <div class="legend kernel-key">
+            {#each kernelKey.keys as k (k.label)}
+              <span class="key"><i style={keySwatch(k)}></i>{k.label}</span>
+            {/each}
+            {#if kernelKey.note}<span class="dashnote">{kernelKey.note}</span>{/if}
+          </div>
+        {/if}
       {/snippet}
     </Shell>
   {/if}
@@ -1957,6 +2006,19 @@
     margin-left: auto;
     font-family: var(--mono);
     color: var(--text-h);
+  }
+  /* The kernel band's key sits inside the square panel (ADR-0033), so it stays tight and is
+     allowed to wrap: with several regions the swatch row can run to two lines rather than
+     stealing width from the plot. Not `.agree` — that pushes right, which reads as a stray
+     fragment in a narrow panel. */
+  .legend.kernel-key {
+    gap: 10px;
+    margin-top: 4px;
+    flex: none;
+  }
+  .legend.kernel-key .dashnote {
+    color: var(--text);
+    opacity: 0.85;
   }
 
   /* ===== shared shell (2026-07-03): rail content · summary(§3) · square kernel · bands.

@@ -521,7 +521,9 @@ Deconvolution methods to expose (pedagogically + practically):
 Cross-cutting: optional **noise injection** (so deconvolution isn't deceptively easy; AWGN on a
 user slider 0–10× cohort-typical σ, calibrated in [ADR-0015](docs/adr/0015-harness-noise-model.md);
 first realized in Tab 1 as measurement noise on the convolution output —
-[ADR-0031](docs/adr/0031-tab1-forward-noise-injection.md)),
+[ADR-0031](docs/adr/0031-tab1-forward-noise-injection.md); **on by default** since
+[ADR-0042](docs/adr/0042-noise-on-by-default-kernel-band-key.md), because a default of 0 was
+exactly the deceptive easiness this clause names — see §11.2),
 explicit **edge handling** (linear vs circular convolution — pick a default, make it visible), and
 **ground-truth overlay** (recovered vs true, with an error metric).
 
@@ -652,8 +654,15 @@ here?" or "does it affect the other tab?":
   of mechanical facts** (τ-railed, peak-at-boundary — neutral, never pass/fail) and the
   **"show anyways" toggle** that reverses the default-hide of railed-parametric output
   ([ADR-0025](docs/adr/0025-tab2-indicator-column-railed-fit-display.md)).
-- **Global-but-default-off** — noise injection (AWGN, slider 0–10× cohort-typical σ, default 0/off;
-  [ADR-0015](docs/adr/0015-harness-noise-model.md)). Its first user-facing realization is the Tab 1
+- **Global, and ON by default** — noise injection (AWGN, slider 0–10× cohort-typical σ;
+  [ADR-0015](docs/adr/0015-harness-noise-model.md)). **Tab 1 opens at 3×** — SNR ≈ 14 at the
+  default 0.1 dF/F₀ peak, so the trace is visibly grainy and every transient still reads. Amended
+  from the original default-0/off by
+  [ADR-0042](docs/adr/0042-noise-on-by-default-kernel-band-key.md): a clean default made the
+  forward model look noiseless and handed a noiseless signal to Tab 2, which is the
+  deceptive-easiness §7's cross-cutting note exists to prevent. The clean case is one slider drag
+  to 0, and stays the right thing to show when the point is the convolution identity itself.
+  Its first user-facing realization is the Tab 1
   measurement-noise tool — AWGN on the convolution output, clean + noisy overlaid, with a peak/σ SNR
   readout and a seeded reseed ([ADR-0031](docs/adr/0031-tab1-forward-noise-injection.md)). The
   teaching kernel's **peak height (dF/F₀)** is a separate, user-set axis — a `buildKernel` amplitude

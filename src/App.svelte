@@ -88,8 +88,12 @@
 
   // Measurement-noise tool (ADR-0031): AWGN injected on the convolution OUTPUT
   // (measurement noise on the synthesized dF/F₀ trace), calibrated in cohort-typical
-  // σ units per ADR-0015. Default 0/off so a learner sees the clean case first (§11.2).
-  let noiseLevel = $state(0); // 0 … NOISE_LEVEL_MAX, cohort-typical σ multiples
+  // σ units per ADR-0015. Opens at 3× cohort σ — SNR ≈ 14 at the default 0.1 dF/F₀ peak, so
+  // the trace is visibly grainy while every transient still reads. A clean default made the
+  // forward model look noiseless, which is the deceptive-easiness FOUNDATIONS §7 exists to
+  // avoid, and it carried a noiseless signal into Tab 2's default recovery. Sliding to 0
+  // still gives the clean case (ADR-0042 amends the §11.2 default-off point).
+  let noiseLevel = $state(3); // 0 … NOISE_LEVEL_MAX, cohort-typical σ multiples
   let noiseSeed = $state(1); // reseed → new realization; stable across unrelated re-renders
 
   function selectKernel(id) {
@@ -383,7 +387,7 @@
       {#snippet summary()}
         <div class="sum-eq">output = input ⊗ kernel</div>
         <div class="sum-sub">
-          Synthesized dF/F₀ trace{#if noiseLevel > 0} with measurement noise (ADR-0031){/if}.
+          Synthesized dF/F₀ trace{#if noiseLevel > 0}&nbsp;with measurement noise (ADR-0031){/if}.
         </div>
         <div class="readouts">
           <div class="ro"><div class="k">Kernel peak</div><div class="v">{kernelAmp.toFixed(2)} <small>dF/F₀</small></div></div>
