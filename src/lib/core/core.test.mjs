@@ -113,6 +113,37 @@ for (const v of ca.samples) if (v > caPeak) caPeak = v;
 ok('calcium normalized to peak 1', approx(caPeak, 1, 1e-12));
 ok('calcium origin causal', ca.zeroIndex === 0);
 
+// --- every kernel's tail is cut where it is negligible, not at a fixed σ/τ ---
+// The array ends by going to zero, so whatever the last sample holds is a step
+// discontinuity — broadband in frequency, and so a ringing source in the Tab 2
+// FFT deconvolution. It must be ≤ TAIL_EPS (1e-3) of the peak for ANY params.
+// The old fixed ±3σ / 5τ rules left 1.1% / 0.7%, and calcium left up to ~9%
+// when τrise approached τdecay. Supports round outward to a whole sample, so
+// the bound is the threshold itself (float slack only, not a rounding budget).
+const TAIL_BOUND = 1e-3 + 1e-9;
+const tailStep = (k) => {
+  let peak = 0;
+  for (const v of k.samples) if (Math.abs(v) > peak) peak = Math.abs(v);
+  return Math.abs(k.samples[k.samples.length - 1]) / peak; // leading edge at t=0 is the intended onset
+};
+ok('calcium tail negligible at defaults', tailStep(ca) <= TAIL_BOUND, `step=${tailStep(ca)}`);
+let worstTail = 0;
+let worstAt = '';
+for (let tr = 0.01; tr <= 0.3001; tr += 0.01) {
+  for (let td = 0.05; td <= 2.0001; td += 0.05) {
+    const s = tailStep(buildKernel('calcium', { tauRise: tr, tauDecay: td }, grid.dt));
+    if (s > worstTail) { worstTail = s; worstAt = `tauRise=${tr.toFixed(2)} tauDecay=${td.toFixed(2)}`; }
+  }
+}
+// τrise → τdecay is the slow-tail worst case a fixed 5τ cutoff got wrong.
+ok('calcium tail negligible across the whole slider range', worstTail <= TAIL_BOUND, `worst=${worstTail} at ${worstAt}`);
+let gaussTail = 0;
+for (let s = 0.01; s <= 0.5001; s += 0.01) gaussTail = Math.max(gaussTail, tailStep(buildKernel('gaussian', { sigma: s }, grid.dt)));
+ok('gaussian tail negligible across the slider range', gaussTail <= TAIL_BOUND, `worst=${gaussTail}`);
+let expTail = 0;
+for (let t = 0.02; t <= 1.0001; t += 0.01) expTail = Math.max(expTail, tailStep(buildKernel('exponential', { tau: t }, grid.dt)));
+ok('exponential tail negligible across the slider range', expTail <= TAIL_BOUND, `worst=${expTail}`);
+
 // --- binned-count: reproduce MATLAB hist(spikes, timing) EXACTLY (ADR-0001/§13) ---
 // Integer-exact centers so the midpoint tie-break is float-safe.
 // centers [0,1,2,3] -> edges 0.5, 1.5, 2.5; max=3 (pre-filter `< 3`).
