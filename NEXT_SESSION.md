@@ -103,7 +103,7 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   the ≈0.3× amplitude shortfall is the visible lesson rather than something two auto-scaled
   axes hid. [ADR-0043](docs/adr/0043-tab3-overlay-true-and-recovered-input.md).
 
-Core suite: **237 passing**, plus `npm run template-acceptance`.
+Core suite: **240 passing**, plus `npm run template-acceptance`.
 Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-08-05.**
 
 **History was rewritten on 2026-07-31 (dated 07-30 in the commits).** The reverted
