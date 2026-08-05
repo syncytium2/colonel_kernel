@@ -149,6 +149,21 @@ are stale.
 
 **Raised by the 2026-08-05 work:**
 
+- **Tab 1's "Fit the trace" challenge is in the wrong direction, and duplicates Tab 3's
+  Advanced mode.** Every other challenge inverts its own tab (Tab 2: shape a kernel, spikes
+  known; Tab 3: place spikes, kernel given). Tab 1 is the *forward* tab, but Fit the trace
+  hides **both** the spikes and the kernel and scores recovery by R² — Tab 2's job and Tab 3's
+  job at once, and the same task as Guess the spikes' Advanced mode, which scores it more
+  richly (F1 + a race against the machine). Its own header comment calls it "the forward
+  problem, played by hand", which it is not. Tony proposed replacing it; the assessed favourite
+  is a **stamp-and-sum drag** — place a kernel copy at each spike and watch them sum — because
+  that is literally `convolve.js`'s own teaching description (ADR-0044), it scores objectively,
+  and it would discharge the deferred slide-and-multiply animation below. Include one
+  **closely-spaced pair** so superposition is discovered by hand. Freehand *sketching* was
+  assessed and is weaker as a scored game (it grades mouse control; ADR-0003 rejected freehand
+  on adjacent grounds) but is strong as **predict-then-reveal, unscored**. **Open decision:**
+  target visible while stamping (matching) or hidden until commit (prediction).
+
 - **The band that draws the x-axis is systematically short-changed** — it pays ~60–95px of
   uPlot axis chrome out of an equal share, so the *container* split is not the *plot* split.
   Measured live at 1600×1000: **Tab 2** trace 117px vs raster **86px** — and ADR-0026 promoted
