@@ -50,10 +50,23 @@ plot, not of `inferSpikes`.
 
 - **The tab now shows what it always computed.** Nothing about the recovery changed; it is merely
   large enough to read. The recovered peaks visibly sit *on* the spikes.
-- **A general layout rule, worth reusing.** Any stack of equal-height bands where only the last
-  draws an axis has this defect silently — the axis band's plot is systematically ~60px shorter.
-  Tab 1's bands (ADR-0040) have the same structure but deliberately unequal proportions, so they
-  are not affected in the same way; Tab 2's three bands are worth checking against this rule.
+- **A general layout rule, and the other two tabs were measured against it** (1600×1000, live):
+
+  | | trace band | axis-carrying band |
+  | --- | --- | --- |
+  | Tab 3 (fixed here) | 123px | 119px |
+  | Tab 2 | 117px | **86px** |
+  | Tab 1 | 198px | **45px** |
+
+  Both are the same tax, neither is broken enough to act on unasked. **Tab 2's raster is meant to
+  be *co-equal*** — ADR-0026 promoted it to first-class precisely because it is the recovery
+  input — so 86-against-117 quietly under-delivers on a settled decision. **Tab 1's 45px** is
+  partly this ADR's own doing: [ADR-0040](0040-tab1-band-order-follows-tab0.md) capped that band
+  at 172px reasoning about the *body*, and the plot inside it is 45px, thinner than the ~76px
+  Tab 0 gives its raster. ADR-0040 has been annotated with the correction. Both are queued rather
+  than swept into this change, since Tab 2's case means revisiting an ADR-0026 intent.
+- **Measure plots, not containers.** Every one of these was invisible from the markup and obvious
+  from one `boundingBox()` on `.u-over`. Worth doing after any band-proportion edit.
 - **Co-registration preserved and verified**: both bands' plot areas measure identical
   (x = 416…1535 at 1600px wide), the ADR-0030 / FOUNDATIONS §11.5 invariant.
 - **The screenshot was the bug report, and the numbers were the diagnosis.** Reading "negative

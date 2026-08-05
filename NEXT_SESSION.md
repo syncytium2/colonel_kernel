@@ -95,6 +95,13 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   key existed but sat below the fold in the summary panel and had drifted; it now sits under
   the square, derived from the series.
   [ADR-0042](docs/adr/0042-noise-on-by-default-kernel-band-key.md).
+- **Tab 3 overlays true vs recovered input (2026-08-05)** — the recovered band was rendering
+  **8px tall** (the bottom band pays for the x-axis out of an equal share), which made a
+  positive peak read as a negative one and looked like a sign error in the deconvolution. It
+  is not: recovered is **positive at all 33 spike times** (+0.23…+0.29); the negatives fall
+  only *between* spikes, which is the ringing §2 exists to show. Now one shared y-axis, where
+  the ≈0.3× amplitude shortfall is the visible lesson rather than something two auto-scaled
+  axes hid. [ADR-0043](docs/adr/0043-tab3-overlay-true-and-recovered-input.md).
 
 Core suite: **237 passing**, plus `npm run template-acceptance`.
 Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-08-05.**
@@ -141,6 +148,16 @@ are stale.
   undecided — WIP lands on `master` often, so it would want a `deploy` branch or a build gate.
 
 **Raised by the 2026-08-05 work:**
+
+- **The band that draws the x-axis is systematically short-changed** — it pays ~60–95px of
+  uPlot axis chrome out of an equal share, so the *container* split is not the *plot* split.
+  Measured live at 1600×1000: **Tab 2** trace 117px vs raster **86px** — and ADR-0026 promoted
+  that raster to *co-equal* on purpose, so this quietly under-delivers on a settled decision;
+  **Tab 1** output 198px vs raster **45px**, thinner than the ~76px Tab 0 gives its raster
+  (ADR-0040 set its 172px cap reasoning about the body, and has been annotated). Tab 3 is fixed
+  ([ADR-0043](docs/adr/0043-tab3-overlay-true-and-recovered-input.md)) with `flex: 1 1 60px` on
+  the axis band; the same one-line rule applies to both. Tab 2's needs an ADR-0026 intent check
+  first. **Measure `.u-over`, not the container**, after any band-proportion edit.
 
 - **Two `style-src-attr` CSP violations fire on Tab 2 in the built artifact.** Pre-existing (3
   before the ADR-0042 pass, 2 after), and **nothing is actually broken** — all 25 styled
