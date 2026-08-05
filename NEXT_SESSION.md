@@ -65,9 +65,17 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   Because it is synthetic the figure could then be made **live and x-zoomable** — two
   co-registered bands, drag or jump-button to zoom, y pinned so amplitudes stay comparable —
   which is the capability a real-data version was reverted for on 2026-07-30.
+- **Kernel support is now cut on amplitude (2026-08-05)** — Tony spotted the Tab 1 calcium
+  kernel cornering at exactly 2.00 s. Supports were cut at a fixed multiple of the shape's own
+  parameter (±3σ, 5τ, 5·τ_decay), which bounds the distance but not the value the last sample
+  still holds, so every kernel ended on a step: 1.11% / 0.67% of peak, 2.68% at the Tab 1
+  calcium defaults, and up to 9.14% as τ_rise → τ_decay. A step is broadband, so it seeds
+  ringing in the Tab 2 FFT decon. One `TAIL_EPS = 1e-3`-of-peak threshold now replaces all
+  three rules; worst case is 0.1% at every slider position, and a swept tail-step invariant in
+  the tests pins it. [ADR-0039](docs/adr/0039-kernel-support-amplitude-cutoff.md).
 
-Core suite: **233 passing**, plus `npm run template-acceptance`.
-Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-07-31.**
+Core suite: **237 passing**, plus `npm run template-acceptance`.
+Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-08-05.**
 
 **History was rewritten on 2026-07-31 (dated 07-30 in the commits).** The reverted
 interactive figure had left the ROI 1 recording in git history, so it was stripped with
