@@ -55,16 +55,18 @@ plot, not of `inferSpikes`.
   | | trace band | axis-carrying band |
   | --- | --- | --- |
   | Tab 3 (fixed here) | 123px | 119px |
-  | Tab 2 | 117px | **86px** |
-  | Tab 1 | 198px | **45px** |
+  | Tab 2 | 117px | **86px** → 101/101 (ADR-0045) |
+  | Tab 1 | 198px | **45px** → 167/76 (ADR-0045) |
 
   Both are the same tax, neither is broken enough to act on unasked. **Tab 2's raster is meant to
   be *co-equal*** — ADR-0026 promoted it to first-class precisely because it is the recovery
   input — so 86-against-117 quietly under-delivers on a settled decision. **Tab 1's 45px** is
   partly this ADR's own doing: [ADR-0040](0040-tab1-band-order-follows-tab0.md) capped that band
   at 172px reasoning about the *body*, and the plot inside it is 45px, thinner than the ~76px
-  Tab 0 gives its raster. ADR-0040 has been annotated with the correction. Both are queued rather
-  than swept into this change, since Tab 2's case means revisiting an ADR-0026 intent.
+  Tab 0 gives its raster. ADR-0040 has been annotated with the correction. Both were queued rather
+  than swept into this change, and are now closed by
+  [ADR-0045](0045-close-axis-tax-and-csp-style-attrs.md) — which found that Tab 2's case
+  *delivers* ADR-0026's co-equal intent rather than revisiting it.
 - **Measure plots, not containers.** Every one of these was invisible from the markup and obvious
   from one `boundingBox()` on `.u-over`. Worth doing after any band-proportion edit.
 - **Co-registration preserved and verified**: both bands' plot areas measure identical
