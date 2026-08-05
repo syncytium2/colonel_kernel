@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-08-05 13:06 UTC |
-| **Commit** | `b784fb4` — Merge branch 'fix/kernel-tail-truncation': cut kernel support on amplitu |
-| **Bundle** | `assets/index-DiVdICBM.js` |
-| **Worker version** | `d41a5943-94f0-44c0-8659-36fcba86a9bc` |
+| **Deployed at** | 2026-08-05 13:31 UTC |
+| **Commit** | `55b23b7` — Merge branch 'feat/tab1-band-order': output above input on Tab 1 |
+| **Bundle** | `assets/index-b6ndyxm5.js` |
+| **Worker version** | `00c2fa55-7fec-4a40-9769-40c7e20cd139` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
