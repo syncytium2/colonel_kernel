@@ -666,7 +666,7 @@
   .caption { font-weight: 400; color: var(--text); font-size: 11px; }
   .band-body { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 4px; }
   /* Tab 0's premise-figure proportions: the calcium trace takes the available height, the
-     spike raster is a short strip beneath it (~136px of plot body, as on Tab 0). The raster
+     spike raster is a short strip beneath it (~136px of band BODY, as on Tab 0). The raster
      carries one bit per sample, so height beyond legibility buys nothing, and the trace is
      what the tab is about. Deliberately unlike Tab 2, where ADR-0026 makes the raster
      co-equal because there it is the recovery INPUT, not an illustration.
@@ -676,6 +676,11 @@
      while the trace shrank underneath it — inverting the priority at ~1100px and starving the
      trace to nothing below the 900px breakpoint. Capping instead lets both shrink together,
      so the intended proportion holds where there is room and degrades evenly where there
-     is not. */
-  .band.raster { max-height: 172px; }
+     is not.
+
+     The cap counts the AXIS too. This band is the one drawing the x-axis and its label, so
+     ~31px of the cap is uPlot chrome, not plot: at 172px the raster's plot measured 45px,
+     against the ~76px Tab 0 gives its own raster once you subtract the same chrome. 203px
+     restores that. Measure `.u-over`, never the container (ADR-0043). */
+  .band.raster { max-height: 203px; }
 </style>

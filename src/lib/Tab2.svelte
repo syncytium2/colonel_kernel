@@ -1336,8 +1336,12 @@
           {/if}
         </div>
         <div class="legend">
-          <span class="key"><i style="background:var(--series-trace)"></i>actual dF/F₀</span>
-          <span class="key"><i style="background:var(--series-machine)"></i>predicted</span>
+          <!-- Classes, not inline style: these two are STATIC, so Svelte bakes them into the
+               template's HTML string, and parsing a `style` attribute trips the strict CSP's
+               style-src-attr (FOUNDATIONS §6 / ADR-0008). The dynamic swatches nearby are set
+               through CSSOM by the runtime and are fine. -->
+          <span class="key"><i class="k-trace"></i>actual dF/F₀</span>
+          <span class="key"><i class="k-machine"></i>predicted</span>
           {#if analysis && !railedHidden}<span class="agree">{recoveryRegion.regionName} reconstruction R² {f(active.r2)} — reported, not gated (§3)</span>{/if}
         </div>
       </div>
@@ -1345,7 +1349,7 @@
       <!-- BAND B — spike raster, FIRST-CLASS (equal height to the others; it is the recovery
            input). Binned-count + pinned [0, maxCount] axis (decoupling visibility, ADR-0024);
            wider filled bars so sparse, low-count cells read. Co-registered with band A. -->
-      <div class="band">
+      <div class="band axis">
         <div class="band-head">
           <span class="plot-label">
             {#if rasterMode === 'raw'}
@@ -2219,6 +2223,15 @@
     padding: 8px 12px;
     background: var(--bg);
   }
+  /* The raster is FIRST-CLASS and co-equal by ADR-0026 — but it is also the band drawing the
+     x-axis and its label, ~31px of uPlot chrome paid out of an equal share, so an equal split
+     of the CONTAINERS left its PLOT that much shorter than the reconstruction's (measured
+     117 vs 86px). Equal flex-grow with a matching head start on the basis makes the plots
+     equal, which is what ADR-0026 actually asked for. Same rule as Tab 3 (ADR-0043). */
+  .band.axis { flex: 1 1 31px; }
+  /* Legend swatches whose color is fixed: a class, never an inline style attribute (CSP). */
+  .legend .key i.k-trace { background: var(--series-trace); }
+  .legend .key i.k-machine { background: var(--series-machine); }
   .band-head {
     display: flex;
     flex-wrap: wrap;

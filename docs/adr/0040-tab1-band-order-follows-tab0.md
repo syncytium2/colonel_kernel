@@ -39,11 +39,12 @@ one to follow.
 
    > **Correction (ADR-0043).** "136px of body" is not 136px of *plot*. The raster band is also
    > the one drawing the x-axis and its label, ~60–95px of uPlot chrome paid out of its own
-   > height, so the measured plot area is **45px** — thinner than intended, and thinner than
+   > height, so the measured plot area **was 45px** — thinner than intended, and thinner than
    > Tab 0's raster (whose own 136px likewise includes its axis, leaving ~76px). The band order
    > and the cap-not-fixed-height decision below stand; only this pixel claim was wrong.
-   > [ADR-0043](0043-tab3-overlay-true-and-recovered-input.md) states the general rule and fixes
-   > the case where it actually broke something.
+   > [ADR-0043](0043-tab3-overlay-true-and-recovered-input.md) states the general rule.
+   > **Resolved by [ADR-0045](0045-close-axis-tax-and-csp-style-attrs.md)**: the cap is now
+   > 203px and the raster's plot measures **76px**, matching Tab 0 as this ADR intended.
 4. **The strip is a CAP (`max-height`), not a fixed height.** This is the one place Tab 0 could
    not be copied literally. Tab 0's figure sits in document flow, where the trace always has
    room to fill; Tab 1's bands divide a viewport. A fixed raster height held its 136px while the
