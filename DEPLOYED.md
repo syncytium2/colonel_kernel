@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-08-05 16:41 UTC |
-| **Commit** | `4027029` — Merge branch 'feat/noise-default-kernel-key': noise on by default; kerne |
-| **Bundle** | `assets/index-DgPdt0ZH.js` |
-| **Worker version** | `e5231fad-a2ff-4f2c-a48b-99863effe6b4` |
+| **Deployed at** | 2026-08-05 17:02 UTC |
+| **Commit** | `82d1586` — Merge branch 'feat/tab3-merge-input-bands': overlay true vs recovered on |
+| **Bundle** | `assets/index-CF7NCHjV.js` |
+| **Worker version** | `d8ac60b4-afd6-429d-a5ef-7efaf43ff79c` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
