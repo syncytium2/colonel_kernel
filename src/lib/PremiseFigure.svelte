@@ -97,7 +97,7 @@
       fill
       {xs}
       {ys}
-      color="#1f77b4"
+      color="var(--series-trace)"
       xRange={xView}
       yRange={yFixed}
       yAxisSize={54}
@@ -119,7 +119,7 @@
       xs={spikeXs}
       ys={spikeYs}
       kind="stems"
-      color="#d21f3c"
+      color="var(--series-spikes)"
       xRange={xView}
       yRange={[0, 1]}
       yAxisSize={54}
@@ -169,7 +169,7 @@
        This is the accessible equivalent, and the rendered figure is the static fallback. -->
   <p class="alt">
     A simulated recording: {sim.spikes.length} action potentials in {sim.clusters.length}
-    bursts of one to five, shown as red ticks beneath a blue calcium trace. Each burst
+    bursts of one to five, shown as ticks in a band beneath the calcium trace. Each burst
     produces a transient roughly proportional to the number of spikes in it. Three further
     calcium events have no action potentials beneath them at all — one tall, brief and
     symmetric, one rising slowly and decaying for most of a minute, and a third brief one.

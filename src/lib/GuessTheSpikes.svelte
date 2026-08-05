@@ -8,7 +8,7 @@
   //   • Advanced — the kernel is ALSO unknown; you tune it AND place the spikes,
   //                the true spike-inference problem where you know neither.
   // Scored by reconstruction R² (live) and spike-match F1 vs the hidden truth. On
-  // reveal, your spikes (red) and the true spikes (black) are overlaid for contrast.
+  // reveal, your spikes (up) and the true spikes (down) are overlaid for contrast.
   import Shell from './Shell.svelte';
   import Plot from './Plot.svelte';
   import Celebration from './Celebration.svelte';
@@ -151,20 +151,22 @@
   }
 
   const reconSeries = $derived([
-    { ys: Array.from(round.target), stroke: '#2a9d8f', width: 2 },
-    { ys: Array.from(userRecon), stroke: '#d21f3c', width: 2 }, // "you" = red throughout this tab
+    { ys: Array.from(round.target), stroke: 'var(--series-trace)', width: 2 },
+    { ys: Array.from(userRecon), stroke: 'var(--series-you)', width: 2 }, // you — purple is the user's own object app-wide
   ]);
   const kernelPanelSeries = $derived.by(() => {
     const u = sampleOnLag(activeKernel);
     if (advanced && phase === 'revealed') {
       const tru = sampleOnLag(round.kernel);
-      return { xs: u.t, list: [{ ys: tru.v, stroke: 'var(--text)', width: 2, dash: [3, 3] }, { ys: u.v, stroke: 'var(--accent)', width: 2 }] };
+      return { xs: u.t, list: [{ ys: tru.v, stroke: 'var(--series-truth)', width: 2, dash: [3, 3] }, { ys: u.v, stroke: 'var(--series-you)', width: 2 }] };
     }
-    return { xs: u.t, list: [{ ys: u.v, stroke: advanced ? 'var(--accent)' : 'var(--text-h)', width: 2 }] };
+    // advanced: the kernel is YOURS to tune. normal: it is GIVEN — i.e. the true one,
+    // so it wears the ground-truth color rather than the spike ink it used to borrow.
+    return { xs: u.t, list: [{ ys: u.v, stroke: advanced ? 'var(--series-you)' : 'var(--series-truth)', width: 2 }] };
   });
   const kernelXRange = [-WIN_S, WIN_S];
   const userRasterSamples = $derived(Array.from(userRaster.samples));
-  // reveal comparison: your spikes UP (+1, red), true spikes DOWN (−1, black)
+  // reveal comparison: your spikes UP (+1), true spikes DOWN (−1) — direction is the encoding
   const yourUp = $derived.by(() => {
     const a = new Float64Array(grid.n);
     for (const t of userSpikes) { const i = Math.round(t / grid.dt); if (i >= 0 && i < grid.n) a[i] = 1; }
@@ -268,8 +270,8 @@
         {/if}
       </div>
       <p class="reveal-note">
-        <span class="you">Your spikes</span> (red, up) and the <span class="true">true spikes</span>
-        (black, down) are overlaid below. A good R² with the <em>wrong</em> spikes is exactly why
+        <span class="you">Your spikes</span> (up) and the <span class="true">true spikes</span>
+        (down) are overlaid below. A good R² with the <em>wrong</em> spikes is exactly why
         inference is hard{#if advanced} — doubly so when the kernel is unknown too{/if}.
       </p>
     {:else}
@@ -302,7 +304,7 @@
         <div class="band-head"><span class="plot-label">Your spikes ({userSpikes.length}) — click add · shift-click remove · drag move</span></div>
         <div class="band-body">
           <Plot
-            fill xs={gridTimes} ys={userRasterSamples} kind="stems" color="var(--accent)"
+            fill xs={gridTimes} ys={userRasterSamples} kind="stems" color="var(--series-you)"
             yAxisSize={48} padRight={32} syncKey="gts-x" xLabel="time (s)"
             editable spikeTimesForEdit={userSpikes} editSnapDt={grid.dt}
             onSpikeAdd={addSpike} onSpikeRemove={removeSpike} onSpikeMove={moveSpike}
@@ -311,11 +313,11 @@
       </div>
     {:else}
       <div class="band big">
-        <div class="band-head"><span class="plot-label"><span class="you">Your spikes (red, up)</span> vs <span class="true">true spikes (black, down)</span> — {match.matched} hits · {match.falsePos} false · {match.missed} missed</span></div>
+        <div class="band-head"><span class="plot-label"><span class="you">Your spikes (up)</span> vs <span class="true">true spikes (down)</span> — {match.matched} hits · {match.falsePos} false · {match.missed} missed</span></div>
         <div class="band-body">
           <Plot
             fill xs={gridTimes} ys={yourUp} ys2={trueDown} kind="stems" ys2Bars
-            color="#d21f3c" color2="#111111" barSize={[0.5, 5]} yRange={[-1.2, 1.2]}
+            color="var(--series-you)" color2="var(--series-spikes)" barSize={[0.5, 5]} yRange={[-1.2, 1.2]}
             yAxisSize={48} padRight={32} syncKey="gts-x" cursorPoints={true} zeroLine xLabel="time (s)"
           />
         </div>
@@ -332,10 +334,10 @@
   .rail-title span { font-size: 11px; color: var(--text); font-family: var(--mono); }
   .note { font-size: 12.5px; line-height: 1.5; color: var(--text); background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 8px; padding: 10px 12px; }
   .note strong { color: var(--text-h); }
-  .you { color: #d21f3c; font-weight: 600; }
-  .target { color: #2a9d8f; font-weight: 600; }
-  .true { color: var(--text-h); font-weight: 600; }
-  .mach { color: var(--accent); font-weight: 600; }
+  .you { color: var(--series-you); font-weight: 600; }
+  .target { color: var(--series-trace); font-weight: 600; }
+  .true { color: var(--series-spikes); font-weight: 600; }
+  .mach { color: var(--series-machine); font-weight: 600; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .fieldlab { font-size: 12px; color: var(--text-h); font-weight: 600; }
   .params { display: flex; flex-direction: column; gap: 8px; }

@@ -404,7 +404,7 @@
             fill
             xs={kernelDisplay.t}
             ys={kernelDisplay.v}
-            color="var(--accent)"
+            color="var(--series-you)"
             xRange={kernelXRange}
             xLabel="lag (s)"
             zeroLine
@@ -440,7 +440,7 @@
                 xs={outTimes}
                 ys={outValues}
                 ys2={noisyOut}
-                color="#2a9d8f"
+                color="var(--series-trace)"
                 color2="var(--noise-trace)"
                 xRange={xView}
                 yAxisSize={54}
@@ -465,7 +465,7 @@
               xs={gridTimes}
               ys={rasterSamples}
               kind="stems"
-              color="var(--text-h)"
+              color="var(--series-spikes)"
               xRange={xView}
               yAxisSize={54}
               yLabel="spikes"
