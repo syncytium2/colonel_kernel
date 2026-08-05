@@ -412,30 +412,18 @@
         </div>
       {/snippet}
 
-      <!-- FULL-WIDTH TIME-COURSE BANDS — spike train + output, co-registered (ADR-0030). -->
-      {#snippet bands()}
-        <div class="band">
-          <div class="band-head"><span class="plot-label">Input — spike train</span></div>
-          <div class="band-body">
-            <Plot
-              fill
-              xs={gridTimes}
-              ys={rasterSamples}
-              kind="stems"
-              color="var(--text-h)"
-              xRange={xView}
-              yAxisSize={48}
-              padRight={PLOT_PAD_R}
-              syncKey="tab1-rec-x"
-              cursorPoints={true}
-              zoomable
-              onZoom={handleZoom}
-              dblClickReset
-              showXAxis={false}
-            />
-          </div>
-        </div>
+      <!-- FULL-WIDTH TIME-COURSE BANDS — output + spike train, co-registered (ADR-0030).
+           The OUTPUT sits on top: the calcium trace is the object of interest (it is what a
+           real experiment measures), and the spike train reads as the input feeding it. This
+           also matches the Tab 1 challenge view (FitTheTrace), which already stacks them this
+           way. The x-axis lives on the lower band only; padRight and yAxisSize are equal on
+           both, which is what actually holds the pixel-for-pixel co-registration (ADR-0030),
+           so which band carries the axis is free.
 
+           Proportions and y-labels follow Tab 0's premise figure: the trace takes the
+           available height and the raster is a fixed short strip beneath it, each band named
+           on its y-axis rather than by its header alone. -->
+      {#snippet bands()}
         <div class="band">
           <div class="band-head">
             <span class="plot-label">Output — input ⊗ kernel</span>
@@ -455,16 +443,40 @@
                 color="#2a9d8f"
                 color2="var(--noise-trace)"
                 xRange={xView}
-                yAxisSize={48}
+                yAxisSize={54}
+                yLabel="dF/F₀"
                 padRight={PLOT_PAD_R}
                 syncKey="tab1-rec-x"
                 cursorPoints={true}
                 zoomable
                 onZoom={handleZoom}
                 dblClickReset
-                xLabel="time (s)"
+                showXAxis={false}
               />
             {/key}
+          </div>
+        </div>
+
+        <div class="band raster">
+          <div class="band-head"><span class="plot-label">Input — spike train</span></div>
+          <div class="band-body">
+            <Plot
+              fill
+              xs={gridTimes}
+              ys={rasterSamples}
+              kind="stems"
+              color="var(--text-h)"
+              xRange={xView}
+              yAxisSize={54}
+              yLabel="spikes"
+              padRight={PLOT_PAD_R}
+              syncKey="tab1-rec-x"
+              cursorPoints={true}
+              zoomable
+              onZoom={handleZoom}
+              dblClickReset
+              xLabel="time (s)"
+            />
           </div>
         </div>
       {/snippet}
@@ -649,4 +661,17 @@
   .plot-label { font-size: 12px; font-weight: 500; color: var(--text-h); }
   .caption { font-weight: 400; color: var(--text); font-size: 11px; }
   .band-body { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 4px; }
+  /* Tab 0's premise-figure proportions: the calcium trace takes the available height, the
+     spike raster is a short strip beneath it (~136px of plot body, as on Tab 0). The raster
+     carries one bit per sample, so height beyond legibility buys nothing, and the trace is
+     what the tab is about. Deliberately unlike Tab 2, where ADR-0026 makes the raster
+     co-equal because there it is the recovery INPUT, not an illustration.
+
+     A CAP, not a fixed height. Tab 0's figure sits in document flow where the trace always
+     has room; these bands divide a viewport, so a fixed raster height would hold its 136px
+     while the trace shrank underneath it — inverting the priority at ~1100px and starving the
+     trace to nothing below the 900px breakpoint. Capping instead lets both shrink together,
+     so the intended proportion holds where there is room and degrades evenly where there
+     is not. */
+  .band.raster { max-height: 172px; }
 </style>
