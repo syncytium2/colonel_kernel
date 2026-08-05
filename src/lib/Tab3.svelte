@@ -157,8 +157,23 @@
       </div>
     </div>
 
-    <div class="band">
-      <div class="band-head"><span class="plot-label">True input — spike train ({spikeCount})</span></div>
+    <!-- TRUE vs RECOVERED, superimposed. They were two stacked bands, which cost a third of
+         the column and — because the bottom band is the one carrying the x-axis and its label,
+         ~60px out of an equal share — left the recovered trace with an 8px-tall plot: too
+         short to read, and short enough to make a positive peak look like a negative one.
+         Overlaying them is also the better comparison: the recovered estimate is in the SAME
+         units as the input it estimates, so on one shared y-axis the reader sees directly that
+         naive deconvolution returns ~30% of a unit spike's height, smeared, with ringing
+         between the spikes. That gap IS the lesson (FOUNDATIONS §2) and two separate y-axes
+         were hiding it. -->
+    <div class="band axis">
+      <div class="band-head">
+        <span class="plot-label">Input — true spikes vs recovered</span>
+        <span class="legend">
+          <span class="key"><i class="stem"></i>true spikes ({spikeCount})</span>
+          <span class="key"><i class="line"></i>recovered — naive deconvolution</span>
+        </span>
+      </div>
       <div class="band-body">
         <Plot
           fill
@@ -166,30 +181,8 @@
           ys={rasterSamples}
           kind="stems"
           color="var(--series-spikes)"
-          xRange={xView}
-          yAxisSize={48}
-          padRight={PLOT_PAD_R}
-          syncKey="tab3-rec-x"
-          cursorPoints={true}
-          zoomable
-          onZoom={handleZoom}
-          dblClickReset
-          showXAxis={false}
-        />
-      </div>
-    </div>
-
-    <div class="band">
-      <div class="band-head">
-        <span class="plot-label">Recovered input — naive deconvolution</span>
-        <span class="caption">compare to the clean spikes above</span>
-      </div>
-      <div class="band-body">
-        <Plot
-          fill
-          xs={gridTimes}
-          ys={recovered}
-          color="var(--series-you)"
+          ys2={recovered}
+          color2="var(--series-you)"
           xRange={xView}
           yAxisSize={48}
           padRight={PLOT_PAD_R}
@@ -289,4 +282,18 @@
   .plot-label { font-size: 12px; font-weight: 500; color: var(--text-h); }
   .caption { font-weight: 400; color: var(--text); font-size: 11px; }
   .band-body { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 4px; }
+
+  /* The band carrying the x-axis pays for it out of its own share. uPlot spends ~60px on the
+     tick row plus the "time (s)" label, so with a plain equal split the axis band's PLOT ends
+     up that much shorter than its neighbour's — which is how the recovered trace came to be
+     drawn 8px tall. Equal flex-grow with a 60px head start on the basis hands that back, so
+     the two PLOTS match rather than the two containers. */
+  .band.axis { flex: 1 1 60px; }
+
+  /* Inline key — two series in one band, so identity is never left to color alone. */
+  .band-head .legend { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 11px; color: var(--text); }
+  .band-head .key { display: inline-flex; align-items: center; gap: 5px; }
+  .band-head .key i { width: 14px; display: inline-block; }
+  .band-head .key i.stem { height: 9px; width: 3px; border-radius: 1px; background: var(--series-spikes); }
+  .band-head .key i.line { height: 3px; border-radius: 2px; background: var(--series-you); }
 </style>
