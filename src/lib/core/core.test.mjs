@@ -86,6 +86,61 @@ const cl = convolveLinear([0, 1, 0], [1, 2, 3]);
 ok('linear conv length n+m-1', cl.length === 5);
 ok('linear conv values', [0, 1, 2, 3, 0].every((v, i) => approx(cl[i], v)), `[${cl}]`);
 
+// --- convolveLinear IS the definition, not an approximation of it (ADR-0044) ---
+// convolve.js accumulates by SCATTER (walk input i, add x[i]·h[j] into out[i+j]);
+// the textbook form is a GATHER (walk output n, sum x[k]·h[n−k]). Same products,
+// same partition by i+j, so they must agree. The example above pins one hand-checked
+// case; this pins the general property against a reference written straight from the
+// definition, so a future "optimization" that quietly changes the math fails loudly.
+// Dense random inputs on purpose: no zeros, so convolve.js's sparse skip never fires
+// and floating-point ordering is maximally exposed.
+const gatherRef = (x, h) => {
+  const out = new Float64Array(x.length + h.length - 1);
+  for (let n = 0; n < out.length; n++) {
+    let s = 0;
+    for (let k = 0; k < x.length; k++) {
+      const j = n - k;
+      if (j >= 0 && j < h.length) s += x[k] * h[j];
+    }
+    out[n] = s;
+  }
+  return out;
+};
+{
+  const rnd = mulberry32(20260805);
+  let worstRel = 0;
+  let allBitIdentical = true;
+  for (const [nx, nh] of [
+    [1, 1], [1, 17], [17, 1], [2, 3], [64, 9], [9, 64], [257, 33], [500, 120],
+  ]) {
+    const x = Float64Array.from({ length: nx }, () => rnd() * 2 - 1);
+    const h = Float64Array.from({ length: nh }, () => rnd() * 2 - 1);
+    const got = convolveLinear(x, h);
+    const want = gatherRef(x, h);
+    if (got.length !== want.length) { worstRel = Infinity; break; }
+    for (let i = 0; i < want.length; i++) {
+      if (got[i] !== want[i]) allBitIdentical = false;
+      const den = Math.max(Math.abs(got[i]), Math.abs(want[i]));
+      if (den > 0) worstRel = Math.max(worstRel, Math.abs(got[i] - want[i]) / den);
+    }
+  }
+  // The mathematical claim is agreement to rounding; bit-identity is what the current
+  // accumulation order happens to give, reported but deliberately NOT asserted — a
+  // legitimate reordering may cost the last ulp without being wrong.
+  ok('scatter convolution matches the gather definition', worstRel <= 1e-12, `worst rel ${worstRel}`);
+  ok('linear conv output length is nx+nh-1 for every shape', worstRel !== Infinity);
+  console.log(`  note  scatter vs gather currently ${allBitIdentical ? 'bit-identical' : 'differs within tolerance'}`);
+}
+
+// A zero input sample contributes nothing, so convolve.js skipping it is exact —
+// the one place the implementation departs from a literal transcription (ADR-0044).
+{
+  const h = [0.5, -1.25, 2];
+  const withZeros = convolveLinear([0, 3, 0, 0, -2, 0], h);
+  const ref = gatherRef(Float64Array.from([0, 3, 0, 0, -2, 0]), Float64Array.from(h));
+  ok('sparse zero-skip changes nothing', withZeros.every((v, i) => v === ref[i]), `[${withZeros}]`);
+}
+
 // --- the headline hand-verify: spike ⊗ boxcar reproduces the boxcar ---------
 const box = buildKernel('boxcar', { length: 0.3 }, grid.dt); // 30 samples of 1
 const out = convolveOnGrid(r1.samples, grid, box);
