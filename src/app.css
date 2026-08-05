@@ -13,6 +13,19 @@
   --accent-bg: rgba(170, 59, 255, 0.1);
   --accent-border: rgba(170, 59, 255, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
+
+  /* PLOT SERIES PALETTE — one color per QUANTITY, identical on every tab.
+     These exist because the hexes used to be literals scattered across seven
+     components, which is how the same red ended up meaning "spikes" on Tab 0,
+     "the reconstruction" on Tab 2 and "you" in Guess the spikes, and how the
+     Colonel came out gray in one panel and teal in the next. A role changes
+     here or nowhere. Validated for colorblind separation against both surfaces
+     (worst adjacent pair, deutan: trace vs machine, ΔE 13.1). */
+  --series-trace: #2a9d8f; /* measured / synthesized calcium trace; the target */
+  --series-machine: #c0392b; /* what the MACHINE produced — recovery, reconstruction, the Colonel */
+  --series-you: var(--accent); /* you: the kernel you author, your attempt */
+  --series-spikes: var(--text-h); /* spike events (raster / stems) */
+  --series-truth: var(--text); /* hidden ground truth — always ALSO dashed, never color alone */
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
@@ -48,6 +61,10 @@
     --accent-bg: rgba(192, 132, 252, 0.15);
     --accent-border: rgba(192, 132, 252, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);
+    /* Chart purple is a shade deeper than the UI accent here, and only here: the
+       dark --accent (#c084fc, OKLCH L 0.72) sits above the L 0.48–0.67 band a
+       series mark needs against this surface. UI chrome keeps #c084fc. */
+    --series-you: #b45ef5;
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }

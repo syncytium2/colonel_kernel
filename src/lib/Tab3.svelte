@@ -127,7 +127,7 @@
         fill
         xs={kernelDisplay.t}
         ys={kernelDisplay.v}
-        color="var(--accent)"
+        color="var(--series-you)"
         xRange={kernelXRange}
         xLabel="lag (s)"
         zeroLine
@@ -143,7 +143,7 @@
           fill
           xs={traceTimes}
           ys={traceValues}
-          color="#2a9d8f"
+          color="var(--series-trace)"
           xRange={xView}
           yAxisSize={48}
           padRight={PLOT_PAD_R}
@@ -165,7 +165,7 @@
           xs={gridTimes}
           ys={rasterSamples}
           kind="stems"
-          color="var(--text-h)"
+          color="var(--series-spikes)"
           xRange={xView}
           yAxisSize={48}
           padRight={PLOT_PAD_R}
@@ -189,7 +189,7 @@
           fill
           xs={gridTimes}
           ys={recovered}
-          color="var(--accent)"
+          color="var(--series-you)"
           xRange={xView}
           yAxisSize={48}
           padRight={PLOT_PAD_R}

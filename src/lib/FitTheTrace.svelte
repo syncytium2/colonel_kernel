@@ -127,14 +127,14 @@
   }
 
   const reconSeries = $derived([
-    { ys: Array.from(round.target), stroke: '#2a9d8f', width: 2 },
-    { ys: Array.from(userRecon), stroke: 'var(--accent)', width: 2 },
+    { ys: Array.from(round.target), stroke: 'var(--series-trace)', width: 2 },
+    { ys: Array.from(userRecon), stroke: 'var(--series-you)', width: 2 },
   ]);
   const kernelSeries = $derived.by(() => {
     const u = sampleOnLag(userKernel);
-    if (phase !== 'revealed') return { xs: u.t, list: [{ ys: u.v, stroke: 'var(--accent)', width: 2 }] };
+    if (phase !== 'revealed') return { xs: u.t, list: [{ ys: u.v, stroke: 'var(--series-you)', width: 2 }] };
     const tru = sampleOnLag(round.hiddenKernel);
-    return { xs: u.t, list: [{ ys: tru.v, stroke: 'var(--text)', width: 2, dash: [3, 3] }, { ys: u.v, stroke: 'var(--accent)', width: 2 }] };
+    return { xs: u.t, list: [{ ys: tru.v, stroke: 'var(--series-truth)', width: 2, dash: [3, 3] }, { ys: u.v, stroke: 'var(--series-you)', width: 2 }] };
   });
   const kernelXRange = [-WIN_S, WIN_S];
   const userRasterSamples = $derived(Array.from(userRaster.samples));
@@ -233,7 +233,7 @@
           xs={gridTimes}
           ys={userRasterSamples}
           kind="stems"
-          color="var(--accent)"
+          color="var(--series-you)"
           yAxisSize={48}
           padRight={32}
           syncKey="ftt-x"
@@ -253,7 +253,7 @@
       <div class="band">
         <div class="band-head"><span class="plot-label">True spikes ({round.nSpikes})</span></div>
         <div class="band-body">
-          <Plot fill xs={gridTimes} ys={trueRasterSamples} kind="stems" color="var(--text-h)" yAxisSize={48} padRight={32} syncKey="ftt-x" cursorPoints={true} xLabel="time (s)" />
+          <Plot fill xs={gridTimes} ys={trueRasterSamples} kind="stems" color="var(--series-spikes)" yAxisSize={48} padRight={32} syncKey="ftt-x" cursorPoints={true} xLabel="time (s)" />
         </div>
       </div>
     {/if}
@@ -268,9 +268,9 @@
   .rail-title span { font-size: 11px; color: var(--text); font-family: var(--mono); }
   .note { font-size: 12.5px; line-height: 1.5; color: var(--text); background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 8px; padding: 10px 12px; }
   .note strong { color: var(--text-h); }
-  .you { color: var(--accent); font-weight: 600; }
-  .target { color: #2a9d8f; font-weight: 600; }
-  .true { color: var(--text-h); font-weight: 600; }
+  .you { color: var(--series-you); font-weight: 600; }
+  .target { color: var(--series-trace); font-weight: 600; }
+  .true { color: var(--series-spikes); font-weight: 600; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .params { display: flex; flex-direction: column; gap: 8px; }
   .slider { display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'lab out' 'rng rng'; gap: 4px 8px; align-items: center; }

@@ -797,7 +797,7 @@
       const kv = railedHidden ? null : active.kernelV.slice();
       const sv = analysis.staOnKernel;
       const hue = hasRegions && effectiveCurrentIdx != null ? regionColor(effectiveCurrentIdx) : null;
-      const kColor = hue ?? '#7b2ff7';
+      const kColor = hue ?? 'var(--series-you)';
       const sColor = hue ?? '#e76f51';
       if (kv) series.push({ ys: nv(kv), stroke: kColor, width: 2.4, dash: null, type: 'kernel' });
       series.push({ ys: nv(sv), stroke: sColor, width: hue ? 1.8 : 2, dash: hue ? [6, 4] : null, type: 'sta' });
@@ -807,7 +807,7 @@
     // (null for a real file). Pooled as a 'kernel' curve so scale-to-kernels includes it.
     if (sourceKernel) {
       const srcYs = sourceOntoKernel(sourceKernel, kernelLag, recording.meta.dt);
-      if (srcYs) series.push({ ys: nv(srcYs), stroke: 'var(--text)', width: 1.8, dash: [2, 3], type: 'kernel', source: true });
+      if (srcYs) series.push({ ys: nv(srcYs), stroke: 'var(--series-truth)', width: 1.8, dash: [2, 3], type: 'kernel', source: true });
     }
     // ADR-0029 scale targets — ONE shared axis; the mode only chooses whose range sets it.
     // kernels/sta pool by curve TYPE across regions; shared/normalized pool all curves. A
@@ -1276,9 +1276,9 @@
               fill
               xs={gridTimes}
               ys={traceYs}
-              color="#2a9d8f"
+              color="var(--series-trace)"
               ys2={reconTrace}
-              color2="#c0392b"
+              color2="var(--series-machine)"
               xRange={xView}
               yAxisSize={44}
               padRight={PLOT_PAD_R}
@@ -1295,8 +1295,8 @@
           {/if}
         </div>
         <div class="legend">
-          <span class="key"><i style="background:#2a9d8f"></i>actual dF/F₀</span>
-          <span class="key"><i style="background:#c0392b"></i>predicted</span>
+          <span class="key"><i style="background:var(--series-trace)"></i>actual dF/F₀</span>
+          <span class="key"><i style="background:var(--series-machine)"></i>predicted</span>
           {#if analysis && !railedHidden}<span class="agree">{recoveryRegion.regionName} reconstruction R² {f(active.r2)} — reported, not gated (§3)</span>{/if}
         </div>
       </div>
@@ -1323,7 +1323,7 @@
                 ys={rawStems.ys}
                 kind="stems"
                 barSize={[0.9, 2]}
-                color="var(--text-h)"
+                color="var(--series-spikes)"
                 xRange={xView}
                 yRange={[0, 1.25]}
                 yAxisSize={44}
@@ -1346,7 +1346,7 @@
               ys={histo.values}
               kind="stems"
               barSize={[0.9, 6]}
-              color="var(--text-h)"
+              color="var(--series-spikes)"
               xRange={xView}
               yRange={histYRange}
               yAxisSize={44}

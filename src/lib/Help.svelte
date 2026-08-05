@@ -79,8 +79,8 @@
     <h2>The problem, in one trace</h2>
     <p class="plain">
       Here is what a well-behaved recording would look like, and what actually turns up in
-      one. The red ticks are action potentials, arriving in bursts of one to five; the blue
-      trace is the calcium signal.
+      one. The ticks along the bottom are action potentials, arriving in bursts of one to
+      five; the trace above them is the calcium signal.
     </p>
     <PremiseFigure />
     <p class="plain">
