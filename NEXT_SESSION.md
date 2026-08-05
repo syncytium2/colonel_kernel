@@ -87,6 +87,14 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   spikes, gray+dashed = hidden truth. Validated for colorblind separation, not eyeballed.
   Copy that named colors ("the red ticks…") is now position-based.
   [ADR-0041](docs/adr/0041-plot-series-palette-one-color-per-quantity.md).
+- **Noise is ON by default, and the kernel band has a key (2026-08-05)** — **amends canon.**
+  §7 named noise injection "so deconvolution isn't deceptively easy" and §11.2 then set it to
+  **0**, so Tab 1 opened noiseless and handed Tab 2 a noiseless signal: its headline read
+  retained-kernel R² **1.0000**, acausal ratio 0.0000. Tab 1 now opens at 3× cohort σ
+  (SNR ≈ 14); Tab 2's default reads 0.8920 / 0.0134 with real ringing. The kernel+STA square's
+  key existed but sat below the fold in the summary panel and had drifted; it now sits under
+  the square, derived from the series.
+  [ADR-0042](docs/adr/0042-noise-on-by-default-kernel-band-key.md).
 
 Core suite: **237 passing**, plus `npm run template-acceptance`.
 Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-08-05.**
@@ -131,6 +139,17 @@ are stale.
   **user-agent gated**, so verify as a browser, never with a plain curl.
 - **Deploy model.** Still manual (`npm run deploy`). Auto-deploy on push to `master` remains
   undecided — WIP lands on `master` often, so it would want a `deploy` branch or a build gate.
+
+**Raised by the 2026-08-05 work:**
+
+- **Two `style-src-attr` CSP violations fire on Tab 2 in the built artifact.** Pre-existing (3
+  before the ADR-0042 pass, 2 after), and **nothing is actually broken** — all 25 styled
+  elements apply, every legend swatch renders, and the pages look right. They are console noise
+  from a transient inline-style application. Worth closing anyway: the strict CSP is a
+  FOUNDATIONS §6 guarantee, and a console full of expected violations is where a real one hides.
+  Note the dev server has **no CSP** (it is injected at build time, ADR-0008), so this is only
+  visible against `npm run preview` or the deployed site — and `npm run deploy` does not check
+  for console violations, only for third-party beacons.
 
 **Raised by the 2026-07-30/31 work:**
 
