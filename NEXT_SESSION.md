@@ -73,6 +73,14 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   ringing in the Tab 2 FFT decon. One `TAIL_EPS = 1e-3`-of-peak threshold now replaces all
   three rules; worst case is 0.1% at every slider position, and a swept tail-step invariant in
   the tests pins it. [ADR-0039](docs/adr/0039-kernel-support-amplitude-cutoff.md).
+- **Tab 1 stacks output above input (2026-08-05)** — the calcium trace is the object of
+  interest, so it now sits on top with the spike train as a short strip beneath, following
+  Tab 0's premise figure. The Tab 1 Learn view had been the only one of the three stacking
+  them the other way. Tab 0's *fixed* 136px raster could not be copied literally into a
+  viewport-dividing shell — it inverted the priority at ~1100px — so the strip is a cap that
+  shrinks with the trace. [ADR-0040](docs/adr/0040-tab1-band-order-follows-tab0.md).
+  **Open for Tony:** colors are still inconsistent across tabs (Tab 0 blue/red vs Tab 1
+  teal/neutral); deliberately not unified, since Tab 1's teal is named in the noise caption.
 
 Core suite: **237 passing**, plus `npm run template-acceptance`.
 Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-08-05.**
