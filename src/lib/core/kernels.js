@@ -88,10 +88,30 @@ export function buildKernel(id, params, dt, amplitude = 1) {
   return { id, label: entry.label, samples, zeroIndex, dt, times, params };
 }
 
+// Every shape's support is cut where its tail has fallen below TAIL_EPS of the
+// kernel's peak, so the step down to zero at the end of the array is at most
+// that fraction for ANY parameter setting. Support rules stated in σ or τ alone
+// do not have that property — the old ±3σ and 5τ cutoffs left steps of 1.1% and
+// 0.7% of peak, and the calcium shape left up to ~9% when τrise approached
+// τdecay. A step is broadband in frequency, so it seeds ringing in the Tab 2 FFT
+// deconvolution; cutting on amplitude makes the residual the same small number
+// everywhere. The per-shape factors below are this threshold solved for t, and
+// each is rounded OUTWARD to a whole sample — rounding to nearest can land a
+// half-sample short, which for the steep Gaussian tail alone doubles the step.
+const TAIL_EPS = 1e-3;
+const GAUSS_TAIL_SIGMA = Math.sqrt(-2 * Math.log(TAIL_EPS)); // ≈ 3.72σ
+const EXP_TAIL_TAU = -Math.log(TAIL_EPS); // ≈ 6.91τ
+// The calcium difference-of-exponentials has no closed-form cutoff, so it is
+// found by scanning. This caps the scan: the slowest case is τrise → τdecay,
+// where the shape tends to t·exp(-t/τ) and reaches TAIL_EPS at ≈ 10.2τ. The cap
+// is margin, not the operating point — it does not bind anywhere in the UI's
+// parameter ranges (deepest support actually used is ~11τ, on a coarse grid).
+const CALCIUM_TAIL_CAP_TAU = 12;
+
 const BUILDERS = {
-  // Symmetric bell, peak 1, centered on the spike. Support ±3σ.
+  // Symmetric bell, peak 1, centered on the spike.
   gaussian({ sigma }, dt) {
-    const half = Math.max(1, Math.round((3 * sigma) / dt));
+    const half = Math.max(1, Math.ceil((GAUSS_TAIL_SIGMA * sigma) / dt));
     const n = 2 * half + 1;
     const samples = new Float64Array(n);
     for (let i = 0; i < n; i++) {
@@ -101,9 +121,9 @@ const BUILDERS = {
     return { samples, zeroIndex: half };
   },
 
-  // Causal exponential decay, value 1 at the spike, support ~5τ.
+  // Causal exponential decay, value 1 at the spike.
   exponential({ tau }, dt) {
-    const n = Math.max(2, Math.round((5 * tau) / dt) + 1);
+    const n = Math.max(2, Math.ceil((EXP_TAIL_TAU * tau) / dt) + 1);
     const samples = new Float64Array(n);
     for (let i = 0; i < n; i++) samples[i] = Math.exp(-(i * dt) / tau);
     return { samples, zeroIndex: 0 };
@@ -121,15 +141,29 @@ const BUILDERS = {
   calcium({ tauRise, tauDecay }, dt) {
     // Guard: rise must be faster than decay for a real transient shape.
     const rise = Math.min(tauRise, tauDecay * 0.999);
-    const n = Math.max(2, Math.round((5 * tauDecay) / dt) + 1);
-    const samples = new Float64Array(n);
+    const nMax = Math.max(2, Math.ceil((CALCIUM_TAIL_CAP_TAU * tauDecay) / dt) + 1);
+    const full = new Float64Array(nMax);
     let peak = 0;
-    for (let i = 0; i < n; i++) {
+    let peakIndex = 0;
+    for (let i = 0; i < nMax; i++) {
       const t = i * dt;
       const v = Math.exp(-t / tauDecay) - Math.exp(-t / rise);
-      samples[i] = v;
-      if (v > peak) peak = v;
+      full[i] = v;
+      if (v > peak) {
+        peak = v;
+        peakIndex = i;
+      }
     }
+    // Scan forward from the peak, not from t=0: the causal rise starts at
+    // k(0)=0, which is below the threshold but is not the tail.
+    let n = nMax;
+    for (let i = peakIndex + 1; i < nMax; i++) {
+      if (full[i] < TAIL_EPS * peak) {
+        n = i + 1; // keep the first below-threshold sample as the last one
+        break;
+      }
+    }
+    const samples = full.slice(0, n);
     if (peak > 0) for (let i = 0; i < n; i++) samples[i] /= peak;
     return { samples, zeroIndex: 0 };
   },
