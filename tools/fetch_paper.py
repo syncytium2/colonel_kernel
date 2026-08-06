@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# vendored from https://github.com/syncytium2/murderboard @ ceb1c82 — do NOT edit here; update by re-copying.
+# vendored from https://github.com/syncytium2/murderboard @ c4f0088 — do NOT edit here; update by re-copying.
 """Fetch an open-access paper, cache it, and print its text — the murderboard's lit tool.
 
 WHY THIS EXISTS
