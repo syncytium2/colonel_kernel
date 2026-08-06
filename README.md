@@ -1,5 +1,14 @@
 # Colonel Kernel
 
+> **Authorship.** The ideas, decisions, and review here are mine; the code is Claude's
+> (Anthropic's Claude Code). I set the problems, made the calls — including overriding rules
+> the model had adopted — and merged nothing I hadn't reviewed. I did not write the
+> implementation.
+>
+> Agent commits carry a `Co-Authored-By: Claude` trailer. Commits predating 2026-08-06 are
+> from before that was enforced automatically, so **assume agent authorship unless a commit
+> says otherwise.**
+
 A client-side 1D convolution / deconvolution tool for calcium imaging — a teaching
 demonstrator and a ground-truth kernel-verification instrument.
 
