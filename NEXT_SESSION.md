@@ -152,8 +152,11 @@ are stale.
 
 - ~~**Tab 1's "Fit the trace" challenge is in the wrong direction.**~~ **Closed 2026-08-06**
   by [ADR-0046](docs/adr/0046-tab1-stamp-the-kernel-challenge.md) — replaced by **"Stamp
-  the kernel"**: both spikes and kernel given, you build the output by dropping a kernel
-  copy at each spike (Normal shows the target, Advanced hides it). **Still open:** the
+  the kernel"**: both spikes and kernel given, you build the output. Reworked the same day
+  by [ADR-0047](docs/adr/0047-tab1-stamp-consumes-the-spike.md) so a click **consumes**
+  the spike and replaces it with its kernel — the input drains as the output fills, which
+  is what convolution actually does. Normal shows the target and the count; Advanced hides
+  both, so "have I found them all?" is the real question. **Still open:** the
   **slide-and-multiply animation** below is related but NOT discharged — the challenge
   makes you *perform* stamp-and-sum, it does not animate the kernel sliding. Whether the
   animation is still wanted now the operation is playable is Tony's call.
