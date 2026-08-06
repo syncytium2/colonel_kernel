@@ -2,11 +2,11 @@
   "hooks": {
     "SessionStart": [
       { "matcher": "startup", "hooks": [
-        { "type": "command", "command": "bash .claude/hooks/session-start.sh" },
+        { "type": "command", "command": "bash .claude/hooks/session-start.sh", "timeout": 45 },
         { "type": "command", "command": "bash tools/murderboard_freshness.sh --hook", "timeout": 10 }
       ] },
       { "matcher": "resume",  "hooks": [
-        { "type": "command", "command": "bash .claude/hooks/session-start.sh" },
+        { "type": "command", "command": "bash .claude/hooks/session-start.sh", "timeout": 45 },
         { "type": "command", "command": "bash tools/murderboard_freshness.sh --hook", "timeout": 10 }
       ] }
     ]
