@@ -54,3 +54,38 @@ project-specific version. It has now been **extracted and generalized into its o
 - **Negative / cost.** Updates are a manual re-vendor (re-copy both files, bump the stamp).
   Accepted as the deliberate tradeoff for avoiding submodules.
 - **Repo hygiene.** The tool touches no `data/` or `darkroom/` paths and commits no data.
+
+## Update log
+
+Re-vendors are recorded here rather than by editing the Decision above — the original stamp is
+part of the historical record.
+
+### 2026-08-06 — re-vendored `4a92748` → `ceb1c82`; the predicted cost had materialized
+
+The "Negative / cost" line above ("updates are a manual re-vendor") turned out to understate the
+failure mode. The cost is not the *effort* of re-copying; it is that **nothing announces when a
+copy has gone stale.** This repo sat on `4a92748` — the original v1 — for **17 days and 13
+upstream commits**, missing every rule landed in that window: the slide-overlap check, the
+figure-craft axis-limits (x & y) / show-both-views / show-the-actual-data rules, and the whole
+2026-07-29 proposal (8 rules including role 11, "all roles are mandatory", blind re-review). A
+murderboard run in that window would have reported clean coverage it did not have.
+
+Two things changed to stop it recurring, both now vendored:
+
+- **`tools/murderboard_freshness.sh`** — compares this repo's stamp against upstream HEAD
+  (0 current · 1 stale · 2 unknown, never a false "current"), wired into `SessionStart` in
+  `.claude/settings.json` as a **second, layered hook entry** so the vendored
+  `.claude/hooks/session-start.sh` core stays byte-identical and re-copyable. Silent when
+  current.
+- **`tools/murderboard_roster.sh`** — derives the role roster from `doc_review_process.md` and
+  checks a finished review report accounts for every role, so a 7-of-11 run cannot read as a
+  clean 11-of-11.
+
+The vendored set therefore grows from two files to five: the process doc, the lit tool, the two
+gates, and **`.claude/skills/murderboard/SKILL.md`** — the `/murderboard` call-up, which sequences
+the review so it cannot be half-executed. The "do not edit in place" contract applies to all five.
+
+⚠ **Separately still stale, not addressed here:** `.claude/hooks/session-start.sh` and
+`docs/session_protocol.md` are vendored from `interface2 @ 46da2c3` / `@ 7065f5e`, and interface2
+has since landed the hook's deadline discipline (`2a0c299`) plus the ADR-0020 board split
+(`7717ac3`). That is a different upstream and a separate re-vendor.
