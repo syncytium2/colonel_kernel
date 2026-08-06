@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-08-05 20:27 UTC |
-| **Commit** | `b3d168b` — Merge branch 'fix/axis-tax-and-csp': close the queued layout and CSP ite |
-| **Bundle** | `assets/index-DDGH3hda.js` |
-| **Worker version** | `6be48b19-37d6-40d6-8376-903eaa427269` |
+| **Deployed at** | 2026-08-06 19:00 UTC |
+| **Commit** | `39157b1` — Merge origin/master: murderboard/session-protocol re-vendor + README aut |
+| **Bundle** | `assets/index-DUKyzDmW.js` |
+| **Worker version** | `41f56a83-6b38-46ae-b4bd-481de49e1e84` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
