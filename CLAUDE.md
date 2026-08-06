@@ -94,8 +94,11 @@ version control. Don't conflate them.
 - **`DEPLOYED.md`** — what is actually live (commit, bundle hash, worker version). Written by
   `npm run deploy`; never edit by hand. Before assuming the deployed app is stale, read it.
 - **`docs/doc_review_process.md`** — the **murderboard**: the anti-slop review process any
-  document deliverable runs through before delivery. Vendored from `syncytium2/murderboard`
-  (see ADR-0037); do not edit the vendored copy — update by re-copying upstream.
+  document deliverable runs through before delivery. Call it up with **`/murderboard`**
+  (`.claude/skills/murderboard/`); the two gates are `tools/murderboard_freshness.sh` (is this
+  copy current?) and `tools/murderboard_roster.sh` (did every role leave a trace?). All five
+  files are vendored from `syncytium2/murderboard` (see ADR-0037); do not edit the vendored
+  copies — update by re-copying upstream.
 - **Cross-project practice** — `<Dropbox>/Richard DeFazio/team_webapp_practice/`. Lessons that
   apply to more than one of my web apps (this one and `fireflies`), so a fix found here isn't
   rediscovered there. Distinct from the `team_colonel_kernel/` data bus: no contract, no
@@ -124,10 +127,26 @@ for up to ~a minute after upload — the script polls through both.
 
 When asked for a **document** deliverable — a methods/spec write-up, an explainer, a report,
 a figure **or its caption**, or a human-facing handoff — do **not** hand over a first draft.
-Draft it, then run the review process in [`docs/doc_review_process.md`](docs/doc_review_process.md)
-(scale the reviewer team to stakes — full team for a spec, a single self-review pass for a
-caption), apply the fixes, and deliver the corrected document **plus a short review report**
+Draft it, then **call up the murderboard: `/murderboard <artifact>`**
+([`.claude/skills/murderboard/`](.claude/skills/murderboard/SKILL.md)). It runs the review team
+in [`docs/doc_review_process.md`](docs/doc_review_process.md), applies the fixes, re-reviews the
+repaired artifact, and delivers the corrected document **plus a summary and a role ledger**
 naming any residual `⚠` flags. A deliverable with unresolved `⚠` is not "done."
+
+**Use the skill rather than working from the file by hand.** The process doc stays the authority
+on *what* each role checks, but four things only fire reliably through the skill, and each fails
+**silently** when skipped:
+- **Freshness is gated at the moment of review** (`tools/murderboard_freshness.sh --refresh`);
+  **exit 1 = STOP and re-vendor.** This repo sat 13 commits and 17 days behind upstream with
+  nothing able to say so — it had the process and none of the gates.
+- **The role roster is DERIVED** from the process doc (`tools/murderboard_roster.sh list` — 11
+  roles today), never recalled. **Every role runs on every deliverable**; scale *how* you run
+  them to stakes (parallel subagents for a spec, one pass walking every checklist for a caption),
+  never *which* ones.
+- **The artifact is the BUILT FILE, not its generator**, fingerprinted before and after.
+- **The run leaves a record** in `docs/reviews/`, gated by `tools/murderboard_roster.sh check`.
+  **Exit 1 means a role is missing and the run is not finished** — a 7-of-11 review and a clean
+  11-of-11 are otherwise indistinguishable in the report.
 
 `FOUNDATIONS.md` remains the source of truth; the murderboard is a *process* aid and never
 overrides it — if a review finding conflicts with FOUNDATIONS, flag the conflict.
