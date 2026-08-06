@@ -2,7 +2,7 @@
   import Plot from './lib/Plot.svelte';
   import Tab2 from './lib/Tab2.svelte';
   import BeatTheColonel from './lib/BeatTheColonel.svelte';
-  import FitTheTrace from './lib/FitTheTrace.svelte';
+  import StampTheKernel from './lib/StampTheKernel.svelte';
   import GuessTheSpikes from './lib/GuessTheSpikes.svelte';
   import Shell from './lib/Shell.svelte';
   import Help from './lib/Help.svelte';
@@ -72,7 +72,7 @@
   // true = full-bleed. A view pref only; lives here so Tab 1 and Tab 2 obey one toggle.
   let wide = $state(false);
   // Per-tab "Challenge" modes. Tab-local; Learn mode is unchanged.
-  let challenge1 = $state(false); // Tab 1 · Fit the trace
+  let challenge1 = $state(false); // Tab 1 · Stamp the kernel
   let challenge2 = $state(false); // Tab 2 · Beat the Colonel
   let challenge3 = $state(false); // Tab 3 · Guess the spikes
   // Kernel peak height in dF/F₀ (ADR-0031 follow-up). Builders emit a peak-1
@@ -243,8 +243,8 @@
     <button class:active={tab === 2} onclick={goToTab2} title="loads the current Tab 1 signal for recovery">2 · Kernel recovery</button>
     <button class:active={tab === 3} onclick={() => (tab = 3)} title="naive spike inference — honest illustration (in development)">3 · Spike inference</button>
     {#if tab === 1}
-      <button class="challengebtn" class:on={challenge1} onclick={() => (challenge1 = !challenge1)} title="Fit the trace — place spikes and shape a kernel to match the target">
-        {challenge1 ? '← Back to Learn' : '🎯 Fit the trace'}
+      <button class="challengebtn" class:on={challenge1} onclick={() => (challenge1 = !challenge1)} title="Stamp the kernel — drop a copy of the kernel at each spike and watch them sum">
+        {challenge1 ? '← Back to Learn' : '🎯 Stamp the kernel'}
       </button>
     {/if}
     {#if tab === 2}
@@ -289,7 +289,7 @@
       />
     {/if}
   {:else if tab === 1 && challenge1}
-    <FitTheTrace {wide} />
+    <StampTheKernel {wide} />
   {:else}
     <Shell {wide}>
       <!-- LEFT RAIL — tools (was the top controls card; folded into the 20% rail). -->
@@ -419,7 +419,7 @@
       <!-- FULL-WIDTH TIME-COURSE BANDS — output + spike train, co-registered (ADR-0030).
            The OUTPUT sits on top: the calcium trace is the object of interest (it is what a
            real experiment measures), and the spike train reads as the input feeding it. This
-           also matches the Tab 1 challenge view (FitTheTrace), which already stacks them this
+           also matches the Tab 1 challenge view (StampTheKernel), which stacks them this
            way. The x-axis lives on the lower band only; padRight and yAxisSize are equal on
            both, which is what actually holds the pixel-for-pixel co-registration (ADR-0030),
            so which band carries the axis is free.
