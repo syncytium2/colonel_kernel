@@ -19,9 +19,10 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   the four-methods explainer figure, and born-on / last-updated dates baked from git at build time.
 - **Summaries & export (Phase 1)** — in-app per-recording summary → Save as PDF.
 - **Tab 3** — naive spike inference (honest illustration, FOUNDATIONS §2).
-- **Challenges across all three tabs** — "Fit the trace" (Tab 1), "Beat the Colonel"
-  (Tab 2, behind a toggle, with timers), "Guess the spikes" (Tab 3, with Advanced mode).
-  Editable spike band on Plot.
+- **Challenges across all three tabs** — "Stamp the kernel" (Tab 1, with Advanced mode;
+  replaced "Fit the trace" 2026-08-06, [ADR-0046](docs/adr/0046-tab1-stamp-the-kernel-challenge.md)),
+  "Beat the Colonel" (Tab 2, behind a toggle, with timers), "Guess the spikes" (Tab 3,
+  with Advanced mode). Editable spike band on Plot.
 - **SheetJS pinned** to the maintained CDN tarball 0.20.3, closing the `xlsx` 0.18.5 CVEs
   ([ADR-0036](docs/adr/0036-sheetjs-install-from-maintained-tarball.md)), plus Dependabot,
   a weekly freshness workflow, and [docs/DEPENDENCY_HEALTH.md](docs/DEPENDENCY_HEALTH.md).
@@ -149,21 +150,13 @@ are stale.
 
 **Raised by the 2026-08-05 work:**
 
-- **Tab 1's "Fit the trace" challenge is in the wrong direction, and duplicates Tab 3's
-  Advanced mode.** Every other challenge inverts its own tab (Tab 2: shape a kernel, spikes
-  known; Tab 3: place spikes, kernel given). Tab 1 is the *forward* tab, but Fit the trace
-  hides **both** the spikes and the kernel and scores recovery by R² — Tab 2's job and Tab 3's
-  job at once, and the same task as Guess the spikes' Advanced mode, which scores it more
-  richly (F1 + a race against the machine). Its own header comment calls it "the forward
-  problem, played by hand", which it is not. Tony proposed replacing it; the assessed favourite
-  is a **stamp-and-sum drag** — place a kernel copy at each spike and watch them sum — because
-  that is literally `convolve.js`'s own teaching description (ADR-0044), it scores objectively,
-  and it would discharge the deferred slide-and-multiply animation below. Include one
-  **closely-spaced pair** so superposition is discovered by hand. Freehand *sketching* was
-  assessed and is weaker as a scored game (it grades mouse control; ADR-0003 rejected freehand
-  on adjacent grounds) but is strong as **predict-then-reveal, unscored**. **Open decision:**
-  target visible while stamping (matching) or hidden until commit (prediction).
-
+- ~~**Tab 1's "Fit the trace" challenge is in the wrong direction.**~~ **Closed 2026-08-06**
+  by [ADR-0046](docs/adr/0046-tab1-stamp-the-kernel-challenge.md) — replaced by **"Stamp
+  the kernel"**: both spikes and kernel given, you build the output by dropping a kernel
+  copy at each spike (Normal shows the target, Advanced hides it). **Still open:** the
+  **slide-and-multiply animation** below is related but NOT discharged — the challenge
+  makes you *perform* stamp-and-sum, it does not animate the kernel sliding. Whether the
+  animation is still wanted now the operation is playable is Tony's call.
 - ~~**The band that draws the x-axis is systematically short-changed.**~~ **Closed
   2026-08-05** by [ADR-0045](docs/adr/0045-close-axis-tax-and-csp-style-attrs.md).
   Live: Tab 1 167/**76**px, Tab 2 **101/101** (ADR-0026's co-equal raster delivered as
