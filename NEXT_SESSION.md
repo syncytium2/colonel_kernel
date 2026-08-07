@@ -150,6 +150,36 @@ are stale.
 - **Deploy model.** Still manual (`npm run deploy`). Auto-deploy on push to `master` remains
   undecided — WIP lands on `master` often, so it would want a `deploy` branch or a build gate.
 
+**Raised by the 2026-08-07 haruspex-handoff murderboard** (run record:
+[docs/reviews/kernels_v1_handoff_para_2026-08-07.md](docs/reviews/kernels_v1_handoff_para_2026-08-07.md)):
+
+- **Haruspex has no findable home for the human-identified kernel list.** The 8-ID list (all
+  ROI 1, no deviations) lives only in
+  [docs/reviews/kernel-review-baseline-2026-07-19.md](docs/reviews/kernel-review-baseline-2026-07-19.md)
+  and the bus CSV — there is no haruspex-facing bus folder, which is why they asked for a list
+  that already existed. The reviewed handoff note (full text in the run record) now carries
+  the list + analysed windows; it still needs a durable home haruspex can see. Their next
+  step, **raw-F extraction, will also need per-recording F₀ or raw traces** — the kernels
+  export deliberately ships neither.
+- **Spike-count discrepancy between the review doc and the export, unreconciled.** The
+  2026-07-19 review quotes 235: 3554 and 209: 2006 spikes; the CSV's baseline `n_spikes` says
+  1937 and 1240. The other three quoted counts match exactly. Likely cause: for exactly those
+  two the screen scored **senktide** (its most-spikes region), so the review quoted
+  senktide-window counts against the export's baseline counts — but neither doc says so.
+  One line in whichever doc gets touched next would close it.
+- **Exporter nit:** `colonel_kernels_v1.json` stores `dt = 0.100000000083` for `20250926_237`
+  where the CSV says 0.1 — harmless (~1 µs over 1200 s), worth one rounding line in
+  `scripts/dataset-summary/export_kernels.mjs` at the next regen.
+- **Standing debts the handoff leans on, still open** (owed since 2026-07-19/20): the
+  λ-stability sweep behind `a_robust` (haruspex's coupling-floor use will likely trigger the
+  "ask us for the sweep" clause), the careful all-regions walkthrough, the baseline-restricted
+  screen re-run, and the screen's dense-firing under-call cleanup.
+- **Murderboard staleness was invisible at session start.** The briefing printed no warning
+  while the vendored copy sat behind upstream (d0ce4e7 vs 635c5a8); the skill's call-up gate
+  (`--refresh`) caught it. The `--hook` cache masking a fresh upstream move is by design, but
+  worth knowing the briefing's silence is not evidence of freshness. Re-vendored to 635c5a8
+  and landed on master this session (merge `4da0e19`; stamp-only, content was identical).
+
 **Raised by the 2026-08-05 work:**
 
 - ~~**Tab 1's "Fit the trace" challenge is in the wrong direction.**~~ **Closed 2026-08-06**
