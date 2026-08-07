@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-08-06 20:30 UTC |
-| **Commit** | `aac2278` — Merge branch 'feat/tab1-transform-spikes': stamping consumes the spike |
-| **Bundle** | `assets/index-meEuydya.js` |
-| **Worker version** | `e9cebf57-a61d-4b53-8d10-f3ae06ff339c` |
+| **Deployed at** | 2026-08-07 12:46 UTC |
+| **Commit** | `c851ad1` — Merge branch 'fix/lock-scored-round': freeze a scored round |
+| **Bundle** | `assets/index-Cdu0hYJx.js` |
+| **Worker version** | `c3529b02-317a-446f-8054-5564bde879d9` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
