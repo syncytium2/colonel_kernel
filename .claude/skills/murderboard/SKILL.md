@@ -1,5 +1,6 @@
 ---
-# vendored from https://github.com/syncytium2/murderboard @ d0ce4e7 — do NOT edit here; update by re-copying.
+# canonical: syncytium2/murderboard skills/murderboard/SKILL.md
+# vendored from https://github.com/syncytium2/murderboard @ 635c5a8 — do NOT edit here; update by re-copying.
 name: murderboard
 description: Run the murderboard — the adversarial critical-review process — on a document deliverable before it ships. Use whenever the deliverable is an explainer, methods section, manuscript/abstract/cover-letter text, a figure or its caption/labels, a report, a slide deck, or a human-facing handoff. Also use when asked to "murderboard", "critically review", or "check this before I send it". Not for source code (that is the code-review path), quick conversational answers, or throwaway diagnostics.
 ---
