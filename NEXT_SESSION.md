@@ -1,6 +1,6 @@
 # NEXT_SESSION
 
-**Working state as of 2026-07-31.** Short by design. Read
+**Working state as of 2026-08-07.** Short by design. Read
 [`FOUNDATIONS.md`](FOUNDATIONS.md) first (canonical), then this.
 
 > **Rule for this file:** one dated state block, one next action, and a list of
@@ -121,7 +121,9 @@ The 2026-07-30 review produced a ranked list; **the top four are small, local, a
 
 1. **A scored round can be rewritten after it is scored.** Beat the Colonel's sliders stay live
    after reveal (0.760 → −1.000 while the tally still says `Ties 1`); Guess the spikes' `clear`
-   is enabled post-reveal and rewrites 42% F1 → 0%.
+   is enabled post-reveal and rewrites 42% F1 → 0%. **Tab 1's new challenge had the same bug
+   and is fixed** (2026-08-07, ADR-0047: both click handlers return unless `phase === 'play'`)
+   — the one-line shape of that fix applies to the other two. **These two are still open.**
 2. **Plot bands collapse 206 px → 18 px at ≤900 px**, a cliff at the breakpoint.
 3. **Toggling a challenge destroys a loaded recording** — Tab 2 unmounts and silently reloads
    the synthetic handoff.
