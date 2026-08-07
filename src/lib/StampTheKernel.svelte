@@ -121,6 +121,10 @@
   // box) keeps a burst clickable: click the same pixel twice and you consume both, since
   // the first is gone by the second click. You still have to click once per spike.
   function stampNearest(t) {
+    // A scored round is FROZEN. Without this the reveal is not a result, it is a snapshot you
+    // can keep editing — the same defect the 2026-07-30 review logged against the other two
+    // challenges (a 3/9 could be clicked up to 6/9 while its verdict still read 3/9).
+    if (phase !== 'play') return;
     let best = -1;
     let bestD = GRAB_S;
     remaining.forEach((s) => {
@@ -137,6 +141,7 @@
   }
   // Shift-click puts one back, so a misread burst is recoverable without a full reset.
   function unstamp(idx) {
+    if (phase !== 'play') return; // frozen once scored, same as stamping
     if (idx >= 0 && idx < stamped.length) stamped = stamped.filter((_, i) => i !== idx);
   }
   const startOver = () => { stamped = []; phase = 'play'; };

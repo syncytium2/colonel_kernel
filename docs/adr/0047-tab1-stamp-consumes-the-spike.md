@@ -62,6 +62,12 @@ instruction the UI never gave: nothing on screen said *click each spike to stamp
 - **R² is kept as a live "output match" readout**, blanked while the target is hidden. It is no
   longer a skill score — with placement impossible to get wrong it only measures completeness —
   so the headline readout is now the stamped count.
+- **A scored round is frozen.** Shipped without this and caught it in the end-of-session
+  sweep: after scoring you could keep clicking, taking a locked `3 / 9` to `6 / 9` while
+  its verdict still read three. That is the same defect the 2026-07-30 review logged
+  against Beat the Colonel and Guess the spikes — a new challenge inherited it by simply
+  not thinking about the revealed phase. Both handlers now return unless `phase === 'play'`.
+  The other two remain open (NEXT_SESSION "Next action" item 1).
 - 240/240, machinery-check and template-acceptance pass; no core change.
 - Relates to: [ADR-0046](0046-tab1-stamp-the-kernel-challenge.md) (the challenge this reworks),
   [ADR-0044](0044-convolution-scatter-form.md) (the stamp-and-sum formulation being enacted),
