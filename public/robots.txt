@@ -5,7 +5,15 @@
 # public scientific tool and we want it discoverable and described accurately.
 # A curated summary for language models is at /llms.txt; the citable methods
 # reference is at /methods. The app itself sends no data anywhere (strict CSP,
-# no backend) — crawling it cannot expose any user's data.
+# no backend) — crawling it cannot expose any user's data. Its sibling tool
+# no_peak (nopeak.tonydefazio.com) carries the same policy, by the same
+# deliberate decision (2026-08-10).
+#
+# Note for whoever maintains this: Cloudflare's Security > Bots > "Block AI
+# Scrapers and Crawlers" toggle acts at the edge, BEFORE robots.txt is ever
+# read. Leave it OFF, or it silently overrides everything in this file — the
+# same class of host-side surprise as the Web Analytics beacon injection
+# (see public/_headers).
 
 User-agent: *
 Allow: /
