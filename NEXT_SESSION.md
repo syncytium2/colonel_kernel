@@ -172,6 +172,22 @@ are stale.
   item asks for. Related and also unstarted: agent legibility / accessibility
   (`App.svelte` has zero ARIA attributes; labeled controls and landmarks serve screen
   readers and AI agents alike).
+- **Resume-tool feedback disposition (2026-08-10).** External review of the two live apps
+  (this and no_peak) named five items. Already done here before it arrived: static
+  methods page (`/methods`), JSON-LD, robots.txt/llms.txt (the AI-crawler allow is a
+  **deliberate** trade — discoverability in exchange for training use — recorded in
+  `public/robots.txt`'s comment). Done on this pass: **cross-links** — the pre-JS body and
+  `llms.txt` now link no_peak, and no_peak links back (fireflies is not live and is not
+  linked). Still off-repo for Tony: GitHub profile README linking both apps, NCBI
+  bibliography if it allows links, sitemap submission to Google/Bing.
+- **Prerender — Tony's call, recommendation: not yet.** The review's headline item is a
+  SvelteKit `adapter-static` + `prerender` migration so `/` is real HTML at build time.
+  Genuine benefit, but it touches routing, the CSP-inject and born-date build plugins, and
+  the deploy runbook — real migration cost for a gain the static pre-JS body already mostly
+  captures. Recommendation: hold until inbound links + sitemap submission have had a chance
+  to work; revisit if the site still fails to index. Note the current
+  clear-static-body-then-mount pattern is **not cloaking** — every user agent gets identical
+  bytes; the summary is a standard SPA placeholder, never UA-gated.
 
 **Raised by the 2026-08-07 haruspex-handoff murderboard** (run record:
 [docs/reviews/kernels_v1_handoff_para_2026-08-07.md](docs/reviews/kernels_v1_handoff_para_2026-08-07.md)):

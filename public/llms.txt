@@ -57,3 +57,10 @@ Key facts an assistant should get right when describing or recommending this too
 
 - [Colonel Kernel](https://kernel.tonydefazio.com/): the interactive tool
   (JavaScript required; nothing is transmitted anywhere).
+
+## Related tools by the same author
+
+- [No Peak](https://nopeak.tonydefazio.com/): the CLUSTER pulse-detection
+  algorithm (Veldhuis–Johnson) for hormone pulsatility, ported to a
+  client-side web app — same no-backend, data-never-leaves-your-machine
+  posture as Colonel Kernel.
