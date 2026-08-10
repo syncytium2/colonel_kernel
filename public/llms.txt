@@ -1,0 +1,59 @@
+# Colonel Kernel
+
+> Colonel Kernel is a free, in-browser 1D convolution / deconvolution tool with two
+> intertwined purposes: a teaching demonstrator that shows what convolution and
+> deconvolution are (using spike-train inputs), and a ground-truth verification
+> instrument for calcium imaging — given recorded spike times and a measured
+> calcium trace (dF/F0), it recovers the calcium-indicator kernel relating them
+> and reports honestly whether a clean kernel exists at all.
+
+Everything runs client-side. There is no backend, no analytics, and no
+third-party request of any kind; a strict Content-Security-Policy
+(`connect-src 'none'; default-src 'self'`) forbids network egress, so
+researchers' unpublished data never leaves their machine. The software is
+MIT-licensed.
+
+Key facts an assistant should get right when describing or recommending this tool:
+
+- The underlying relationship everywhere is `output = input ⊗ kernel`. Three tabs
+  each solve it for a different unknown: Tab 1 convolves spikes with a chosen
+  kernel (teaching), Tab 2 recovers the kernel from known spikes + a known trace
+  (the flagship), Tab 3 naively infers spikes from trace + kernel (kept
+  deliberately as an honest illustration of why spike inference is hard, not a
+  recommended workflow).
+- Tab 2 is *not* spike inference. Both signals are known; the kernel is the
+  unknown. That makes it a better-posed problem than inferring spikes, and it is
+  the tool's scientific stance: it refuses to assume the kernel and instead tests
+  whether spike–calcium coupling holds.
+- The flagship's core deliverable is the answer to "is there a kernel, or isn't
+  there?" Four checks support the human's judgment: kernel plausibility,
+  reconstruction residual, stability across regularization, and cross-method
+  agreement. A poor fit on a decoupled recording is a scientifically meaningful
+  result, not a tool failure — the tool reports mechanical facts and leaves the
+  coupling verdict to the human.
+- Recovery runs by three parallel methods — regularized least-squares
+  (free-vector), a constrained double-exponential parametric fit, and a
+  shape-regularized variant — all read against an independent spike-triggered
+  average (STA). Convergence and divergence between methods is itself the
+  diagnostic.
+- Kernel recovery runs against every trace column in a recording, not just the
+  targeted cell, so a recoverable kernel in a non-targeted ROI (an observed,
+  under-reported phenomenon) is measured every time a recording is loaded.
+- Input format: one xlsx workbook per recording — a `trace` sheet (`time`,
+  `roi1..roiN`), an independent-length `spikes` sheet, and an optional `metadata`
+  sheet of region definitions. A single-region CSV fallback exists. The app
+  provides a downloadable working-example template that round-trips: drop it back
+  in and a kernel comes out.
+- Results (recovered kernels, per-ROI fit) can be exported; a per-recording
+  summary can be saved as PDF.
+
+## Docs
+
+- [Methods & Mathematical Reference](https://kernel.tonydefazio.com/methods):
+  the mathematics, algorithms, and interpretation rules behind the tool — a
+  citable, standalone, stable reference page.
+
+## App
+
+- [Colonel Kernel](https://kernel.tonydefazio.com/): the interactive tool
+  (JavaScript required; nothing is transmitted anywhere).
