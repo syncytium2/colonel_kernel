@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-08-10 23:25 UTC |
-| **Commit** | `2bebb94` — Merge branch 'robots-edge-note': robots.txt edge-toggle note |
+| **Deployed at** | 2026-08-10 23:28 UTC |
+| **Commit** | `c7c61c0` — Merge branch 'robots-managed-note': managed-robots.txt edge override, do |
 | **Bundle** | `assets/index-CKwrcYMs.js` |
-| **Worker version** | `a3ad483c-935c-4fc9-b4da-9ffe02ea896c` |
+| **Worker version** | `ed15e68a-1d34-46ca-afde-949db4364408` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
