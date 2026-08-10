@@ -1,6 +1,6 @@
 # NEXT_SESSION
 
-**Working state as of 2026-08-07.** Short by design. Read
+**Working state as of 2026-08-10.** Short by design. Read
 [`FOUNDATIONS.md`](FOUNDATIONS.md) first (canonical), then this.
 
 > **Rule for this file:** one dated state block, one next action, and a list of
@@ -103,6 +103,17 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   only *between* spikes, which is the ringing §2 exists to show. Now one shared y-axis, where
   the ≈0.3× amplitude shortfall is the visible lesson rather than something two auto-scaled
   axes hid. [ADR-0043](docs/adr/0043-tab3-overlay-true-and-recovered-input.md).
+- **AI/search visibility groundwork (2026-08-10, branch `ai-visibility`)** — the on-page half
+  of the "site is not indexed" open item below. The pre-JS body was an empty
+  `<div id="app">` with `<title>colonel_kernel</title>`; `index.html` now carries a real
+  title, meta description, canonical, OG tags, JSON-LD, and a static crawler-readable
+  summary inside `#app` that `main.js` clears before mount. `/methods` gains canonical +
+  OG + JSON-LD. New `public/robots.txt` (replaces the **host-injected** Cloudflare one that
+  blocked AI crawlers — the policy is now ours, all crawlers welcome), `sitemap.xml`, and
+  `llms.txt` (curated AI-facing summary; keep its claims in sync with FOUNDATIONS).
+  JSON-LD is a non-executable data block, so the strict CSP is untouched — verified against
+  the built bundle with `scripts/screenshot.mjs` (zero console errors, app mounts over the
+  static summary). **Not yet deployed.**
 
 Core suite: **240 passing**, plus `npm run template-acceptance`.
 Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-08-05.**
@@ -149,6 +160,18 @@ are stale.
   **user-agent gated**, so verify as a browser, never with a plain curl.
 - **Deploy model.** Still manual (`npm run deploy`). Auto-deploy on push to `master` remains
   undecided — WIP lands on `master` often, so it would want a `deploy` branch or a build gate.
+
+**Raised by the 2026-08-10 AI-visibility work:**
+
+- **Golden-path browser eval — TODO, named but not started.** An agent-runnable Playwright
+  pass against the **built** app: serve `dist/`, download the ADR-0038 template workbook,
+  drop it back into Tab 2, assert the recovered τ / peak-lag land within tolerance. This is
+  the browser-level loop the node gates (`test:core`, `machinery-check`,
+  `template-acceptance`) cannot close — real UI, real file path, real CSP'd bundle — and it
+  would double as the "deploy does not gate on console CSP violations" gate the 2026-08-05
+  item asks for. Related and also unstarted: agent legibility / accessibility
+  (`App.svelte` has zero ARIA attributes; labeled controls and landmarks serve screen
+  readers and AI agents alike).
 
 **Raised by the 2026-08-07 haruspex-handoff murderboard** (run record:
 [docs/reviews/kernels_v1_handoff_para_2026-08-07.md](docs/reviews/kernels_v1_handoff_para_2026-08-07.md)):
@@ -228,7 +251,10 @@ are stale.
   sitemap, never submitted. Note Cloudflare injects a `robots.txt` we did not write — it
   permits search and blocks AI crawlers, which is benign, but it is host-injected and
   invisible to the repo, exactly like the beacon was. A `public/robots.txt` would make the
-  policy ours.
+  policy ours. **On-page half addressed 2026-08-10** (state block above): title, description,
+  static pre-JS body, JSON-LD, sitemap, and our own `robots.txt` are in. **Still open, and
+  still the biggest cause: inbound links** (UMich experts page, GitHub profile README) and
+  submitting the sitemap to Google/Bing — both live outside the repo.
 - **Tab 2's multi-region path is still UNREVIEWED.** `data/` is gitignored, so the demo review
   never loaded a real multi-region workbook: region shading, double-click region selection,
   the regional kernel band and the summary PDF export are unexercised. Overlaps the File-98

@@ -9,10 +9,84 @@
          shipped artifact is fully locked down; the dev server is not. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>colonel_kernel</title>
+    <title>Colonel Kernel — ground-truth kernel verification for calcium imaging</title>
+    <meta
+      name="description"
+      content="Free in-browser 1D convolution and deconvolution tool: recover the calcium-indicator kernel from ground-truth spike times and a measured dF/F0 trace — and see honestly when no clean kernel exists. All computation runs on your machine; no data is ever uploaded."
+    />
+    <link rel="canonical" href="https://kernel.tonydefazio.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Colonel Kernel" />
+    <meta property="og:title" content="Colonel Kernel — ground-truth kernel verification for calcium imaging" />
+    <meta
+      property="og:description"
+      content="In-browser convolution/deconvolution: recover the kernel relating recorded spikes to a calcium trace, or learn what convolution is. No backend, no uploads — data never leaves your machine."
+    />
+    <meta property="og:url" content="https://kernel.tonydefazio.com/" />
+    <!-- JSON-LD is a non-executable data block: script-src does not apply to
+         type="application/ld+json", so the strict built CSP is unaffected. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Colonel Kernel",
+      "url": "https://kernel.tonydefazio.com/",
+      "description": "A client-side 1D convolution / deconvolution tool: a teaching demonstrator for convolution, and a ground-truth verification instrument for calcium imaging. Given recorded spike times and a measured dF/F0 calcium trace, it recovers the indicator kernel relating them — by three parallel methods read against an independent spike-triggered average — and reports whether a clean kernel exists at all. All computation runs in the browser; no data is ever transmitted.",
+      "applicationCategory": "EducationalApplication",
+      "operatingSystem": "Any (runs entirely in the web browser)",
+      "browserRequirements": "Requires JavaScript",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "license": "https://opensource.org/license/mit/",
+      "author": { "@type": "Person", "name": "Richard Anthony DeFazio" },
+      "keywords": "convolution, deconvolution, calcium imaging, spike train, calcium indicator kernel, dF/F0, spike-triggered average, neuroscience, teaching tool",
+      "featureList": [
+        "Forward convolution of a spike train with a parameterized kernel (teaching)",
+        "Kernel recovery from known spikes + measured calcium trace by regularized deconvolution, parametric fit, and shape-regularized fit, validated against a spike-triggered average",
+        "Per-ROI goodness-of-fit checks across every trace column (multi-ROI)",
+        "Naive spike inference shown as honest illustration",
+        "All computation client-side; strict CSP forbids network egress"
+      ]
+    }
+    </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- Static, crawler-readable summary of the app (this is a JavaScript
+           SPA; without it, non-JS crawlers see an empty page). main.js clears
+           #app before mounting, so users only ever see the app. Plain semantic
+           HTML only: the built CSP forbids inline styles (ADR-0045). Keep the
+           claims in sync with FOUNDATIONS.md; fuller AI-facing copy is in
+           public/llms.txt. -->
+      <h1>Colonel Kernel</h1>
+      <p>
+        A free 1D convolution / deconvolution tool that runs entirely in your
+        browser — a teaching demonstrator for convolution, and a ground-truth
+        verification instrument for calcium imaging.
+      </p>
+      <p>
+        The flagship use: load a paired recording — ground-truth spike times
+        plus a measured calcium trace (dF/F&#8320;) — and recover the
+        calcium-indicator kernel that relates them, by three parallel methods
+        read against an independent spike-triggered average. The scientifically
+        important output is not just the kernel: it is an honest answer to
+        <em>whether a clean kernel exists at all</em>. Spike–calcium decoupling
+        is a finding the tool measures, not an error. Recovery runs against
+        every trace column, so a kernel appearing in a non-targeted ROI is
+        surfaced rather than missed.
+      </p>
+      <p>
+        Everything is computed client-side: no backend, no uploads, no
+        third-party requests, and a strict Content-Security-Policy that forbids
+        network egress. Unpublished data never leaves your machine.
+      </p>
+      <p>
+        <a href="/methods">Methods &amp; Mathematical Reference</a> — the
+        mathematics, algorithms, and interpretation rules, as a citable
+        standalone page.
+      </p>
+      <p>The interactive tool requires JavaScript and loads in place of this summary.</p>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
