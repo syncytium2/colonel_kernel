@@ -180,6 +180,18 @@ are stale.
   `llms.txt` now link no_peak, and no_peak links back (fireflies is not live and is not
   linked). Still off-repo for Tony: GitHub profile README linking both apps, NCBI
   bibliography if it allows links, sitemap submission to Google/Bing.
+- **Cloudflare "managed robots.txt" is voiding the crawl policy on BOTH zones —
+  dashboard action needed (Tony).** Confirmed live 2026-08-10 on kernel.* and nopeak.*:
+  the edge PREPENDS a managed block (`Content-Signal: ai-train=no`, plus `Disallow: /`
+  for GPTBot, ClaudeBot, CCBot, Google-Extended, Amazonbot, Applebot-Extended,
+  Bytespider, meta-externalagent) ahead of our file. Named user-agent groups beat our
+  `User-agent: *` allow, so the AI crawlers we deliberately allow are blocked
+  regardless of the repo's robots.txt. Third host-side override after the beacon and
+  the host-injected robots.txt of 2026-07-31. Fix is per zone in the dashboard:
+  AI Crawl Control / Security → Bots → turn **managed robots.txt OFF** (and keep
+  "Block AI Scrapers and Crawlers" off). Verify after: `curl -s <site>/robots.txt`
+  must return our file's text as the whole response, no managed preamble. No
+  redeploy needed — it is purely an edge setting.
 - **Prerender — Tony's call, recommendation: not yet.** The review's headline item is a
   SvelteKit `adapter-static` + `prerender` migration so `/` is real HTML at build time.
   Genuine benefit, but it touches routing, the CSP-inject and born-date build plugins, and

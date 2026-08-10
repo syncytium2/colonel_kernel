@@ -9,11 +9,21 @@
 # no_peak (nopeak.tonydefazio.com) carries the same policy, by the same
 # deliberate decision (2026-08-10).
 #
-# Note for whoever maintains this: Cloudflare's Security > Bots > "Block AI
-# Scrapers and Crawlers" toggle acts at the edge, BEFORE robots.txt is ever
-# read. Leave it OFF, or it silently overrides everything in this file — the
-# same class of host-side surprise as the Web Analytics beacon injection
-# (see public/_headers).
+# TWO Cloudflare edge features can silently void this file — the same class of
+# host-side surprise as the Web Analytics beacon injection (see public/_headers):
+#
+# 1. "Managed robots.txt" (AI Crawl Control / Security > Bots). CONFIRMED LIVE
+#    2026-08-10: it PREPENDS a managed block to this file with
+#    `Content-Signal: ai-train=no` and per-agent `Disallow: /` for GPTBot,
+#    ClaudeBot, CCBot, Google-Extended, and peers. A named user-agent group
+#    beats our `User-agent: *` group, so the crawlers we mean to allow are
+#    blocked regardless of what this file says. Turn the managed robots.txt
+#    OFF in the dashboard for this policy to take effect.
+# 2. "Block AI Scrapers and Crawlers" acts at the edge BEFORE robots.txt is
+#    ever read. Leave it OFF too.
+#
+# After changing either, verify with: curl -s https://kernel.tonydefazio.com/robots.txt
+# — this file's text should be the WHOLE response, no managed preamble.
 
 User-agent: *
 Allow: /
