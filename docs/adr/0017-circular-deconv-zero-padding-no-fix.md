@@ -214,13 +214,17 @@ enough to manufacture a kernel where there is none, or to absorb a real AP-indep
 That is the quantitative form of this correction, and the reason no automatic kernel-cleaning
 step ships in the app.
 
-### ⚠ Conflict flagged: FOUNDATIONS §3 carries the same error
+### Conflict raised and RESOLVED: FOUNDATIONS §3 carried the same error
 
-Per CLAUDE.md, an ADR and FOUNDATIONS must never disagree, so this is flagged rather than
-silently diverged from. **FOUNDATIONS.md:293** describes the episode as "a large calcium
-transient (~780–800 s, ~0.24 dF/F₀) **with no matching spike burst** (calcium without APs)",
-and **:337** repeats "the real ~790 s calcium-without-spikes event." The 10 APs above
-contradict both. FOUNDATIONS is canonical and this correction does not amend it — the §3
-positive-control description needs a deliberate edit, recasting the episode as a
-gain-and-timing anomaly. **Until that edit lands, FOUNDATIONS §3 and this section disagree,
-and this section is the one with the recomputed numbers.**
+FOUNDATIONS §3 described the episode as "a large calcium transient (~780–800 s, ~0.24 dF/F₀)
+**with no matching spike burst** (calcium without APs)", and repeated "the real ~790 s
+calcium-without-spikes event" in the machinery-gated/fit-reported passage. The 10 APs above
+contradict both. Per CLAUDE.md the conflict was flagged rather than silently diverged from,
+and FOUNDATIONS — which is canonical — was then **deliberately edited to match, in the same
+change that resolved this flag**, recasting the episode as a gain-and-timing anomaly and
+recording why that description is the stronger positive control: an absence claim depends on
+the spike record being complete, whereas a timing-and-gain contradiction is measured against
+the record's own recovered kernel and survives a missed AP.
+
+The two documents now agree. If a future reader finds them disagreeing again, FOUNDATIONS
+wins on the settled point and this section holds the recomputed numbers behind it.
