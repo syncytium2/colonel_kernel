@@ -205,7 +205,8 @@ subtracted the finding."**
 
 ### Supporting evidence added since
 
-An oracle run on 2026-08-13 (`darkroom/fig_kernel_cleaning_oracle.mjs`, synthetic, planted
+An oracle run on 2026-08-13
+(`darkroom/2026-08-13_kernel-cleaning/fig_kernel_cleaning_oracle.mjs`, synthetic, planted
 kernel of known amplitude) measured post-recovery baseline removal — the operation the
 haruspex team proposed for the shipped `fv` waveforms. On a **decoupled** ROI with no kernel
 planted and true amplitude zero, baseline-shifted readouts reported up to **40% of a real
