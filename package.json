@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "k2": "vite --open /#tab2",
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "bash scripts/deploy.sh",
