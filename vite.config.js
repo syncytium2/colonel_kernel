@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { execSync } from 'node:child_process'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // Build-time git dates for the Tab 0 "born on / last updated" line. Baked in at
 // build (NOT fetched at runtime) — the strict CSP (connect-src 'none', §6) forbids
@@ -73,9 +76,60 @@ function injectCspOnBuild() {
   }
 }
 
+// Dev-only lab picker (see docs/adr/0048-dev-only-lab-mode.md). Loads recordings straight
+// from the local, gitignored `exports/` folder so the file dialog is not in the loop on
+// every iteration. `apply: 'serve'` — this never runs in a build, and the browser half is
+// behind `import.meta.env.DEV`, so the shipped artifact contains neither the endpoints nor
+// the folder names. It must stay that way: the deployed app has `connect-src 'none'` and
+// could not call these even if they shipped, so any trace of them in dist/ is pure
+// attack surface on the one artifact FOUNDATIONS §6 asks people to be able to audit.
+const LAB_DIR = 'exports'
+const LAB_RE = /\.(csv|xlsx)$/i
+
+function labRecordingsOnServe() {
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const dir = path.join(here, LAB_DIR)
+
+  function list() {
+    try {
+      return readdirSync(dir).filter((f) => LAB_RE.test(f)).sort()
+    } catch {
+      return null // folder absent — a clone without local data is not an error
+    }
+  }
+
+  return {
+    name: 'lab-recordings-on-serve',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/__lab/recordings', (_req, res) => {
+        const files = list()
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ dir: LAB_DIR, files: files ?? [], missing: files === null }))
+      })
+
+      server.middlewares.use('/__lab/file', (req, res) => {
+        // Serve BY BASENAME out of the listing only. Never join user input onto the path:
+        // `?name=../../.env` would otherwise walk straight out of the repo.
+        const name = new URL(req.url, 'http://lab').searchParams.get('name') || ''
+        const files = list() ?? []
+        if (!files.includes(path.basename(name))) {
+          res.statusCode = 404
+          res.end('not in ' + LAB_DIR)
+          return
+        }
+        const full = path.join(dir, path.basename(name))
+        res.setHeader('Content-Type', 'application/octet-stream')
+        res.setHeader('Content-Length', statSync(full).size)
+        res.end(readFileSync(full))
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [svelte(), injectCspOnBuild(), assertFullHistoryOnBuild()],
+  plugins: [svelte(), injectCspOnBuild(), assertFullHistoryOnBuild(), labRecordingsOnServe()],
   define: {
     __BUILD_BORN__: JSON.stringify(BUILD_BORN),
     __BUILD_UPDATED__: JSON.stringify(BUILD_UPDATED),

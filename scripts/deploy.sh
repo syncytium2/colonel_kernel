@@ -58,6 +58,9 @@ grep -q "connect-src 'none'" dist/index.html ||
   fail "CSP MISSING from dist/index.html — DO NOT DEPLOY"
 echo "  CSP present (connect-src 'none')"
 
+# ADR-0048 — the dev-only lab mode must not have reached the artifact.
+bash scripts/lab-check.sh || fail "dev-only lab mode leaked into dist/ — DO NOT DEPLOY"
+
 # The Born date must be the repo's true root-commit date, not the build date.
 ROOT_DATE="$(git log --max-parents=0 --format=%cs | tail -1)"
 grep -q "$ROOT_DATE" dist/assets/index-*.js ||

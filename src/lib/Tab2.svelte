@@ -223,6 +223,14 @@
     }
   }
 
+  // DEV-ONLY lab picker (ADR-0048): load straight from the local exports/ folder instead of
+  // walking the file dialog every iteration. This dynamic import is the ONLY reference to
+  // LabPicker.svelte anywhere — with `import.meta.env.DEV` substituted to `false` at build
+  // time the branch is dead code, so Rollup emits no chunk and dist/ carries no trace of the
+  // component, the endpoints, or the folder. `npm run lab-check` enforces exactly that.
+  let LabPicker = $state(null);
+  if (import.meta.env.DEV) import('./LabPicker.svelte').then((m) => (LabPicker = m.default));
+
   function resetSlice() {
     selectedCol = 0;
     method = 'free';
@@ -961,6 +969,7 @@
       </label>
       {#if fileName}<p class="fname">{fileName}</p>{/if}
       {#if error}<p class="error">Could not load: {error}</p>{/if}
+      {#if LabPicker}<LabPicker onpick={(f) => handleFiles([f])} current={fileName} />{/if}
       <!-- The dropzone used to name two extensions and stop, leaving the schema
            documented only in ADR-0016/0019 — which a visitor has never read. State the
            shape here, where someone is standing when they need it, and offer the
@@ -991,6 +1000,7 @@
           <input type="file" accept=".csv,.xlsx,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
         </label>
       </div>
+      {#if LabPicker}<LabPicker onpick={(f) => handleFiles([f])} current={fileName} />{/if}
       <p class="error">{fileName}: no APs in this recording — deconvolution not possible (ADR-0022 policy skip; not fit).</p>
     </div>
   {:else}
@@ -1013,6 +1023,7 @@
             <input type="file" accept=".csv,.xlsx,text/csv" onchange={(e) => handleFiles(e.currentTarget.files)} />
           </label>
         </div>
+        {#if LabPicker}<LabPicker onpick={(f) => handleFiles([f])} current={fileName} />{/if}
         <!-- Entering Tab 2 by the nav auto-loads the Tab 1 handoff, so a user who wants
              their OWN recording lands here and never sees the empty dropzone where the
              format is explained. This fold is that guidance on the path people actually
