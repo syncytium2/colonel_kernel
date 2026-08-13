@@ -129,6 +129,12 @@ function labRecordingsOnServe() {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Pin the dev port. The `k2` bookmark/agent (scripts/k2-agent.sh) hard-codes 5173, and
+  // Vite's default is to silently walk to the next free port when 5173 is taken — which
+  // strands the bookmark on whatever stale server grabbed it first. `strictPort` turns a
+  // second `npm run dev` into a loud "port in use" instead of a second server nobody
+  // asked for on a port nobody bookmarked.
+  server: { port: 5173, strictPort: true },
   plugins: [svelte(), injectCspOnBuild(), assertFullHistoryOnBuild(), labRecordingsOnServe()],
   define: {
     __BUILD_BORN__: JSON.stringify(BUILD_BORN),
