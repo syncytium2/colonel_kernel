@@ -290,8 +290,8 @@ real-data coupling control that complements the synthetic oracle, carried with t
 that its **global** fit is imperfect for a reason still being characterized.
 
 The same ROI also exhibits **localized decoupling episodes**: a large calcium transient
-(~780–800 s, ~0.25 dF/F₀) whose **timing and gain both contradict this record's own
-kernel**, and a stretch across ~400–700 s where spiking continues while the calcium
+(~786.7–800 s, crest **0.247 dF/F₀**) with **no APs beneath it**, and a stretch across
+~400–700 s where spiking continues while the calcium
 response shrinks (APs without proportional calcium — non-constant gain). Both facts
 hold simultaneously: the episodes are real and are exactly what the tool exists to
 *measure*, and they do **not** negate the recoverable kernel. A coupled cell with
@@ -301,28 +301,41 @@ Reading the episodes (or the baseline-dominated −0.74) as erasing the kernel i
 category error this section now guards against: low global fit is reported, never used
 to deny a kernel that recovery and STA jointly confirm at +0.6 s.
 
-**What the ~790 s episode is, precisely** (corrected 2026-08-13; this description previously
-read "a large calcium transient with no matching spike burst (calcium without APs)", which the
-spike record contradicts — see the correction section of
-[ADR-0017](docs/adr/0017-circular-deconv-zero-padding-no-fix.md)). The window is **not**
-spike-free: 770–800 s carries **10 APs at ~10× the region's mean rate**, one of the densest
-bouts in a 140-AP recording. The coupling breaks in two measurable ways instead. **Timing:**
-the transient crests at **792.71 s, 6.46 s after the last AP** — irreconcilable with this same
-record's **+0.6 s** peak lag. **Gain:** the bout yields **0.247 dF/F₀** where a comparable
-7-AP bout at 712–722 s yields **0.023**, roughly ten times the calcium for a comparable number
-of spikes.
+**What the ~790 s episode is, precisely** (window corrected 2026-08-16; this description
+previously bracketed it as "~780–800 s", which swallows an AP burst that *precedes* the
+transient — see the correction section of
+[ADR-0017](docs/adr/0017-circular-deconv-zero-padding-no-fix.md)). **Two events sit back to
+back here and must not be merged into one:**
 
-**The corrected description is a *stronger* control than the absence claim it replaces.** "No
-spikes beneath it" is an absence claim, and absence claims rest on the spike record being
-complete — a single missed AP dissolves the episode, and the tool has no way to rule that out.
-A timing-and-gain contradiction is measured **against the record's own recovered kernel**, so
-it survives an imperfect spike record: the APs are present and counted, and the calcium *still*
-cannot be reconciled with them. Note also what this episode is **not** evidence of. Calcium
-unexplained by the targeted cell's APs is physiology to be measured, **not an artifact to
-correct** (the premise stated above) — but *this* episode is not that phenomenon, and neither
-reading may be assumed from the other. Which of the live explanations applies here — genuinely
-AP-independent calcium, a neighbouring cell or neuropil inside the ROI, or non-constant gain in
-the targeted cell — is the human's call, per the machinery-gated / fit-reported split.
+- **777.7–786.3 s — an AP burst that gets an ordinary response.** Ten APs at ~10× the
+  region's mean rate (**1.16 Hz** vs **0.117 Hz**), one of the densest bouts in this 140-AP
+  recording. They produce a peak of **0.037 dF/F₀** — which, against **0.023** for a
+  comparable 7-AP bout at 712–722 s, is **proportionate. The gain here is normal.**
+- **786.7–800 s — the transient, with nothing underneath it.** It begins **0.46 s after the
+  last AP**, rises for six seconds to crest **0.247 dF/F₀ at 792.71 s**, and there is **not
+  one AP between 786.25 s and 800 s.**
+
+The decoupling claim is about the *second* event, and the burst is what makes it legible: the
+same cell, seconds earlier, had just shown exactly what its APs are worth.
+
+**What the episode does not settle.** Its onset at **+0.46 s** sits close to this record's own
+**+0.6 s** kernel peak lag — near enough that the transient may be *evoked* by the last AP
+rather than independent of it. If evoked, its kinetics and amplitude are both grossly
+anomalous: a six-second rise against a 0.6 s kernel, reaching **0.247** where the same burst
+had just produced **0.037**. Either reading is a decoupling episode; **which** one — genuinely
+AP-independent calcium, an AP-evoked event with anomalous gain and kinetics, or a neighbouring
+cell or neuropil inside the ROI — is the human's call, per the machinery-gated / fit-reported
+split. Calcium unexplained by the targeted cell's APs is physiology to be measured, **not an
+artifact to correct** (the premise stated above).
+
+**Why the bracket mattered.** The loose window was not a cosmetic imprecision; it produced a
+false finding downstream. Any window-level aggregate over ~780–800 s — peak-in-window against
+APs-in-window — reads as a **~10× gain anomaly**, because it credits the transient's amplitude
+to a burst that had already ended. The AP counts and the arithmetic are both correct; only a
+figure shows that the peak and the spikes belong to *different events*. That claim was written
+into this section and into ADR-0017 on 2026-08-13 and retracted on 2026-08-16 after the trace
+was plotted. It is the standing graphical-confirmation rule earning its keep, and the reason
+event-level claims are never to be made from window-level statistics.
 
 The synthetic oracle remains the **machinery** oracle, for the distinct reason that
 ROI 1's *true* kernel is unknown — you cannot grade recovery error against a real cell
@@ -357,7 +370,7 @@ positive-control record:
   feature.
 - **The machinery-gated / fit-reported split holds, unchanged.** The parametric
   reconstruction R² on file-80 ROI-1 is **negative (≈ −0.06)** — dominated by the real
-  ~790 s gain-and-timing anomaly and the 400–700 s reduced-gain stretch (the same
+  ~790 s calcium-without-spikes transient and the 400–700 s reduced-gain stretch (the same
   localized decoupling episodes above). Per [ADR-0011](docs/adr/0011-validation-gates-machinery-not-fit.md)
   this is the **correct "low global fit, real kernel" read**, not a no-kernel verdict: a
   clean +0.63 s transient with a finite τ is recovered *and* the global fit is poor for a
