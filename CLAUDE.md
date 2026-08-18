@@ -105,18 +105,6 @@ version control. Don't conflate them.
   fixtures, just portable practice. **Mirror, not master** — a lesson's canonical home is this
   repo; that folder holds a distillation. When you learn something here that would still be true
   in a repo with none of this science, add it there too.
-- **Reaching the MATLAB / interface2 team (don't go looking for a channel — this is it).**
-  Append one dated entry, newest on top, to `status/app_team.md` in the bus at
-  `~/Library/CloudStorage/Dropbox-UniversityofMichigan/Richard DeFazio/team_colonel_kernel/`
-  (NOT `~/Dropbox`; a `~/Dropbox*/` glob misses it). We are the sole writer of that file and
-  they are the sole writer of `status/matlab_team.md` — never edit theirs, request the change
-  in ours (`PROTOCOL.md` rule 1). Bump `Last updated:`, claim the write on the session board
-  first, and run `./check.sh` after (it scans for Dropbox conflicted copies). This is also the
-  channel for **non-data** matters — tooling, vendored hooks — because there is no other one:
-  interface2 is on **GitLab** and this repo on **GitHub**, so no shared issues or PRs exist,
-  and the buses are pairwise (`team_major_coincidence/` is interface2 ↔ `fireflies`). Their
-  side reads the bus at session start, so an already-active session on another machine won't
-  see it until Tony relays it — that lag is expected, not a reason to invent a new channel.
 
 ## Deploying (non-negotiable)
 
