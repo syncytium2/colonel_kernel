@@ -289,9 +289,9 @@ sign inversion. By the four checks above this reads as *there is a kernel* — R
 real-data coupling control that complements the synthetic oracle, carried with the caveat
 that its **global** fit is imperfect for a reason still being characterized.
 
-The same ROI also exhibits **localized decoupling episodes**: a large calcium
-transient (~780–800 s, ~0.24 dF/F₀) with no matching spike burst (calcium without
-APs), and a stretch across ~400–700 s where spiking continues while the calcium
+The same ROI also exhibits **localized decoupling episodes**: a large calcium transient
+(~786.7–800 s, crest **0.247 dF/F₀**) with **no APs beneath it**, and a stretch across
+~400–700 s where spiking continues while the calcium
 response shrinks (APs without proportional calcium — non-constant gain). Both facts
 hold simultaneously: the episodes are real and are exactly what the tool exists to
 *measure*, and they do **not** negate the recoverable kernel. A coupled cell with
@@ -300,6 +300,42 @@ precisely the machinery-gated / fit-reported split above, not a "no kernel" verd
 Reading the episodes (or the baseline-dominated −0.74) as erasing the kernel is the
 category error this section now guards against: low global fit is reported, never used
 to deny a kernel that recovery and STA jointly confirm at +0.6 s.
+
+**What the ~790 s episode is, precisely** (window corrected 2026-08-16; this description
+previously bracketed it as "~780–800 s", which swallows an AP burst that *precedes* the
+transient — see the correction section of
+[ADR-0017](docs/adr/0017-circular-deconv-zero-padding-no-fix.md)). **Two events sit back to
+back here and must not be merged into one:**
+
+- **777.7–786.3 s — an AP burst that gets an ordinary response.** Ten APs at ~10× the
+  region's mean rate (**1.16 Hz** vs **0.117 Hz**), one of the densest bouts in this 140-AP
+  recording. They produce a peak of **0.037 dF/F₀** — which, against **0.023** for a
+  comparable 7-AP bout at 712–722 s, is **proportionate. The gain here is normal.**
+- **786.7–800 s — the transient, with nothing underneath it.** It begins **0.46 s after the
+  last AP**, rises for six seconds to crest **0.247 dF/F₀ at 792.71 s**, and there is **not
+  one AP between 786.25 s and 800 s.**
+
+The decoupling claim is about the *second* event, and the burst is what makes it legible: the
+same cell, seconds earlier, had just shown exactly what its APs are worth.
+
+**What the episode does not settle.** Its onset at **+0.46 s** sits close to this record's own
+**+0.6 s** kernel peak lag — near enough that the transient may be *evoked* by the last AP
+rather than independent of it. If evoked, its kinetics and amplitude are both grossly
+anomalous: a six-second rise against a 0.6 s kernel, reaching **0.247** where the same burst
+had just produced **0.037**. Either reading is a decoupling episode; **which** one — genuinely
+AP-independent calcium, an AP-evoked event with anomalous gain and kinetics, or a neighbouring
+cell or neuropil inside the ROI — is the human's call, per the machinery-gated / fit-reported
+split. Calcium unexplained by the targeted cell's APs is physiology to be measured, **not an
+artifact to correct** (the premise stated above).
+
+**Why the bracket mattered.** The loose window was not a cosmetic imprecision; it produced a
+false finding downstream. Any window-level aggregate over ~780–800 s — peak-in-window against
+APs-in-window — reads as a **~10× gain anomaly**, because it credits the transient's amplitude
+to a burst that had already ended. The AP counts and the arithmetic are both correct; only a
+figure shows that the peak and the spikes belong to *different events*. That claim was written
+into this section and into ADR-0017 on 2026-08-13 and retracted on 2026-08-16 after the trace
+was plotted. It is the standing graphical-confirmation rule earning its keep, and the reason
+event-level claims are never to be made from window-level statistics.
 
 The synthetic oracle remains the **machinery** oracle, for the distinct reason that
 ROI 1's *true* kernel is unknown — you cannot grade recovery error against a real cell
@@ -334,7 +370,7 @@ positive-control record:
   feature.
 - **The machinery-gated / fit-reported split holds, unchanged.** The parametric
   reconstruction R² on file-80 ROI-1 is **negative (≈ −0.06)** — dominated by the real
-  ~790 s calcium-without-spikes event and the 400–700 s reduced-gain stretch (the same
+  ~790 s calcium-without-spikes transient and the 400–700 s reduced-gain stretch (the same
   localized decoupling episodes above). Per [ADR-0011](docs/adr/0011-validation-gates-machinery-not-fit.md)
   this is the **correct "low global fit, real kernel" read**, not a no-kernel verdict: a
   clean +0.63 s transient with a finite τ is recovered *and* the global fit is poor for a
@@ -668,6 +704,17 @@ here?" or "does it affect the other tab?":
   teaching kernel's **peak height (dF/F₀)** is a separate, user-set axis — a `buildKernel` amplitude
   factor surfaced as a Tab 1 slider (UI default 0.1) so physiological σ is not dwarfed by a peak-1
   kernel ([ADR-0032](docs/adr/0032-tab1-kernel-amplitude-control.md)).
+- **Scoped to the signal, default 0** — the **AP-independent calcium dial** (0 → 1;
+  [ADR-0049](docs/adr/0049-ap-independent-calcium-slider.md)), the second signal-model control
+  beside noise injection and the *malign* counterpart to it: no λ removes it and no averaging
+  shrinks it. `0` = every sample is calcium a kernel explains (the null model this whole tool
+  tests); `1` = the spike train explains none of it. Its scope follows the **signal**, not the tab:
+  Tabs 1 and 3 share **one bound value** because Tab 3 deconvolves the signal Tab 1 synthesizes
+  (§11.3), while Tab 2's is tab-local — applied to whatever is loaded, exactly like its noise
+  slider — with Tab 1's contamination riding in through the existing handoff. Events are modeled on
+  `_80` ROI 1 (§3) and placed only in spike-free stretches. It is a **what-if dial, never a
+  correction**: it adds a known violation so its cost on the §3 checks can be measured, and never
+  removes or repairs anything. Tab 0's premise figure is deliberately outside it (ADR-0049).
 
 ### 11.3 Cross-tab flow
 

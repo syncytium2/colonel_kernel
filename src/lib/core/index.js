@@ -7,6 +7,13 @@ export { convolveLinear, convolveOnGrid } from './convolve.js';
 // kernel diagnostics that judge a recovered kernel (ADR-0014).
 export { SIGMA_COHORT_TYPICAL, NOISE_LEVEL_MAX, sigmaForLevel, addAWGN, mulberry32, gaussian } from './noise.js';
 export { nextPow2, circularConvolve, deconvolveCircular, extractSymmetric, recoverKernel } from './deconvolve.js';
+// AP-independent calcium (the phenomenon FOUNDATIONS §3 anatomizes on _80): the mixing
+// model behind every tab's AP-independent slider — 0 = everything a kernel explains,
+// 1 = a trace the spike train cannot account for at all.
+export {
+  AP_INDEPENDENT_SHAPES, AP_INDEPENDENT_DEFAULTS, candidateOnsets, apIndependentEvents,
+  apIndependentTrace, referenceAmplitude, mixApIndependent,
+} from './ap-independent.js';
 // "Beat the Colonel" challenge scoring (game modes): reconstruction R² + a seeded
 // Poisson spike generator. Pure, SheetJS-free.
 export { rSquared, poissonSpikes, spikeMatch, peakPickSpikes } from './challenge.js';

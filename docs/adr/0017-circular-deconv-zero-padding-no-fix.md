@@ -124,33 +124,51 @@ Conditions under which the conclusion holds, stated plainly (not as hedges):
 
 ---
 
-## Correction (2026-08-13) — "calcium-without-spikes contaminant" is wrong twice
+## Correction (2026-08-13, revised 2026-08-16) — "contaminant" is the wrong word, and "~780–800 s" is the wrong bracket
 
 Six places above (lines 38, 71, 73, 86, 112, 116) call the ~790 s episode on file-80 ROI-1 a
-**"calcium-without-spikes contaminant."** Both halves of that phrase are wrong, and they fail
-in different ways: one is a measurement error, one is a naming error. The **decisions in this
-ADR do not change** — every treatment exclusion and permission below stands. What changes is
-the *reasoning*, and the corrected reasoning is stronger and more general than what it
-replaces.
+**"calcium-without-spikes contaminant."** Two things are wrong with that, in different ways:
+the **word** (a naming error, §2 below) and the **bracket** (a measurement error, §1). The
+phrase "calcium without spikes" is itself **accurate for the transient** — that part was
+right all along. The **decisions in this ADR do not change**; every treatment exclusion and
+permission above stands.
 
-### 1. The measurement: the window is not spike-free
+> **This correction was itself wrong on first writing (2026-08-13) and is revised here.** It
+> originally recast the episode as a "~10× gain anomaly," on the strength of a window-level
+> aggregate. Plotting the trace refuted that. The bad claim and its repair are both kept
+> below rather than quietly overwritten, because the mechanism that produced it is the point.
 
-Recomputed from `exports/APs_v1_20241004_80__region1.csv` (the shipped export of the same
-recording this ADR reasoned about):
+### 1. The measurement: the bracket merged two events
 
-| | |
-|---|---|
-| APs in 770–800 s | **10** (777.66, 777.75, 777.83, 778.03, 783.12, 783.24, 783.51, 783.77, 786.19, 786.25) |
-| local rate over ~777.7–786.3 s | **1.16 Hz** vs the region mean of **0.117 Hz** — ~10× |
-| ROI-1 peak in the window | **0.2472 dF/F₀ at 792.71 s** |
-| offset from the last AP | **+6.46 s** |
-| record's own kernel peak lag | **+0.6 s** |
+Recomputed from `exports/APs_v1_20241004_80__region1.csv`, and **plotted** —
+`darkroom/colonel_kernel/2026-08-13_kernel-cleaning/fig_790s_episode.png`. Two events sit
+back to back inside the old ~780–800 s window:
 
-Far from being spike-free, this is one of the densest AP bouts in a 140-AP recording. The
-episode is a **gain-and-timing anomaly**: the transient crests 6.46 s after the last AP —
-irreconcilable with the same record's +0.6 s peak lag — and a 10-AP bout here yields
-**0.247 dF/F₀** where a comparable 7-AP bout at 712–722 s yields **0.023** (independently
-recomputed; consistent with the haruspex-side finding logged on the bus 2026-08-08).
+| | 777.7–786.3 s — the AP burst | 786.7–800 s — the transient |
+|---|---|---|
+| APs | **10** (777.66 … 786.25) | **none** |
+| local AP rate | **1.16 Hz** vs region mean 0.117 Hz | — |
+| ROI-1 peak | **0.037 dF/F₀** | **0.247 dF/F₀ at 792.71 s** |
+| vs a comparable 7-AP bout (712–722 s, peak 0.023) | **proportionate — normal gain** | ~10× a normal response, with no APs to attribute it to |
+| timing | — | onset **+0.46 s**, crest **+6.46 s** after the last AP (kernel peak lag **+0.6 s**) |
+
+So the window is not spike-free, but **the transient is** — there is not one AP between
+786.25 s and 800 s. The APs that precede it got an ordinary, proportionate response; the
+transient is a separate event. What was wrong in the original wording was the **bracket**,
+which credited the transient's amplitude to a burst that had already ended.
+
+**The failure mode, stated so it is not repeated:** a window-level aggregate —
+peak-in-window over APs-in-window — cannot tell whether the peak and the spikes belong to the
+same *event*. Both the AP count and the arithmetic were checked and both were correct, and
+the conclusion was still false. **Event-level claims may not be made from window-level
+statistics**; only the picture separates them. That is what the graphical-confirmation
+standing rule at the top of this ADR is for, and it was skipped here.
+
+**Still open:** the +0.46 s onset sits near this record's +0.6 s kernel peak lag, so the
+transient may be *evoked* by the last AP rather than independent of it — in which case its
+kinetics and amplitude are grossly anomalous (a six-second rise against a 0.6 s kernel,
+0.247 where the same burst had just produced 0.037). Either reading is decoupling; which one
+is a human call (ADR-0011, ADR-0014).
 
 ### 2. The name: "contaminant" answers a question this tool exists to leave open
 
@@ -184,24 +202,27 @@ be absorbed into the baseline estimate — **and that absorption is itself a §3
 signature.**" That sentence treats such an event as signal. The word "contaminant," six lines
 away, treats it as noise. When one document says both, the wording is what is wrong.
 
-### What the corrected reasoning changes
+### What the corrected reasoning changes — less than the first draft claimed
 
-The decision "spike-freeness alone is insufficient as a quiet mask" **stands**, but the reason
-given above is not the operative one. A spike-*proximity* mask would already reject the
-AP-dense body of this episode. What it cannot reject is the **crest at 792.71 s, 6.46 s after
-the last AP** — spike-distant, and therefore selected as "baseline" by any spike-only rule.
+**The quiet-mask argument in the Decision above stands exactly as written, and the 2026-08-13
+draft was wrong to disturb it.** That argument says spike-freeness alone is insufficient
+because the ~790 s event *is* spike-free and a spike-only mask would select it as "baseline."
+With the transient correctly bracketed at 786.7–800 s and carrying **no APs at all**, that is
+simply true. The draft replaced this with a claim that the operative problem was a
+spike-*distant tail* of an AP-driven response — a consequence of the merged bracket, and
+withdrawn.
 
-So the real mechanism is more general and more consequential than "spike-free events exist":
+One genuine addition survives, as an **additional** mechanism rather than a replacement:
 
-> **Calcium events outlast the spikes that cause them.** Any event whose decay exceeds the
-> proximity window leaves a spike-distant tail that a spike-only mask will call baseline —
-> and that is *every* event, not an exotic case, since recovered τ on these recordings runs
-> 0.48–1.49 s against a ±1 s proximity gate.
+> **Calcium events also outlast the spikes that cause them.** An ordinary evoked event whose
+> decay exceeds the proximity window leaves a spike-distant tail that a spike-only mask will
+> call baseline — recovered τ on these recordings runs 0.48–1.49 s against a ±1 s gate. This
+> is a real hazard for quiet-masking in general. It is **not** what the ~790 s episode is.
 
-The variance gate is therefore not "excluding contamination." It is **declining to absorb the
-tail of the phenomenon into the thing the phenomenon is measured against.** The residual risk
-in the Caveats is correspondingly not "leftover noise in the baseline" but **"you may have
-subtracted the finding."**
+Both mechanisms point the same way about what the variance gate is doing: not "excluding
+contamination," but **declining to absorb the phenomenon into the thing the phenomenon is
+measured against.** The residual risk in the Caveats reads accordingly — not "leftover noise
+in the baseline" but **"you may have subtracted the finding."**
 
 ### Supporting evidence added since
 
@@ -215,13 +236,17 @@ enough to manufacture a kernel where there is none, or to absorb a real AP-indep
 That is the quantitative form of this correction, and the reason no automatic kernel-cleaning
 step ships in the app.
 
-### ⚠ Conflict flagged: FOUNDATIONS §3 carries the same error
+### Conflict raised and RESOLVED: FOUNDATIONS §3 carried the same bracket
 
-Per CLAUDE.md, an ADR and FOUNDATIONS must never disagree, so this is flagged rather than
-silently diverged from. **FOUNDATIONS.md:293** describes the episode as "a large calcium
-transient (~780–800 s, ~0.24 dF/F₀) **with no matching spike burst** (calcium without APs)",
-and **:337** repeats "the real ~790 s calcium-without-spikes event." The 10 APs above
-contradict both. FOUNDATIONS is canonical and this correction does not amend it — the §3
-positive-control description needs a deliberate edit, recasting the episode as a
-gain-and-timing anomaly. **Until that edit lands, FOUNDATIONS §3 and this section disagree,
-and this section is the one with the recomputed numbers.**
+FOUNDATIONS §3 described the episode as "a large calcium transient (**~780–800 s**, ~0.24
+dF/F₀) with no matching spike burst (calcium without APs)". Its *characterization* was right;
+its **window** was not, and the loose window is what let a ~10× gain anomaly be derived from
+it. Per CLAUDE.md the conflict was flagged rather than silently diverged from, and FOUNDATIONS
+— which is canonical — was then **deliberately edited to match, in the same change that
+resolved this flag**: the transient re-bracketed to ~786.7–800 s, the preceding AP burst named
+as a separate event with a proportionate 0.037 response, and the open question recorded (a
++0.46 s onset against a +0.6 s kernel lag leaves "evoked with anomalous kinetics" live
+alongside "AP-independent").
+
+The two documents now agree. If a future reader finds them disagreeing again, FOUNDATIONS wins
+on the settled point and this section holds the recomputed numbers and the figure behind it.

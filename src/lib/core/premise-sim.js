@@ -35,29 +35,18 @@ import { rasterize } from './rasterize.js';
 import { buildKernel } from './kernels.js';
 import { convolveOnGrid } from './convolve.js';
 import { addAWGN, mulberry32 } from './noise.js';
+import { AP_INDEPENDENT_SHAPES as EVENT_SHAPES } from './ap-independent.js';
 
 /**
- * Morphologies for AP-independent calcium events. Both were visible in the real ROI-1
- * recording, and neither looks like the AP-linked transient (peak at 0.60 s, τ 2.7 s):
+ * Morphologies for AP-independent calcium events — narrow (tall, brief, near-symmetric) and
+ * slow (medium rise, minute-long tail), neither of which looks like the AP-linked transient.
  *
- *   narrow — tall but brief and near-symmetric. Rise-to-peak 0.73 s against a 0.9 s decay,
- *            so it goes up and comes back down at nearly the same rate and is over in ~5 s.
- *   slow   — medium rise, very long tail. 2.7 s to peak, then a 12 s decay constant, so it
- *            is still visibly elevated most of a minute later.
- *
- * The shape mismatch is not decoration: an event that does not fit the AP kernel is one a
- * kernel fit cannot explain, which is what the tool's diagnostics are for.
+ * Defined in `ap-independent.js` and re-exported here. They used to live in this file, but
+ * the same two shapes are now what the tabs' AP-independent slider injects: one definition
+ * means the figure that ARGUES the phenomenon and the control that DEMONSTRATES it cannot
+ * drift apart.
  */
-export const EVENT_SHAPES = {
-  // Gaussian, not a difference of exponentials: a double-exponential always leaves a tail
-  // longer than its rise, so it cannot be made symmetric no matter how the τ values are
-  // set. σ 0.9 s gives a ~2.1 s width at half height — tall, brief, and up and down at the
-  // same rate, which is what the real recording showed.
-  narrow: { kernel: 'gaussian', params: { sigma: 0.9 } },
-  // Same family as the AP kernel, pushed far from its parameters: 2.7 s to peak against a
-  // 12 s decay constant, so it is still elevated most of a minute later.
-  slow: { kernel: 'calcium', params: { tauRise: 1.0, tauDecay: 12 } },
-};
+export { EVENT_SHAPES };
 
 /** Recording shape — matched to the real ROI-1 recording's length and frame rate. */
 export const SIM = {

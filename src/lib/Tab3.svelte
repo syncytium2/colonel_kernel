@@ -28,6 +28,13 @@
     gridTimes = [],
     rasterSamples = [],
     spikeCount = 0,
+    // AP-independent calcium: BOUND to Tab 1's dial, because this tab deconvolves Tab 1's
+    // signal (§11.3). The slider is repeated here rather than duplicated — the value is the
+    // same one — so the contamination can be raised from the tab where its consequence
+    // (spikes inferred under calcium no spike caused) is visible.
+    apIndepMix = $bindable(0),
+    apIndepEvents = 0,
+    apIndepShare = 0,
   } = $props();
 
   // Regularization for the naive inverse. λ = 0 is the pure noise-amplifying
@@ -98,9 +105,33 @@
       </p>
     </div>
 
+    <!-- AP-independent calcium (FOUNDATIONS §3) — the same dial as Tab 1's, on the same
+         signal. It belongs here too because this is where its consequence is starkest:
+         naive inversion has no way to say "no spike caused this", so it answers a hump
+         with spikes that were never fired. -->
+    <div class="field">
+      <label for="apindep3">AP-independent calcium</label>
+      <div class="params">
+        <label class="slider">
+          <span>Mix</span>
+          <input id="apindep3" type="range" min="0" max="1" step="0.01" bind:value={apIndepMix} />
+          <output>{fx(apIndepMix, 2)}</output>
+        </label>
+      </div>
+      <div class="ends"><span>0 · all kernel</span><span>all AP-independent · 1</span></div>
+      <p class="hint">
+        Calcium with no spike underneath — slow humps and big near-symmetric events, modeled
+        on <em>_80</em> ROI 1. The deconvolution is not told; it invents spikes under them.
+        {#if apIndepMix > 0}<strong>{apIndepEvents}</strong> placed, carrying
+          {Math.round(apIndepShare * 100)}% of the trace's variance.{/if}
+      </p>
+    </div>
+
     <div class="note subtle">
       Trace + kernel come from <strong>Tab 1</strong>. Change the spikes, kernel,
-      or noise there, then return here to see how recovery copes.
+      or noise there, then return here to see how recovery copes. The
+      AP-independent dial above is <em>the same dial</em> as Tab 1's — one signal,
+      two rails.
     </div>
   {/snippet}
 
@@ -117,6 +148,12 @@
       A real spike count can't be negative — yet naive inversion produces
       <strong>{pct(report.negativeFraction)}</strong> negative samples. That, and
       the ringing below, is why honest spike inference needs more than a division.
+      {#if apIndepMix > 0}
+        With the AP-independent dial at <strong>{fx(apIndepMix, 2)}</strong>,
+        {apIndepEvents} event{apIndepEvents === 1 ? '' : 's'} in this trace had no spike
+        underneath at all — every spike the inversion returns there is invented, and
+        nothing in the output marks which ones.
+      {/if}
     </p>
   {/snippet}
 
@@ -237,6 +274,15 @@
   .slider > span { grid-area: lab; font-size: 12.5px; }
   .slider > output { grid-area: out; font-family: var(--mono); font-size: 12px; text-align: right; }
   .slider > input { grid-area: rng; width: 100%; }
+  /* End labels under a slider whose ENDS carry the meaning (matches Tab 1's rail). */
+  .ends {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 10.5px;
+    color: var(--text);
+    margin-top: -2px;
+  }
 
   .sum-eq { font-family: var(--mono); font-size: 15px; color: var(--text-h); }
   .sum-sub { font-size: 12.5px; color: var(--text); margin-top: 3px; }

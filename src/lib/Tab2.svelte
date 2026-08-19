@@ -39,6 +39,7 @@
     addAWGN,
     sigmaForLevel,
     mulberry32,
+    mixApIndependent,
   } from './core/index.js';
   import methodsSvg from './assets/methods_explainer.svg?url'; // "About the methods" modal (data-safe explainer)
   // Per-recording summary + Save-as-PDF (summaries & export, Phase 1). The builder is
@@ -160,6 +161,12 @@
 
   let lambdaLog = $state(LOG_LO); // log10(λ); default λ = 0.002 (sweep floor / UI default)
   let noiseLevel = $state(0); // × cohort-typical σ, 0–10, default 0/off (ADR-0015)
+  // AP-independent calcium (FOUNDATIONS §3, modeled on _80 ROI 1): 0 = the loaded trace as
+  // it is, every event assumed kernel-explained; 1 = a trace whose calcium the spike train
+  // cannot account for at all. Tab-local and default 0, exactly like the noise slider — this
+  // ADDS a known violation to whatever is loaded so its cost is measured on THIS recording's
+  // §3 checks, not argued in the abstract. It is a what-if dial, never a correction.
+  let apIndepMix = $state(0); // 0 … 1
   const lambda = $derived(10 ** lambdaLog);
 
   // ADR-0035 region-protocol windowing — user-adjustable (minutes); defaults mirror
@@ -464,21 +471,53 @@
     return { xs, ys: xs.map(() => 1), n: xs.length };
   });
 
+  // AP-independent calcium mixed into the WHOLE recording's selected column. Placed against
+  // the whole spike train, not the current region's, so the plotted trace and the recovered
+  // kernel are looking at the same events — contaminating each region separately would put
+  // humps in different places depending on which region happened to be current.
+  const contaminated = $derived.by(() => {
+    if (!displayAnalyzable || !displaySelected) return null;
+    return mixApIndependent(
+      displaySelected.samples,
+      displayRegion.grid,
+      displayRegion.spikeTimes,
+      apIndepMix,
+    );
+  });
+
+  // The current region's view of that trace. The recovery region is a pure index slice of the
+  // display grid (windowRegion brackets to spikes; same dt, same t0 origin), so the slice is
+  // exact — no resampling, no second placement pass.
+  const recSamples = $derived.by(() => {
+    if (!analyzable || !selected) return null;
+    if (!contaminated || !(apIndepMix > 0)) return selected.samples;
+    const off = Math.round(
+      (recoveryRegion.grid.times[0] - displayRegion.grid.times[0]) / displayRegion.grid.dt,
+    );
+    const src = contaminated.samples;
+    const out = new Float64Array(selected.samples.length);
+    for (let k = 0; k < out.length; k++) {
+      const i = off + k;
+      out[k] = i >= 0 && i < src.length ? src[i] : selected.samples[k];
+    }
+    return out;
+  });
+
   // One noise realization for the selected ROI (region + column + noise level).
   const noisyTrace = $derived.by(() => {
-    if (!analyzable || !density || !selected) return null;
+    if (!analyzable || !density || !recSamples) return null;
     const { n, N } = density;
     const sigma = sigmaForLevel(noiseLevel);
     const noise = sigma > 0 ? addAWGN(new Float64Array(n), sigma, mulberry32(NOISE_SEED)) : null;
     const recReal = new Float64Array(N); // NaN→0 + noise, zero-padded
     for (let k = 0; k < n; k++) {
-      const v = Number.isFinite(selected.samples[k]) ? selected.samples[k] : 0;
+      const v = Number.isFinite(recSamples[k]) ? recSamples[k] : 0;
       recReal[k] = v + (noise ? noise[k] : 0);
     }
-    let staTrace = selected.samples; // raw (NaN preserved → omitnan) + noise
+    let staTrace = recSamples; // raw (NaN preserved → omitnan) + noise
     if (noise) {
       staTrace = new Float64Array(n);
-      for (let k = 0; k < n; k++) staTrace[k] = selected.samples[k] + noise[k];
+      for (let k = 0; k < n; k++) staTrace[k] = recSamples[k] + noise[k];
     }
     return { recReal, staTrace };
   });
@@ -904,8 +943,10 @@
     return out;
   });
   // Actual dF/F₀ = the WHOLE recording trace for the selected column (display; zoom view-only).
+  // Reads the contaminated trace so the AP-independent dial is VISIBLE, not just felt in the
+  // numbers — at mix 0 this is the loaded samples themselves, unchanged.
   const traceYs = $derived(
-    displaySelected ? Array.from(displaySelected.samples, (v) => (Number.isFinite(v) ? v : null)) : [],
+    contaminated ? Array.from(contaminated.samples, (v) => (Number.isFinite(v) ? v : null)) : [],
   );
 
   // ADR-0025 indicator facts for the current slice (neutral; never pass/fail).
@@ -1165,6 +1206,24 @@
                 <input type="range" min="0" max="10" step="0.5" bind:value={noiseLevel} />
                 <output>{noiseLevel.toFixed(1)}×</output>
               </label>
+              <!-- AP-independent calcium (FOUNDATIONS §3) — a what-if dial, never a
+                   correction. It injects the violation this recording's kernel is supposed
+                   to be free of, so the §3 checks can be watched failing on data whose
+                   answer is known. -->
+              <label class="ctl">
+                <span>AP-independent calcium</span>
+                <input type="range" min="0" max="1" step="0.01" bind:value={apIndepMix} />
+                <output>{apIndepMix.toFixed(2)}</output>
+              </label>
+              <div class="ctl-ends"><span>0 · all kernel</span><span>all AP-independent · 1</span></div>
+              <p class="ctl-note">
+                Adds calcium with no AP underneath — slow humps and big near-symmetric events,
+                modeled on <em>_80</em> ROI 1 — and fades the loaded trace out as it rises, so
+                at 1 the spike train explains none of what is plotted.
+                {#if apIndepMix > 0 && contaminated}<strong>{contaminated.events.length}</strong>
+                  placed, {Math.round(contaminated.share * 100)}% of the trace's variance. The
+                  recovery below is running on the contaminated trace.{/if}
+              </p>
               {#if hasRegions}
                 <p class="ctl-note">Region windows (ADR-0035) — baseline uses the last <em>max</em>; treatments delay by <em>delay</em> then run to <em>max</em>; hiK uses the whole period.</p>
                 <label class="ctl">
@@ -1307,6 +1366,17 @@
         <div class="band-head">
           <span class="plot-label">reconstruction — actual dF/F₀ vs predicted (density ⊛ {methodLabel} kernel), {colLabel(selectedCol)}</span>
           <div class="head-right">
+            <!-- The AP-independent dial lives in a collapsed fold, and everything on this
+                 page — the trace, the kernel, all four §3 checks — is computed from the
+                 doctored trace once it is off zero. Say so where the numbers are, not only
+                 where the control is: a contaminated recovery must never be mistakable for
+                 a measurement of the loaded file. -->
+            {#if apIndepMix > 0}
+              <span class="contam" title="Synthetic AP-independent calcium is mixed into this trace — the recovery below is not a measurement of the loaded file">
+                ⚠ AP-independent mix {apIndepMix.toFixed(2)} — synthetic
+                <button class="linkbtn" onclick={() => (apIndepMix = 0)}>clear</button>
+              </span>
+            {/if}
             {#if zoomRange}
               <span class="zoomnote zoomed">zoomed {zoomRange[0].toFixed(0)}–{zoomRange[1].toFixed(0)} s · click plot to reset</span>
             {:else}
@@ -1886,6 +1956,28 @@
     color: var(--text);
     opacity: 0.75;
     font-style: italic;
+  }
+  /* End labels under a slider whose ENDS carry the meaning (matches Tabs 1 & 3). */
+  .ctl-ends {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 10.5px;
+    color: var(--text);
+    margin-top: -4px;
+  }
+  /* Contamination badge — deliberately loud, and always visible while the dial is off zero. */
+  .contam {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text-h);
+    background: var(--accent-bg);
+    border: 1px solid var(--accent-border);
+    border-radius: 999px;
+    padding: 2px 9px;
   }
 
   /* indicator strip — neutral facts (ADR-0025), deliberately NOT pass/fail colored */
