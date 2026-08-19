@@ -704,17 +704,20 @@ here?" or "does it affect the other tab?":
   teaching kernel's **peak height (dF/F₀)** is a separate, user-set axis — a `buildKernel` amplitude
   factor surfaced as a Tab 1 slider (UI default 0.1) so physiological σ is not dwarfed by a peak-1
   kernel ([ADR-0032](docs/adr/0032-tab1-kernel-amplitude-control.md)).
-- **Scoped to the signal, default 0** — the **AP-independent calcium dial** (0 → 1;
-  [ADR-0049](docs/adr/0049-ap-independent-calcium-slider.md)), the second signal-model control
-  beside noise injection and the *malign* counterpart to it: no λ removes it and no averaging
-  shrinks it. `0` = every sample is calcium a kernel explains (the null model this whole tool
-  tests); `1` = the spike train explains none of it. Its scope follows the **signal**, not the tab:
-  Tabs 1 and 3 share **one bound value** because Tab 3 deconvolves the signal Tab 1 synthesizes
-  (§11.3), while Tab 2's is tab-local — applied to whatever is loaded, exactly like its noise
-  slider — with Tab 1's contamination riding in through the existing handoff. Events are modeled on
-  `_80` ROI 1 (§3) and placed only in spike-free stretches. It is a **what-if dial, never a
-  correction**: it adds a known violation so its cost on the §3 checks can be measured, and never
-  removes or repairs anything. Tab 0's premise figure is deliberately outside it (ADR-0049).
+- **Global, in the chrome, default 0** — the **AP-independent calcium dial** (0 → 1;
+  [ADR-0049](docs/adr/0049-ap-independent-calcium-slider.md), scope and placement settled by
+  [ADR-0050](docs/adr/0050-ap-independent-dial-is-global-chrome.md)), the second signal-model
+  control beside noise injection and the *malign* counterpart to it: no λ removes it and no
+  averaging shrinks it. `0` = every sample is calcium a kernel explains (the null model this whole
+  tool tests); `1` = the spike train explains none of it. It is **one global value in a strip under
+  the tab row** — not a rail control on any tab — because it breaks the premise *all three tabs
+  share*, so it must be in the same place, always visible, on every one of them. It is applied
+  **exactly once**, wherever the signal is (Tab 1 into its synthesis, Tab 2 into whatever is
+  loaded), which is why the Tab 1 → Tab 2 handoff carries the *uncontaminated* trace. Events are
+  modeled on `_80` ROI 1 (§3) and placed only in spike-free stretches. It is a **what-if dial,
+  never a correction**: it adds a known violation so its cost on the §3 checks can be measured, and
+  never removes or repairs anything — so wherever its numbers land, they carry a visible synthetic
+  marker. Tab 0's premise figure is deliberately outside it (ADR-0049).
 
 ### 11.3 Cross-tab flow
 

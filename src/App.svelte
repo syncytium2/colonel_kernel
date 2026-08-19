@@ -7,6 +7,7 @@
   import Shell from './lib/Shell.svelte';
   import Help from './lib/Help.svelte';
   import Tab3 from './lib/Tab3.svelte';
+  import ApIndependentBar from './lib/ApIndependentBar.svelte';
   import {
     makeGrid,
     rasterize,
@@ -100,10 +101,13 @@
   // AP-independent calcium (FOUNDATIONS §3, modeled on _80 ROI 1). The forward model above
   // is the tool's NULL HYPOTHESIS — every calcium event is this kernel stamped once per
   // spike — and this dial is how far it fails: 0 = all of it is kernel-explained, 1 = none
-  // of it is (slow humps and big symmetric events with no spike underneath). It sits on the
-  // Tab 1 pipeline rather than in the plot layer, so the contamination is IN the signal that
-  // flows on to Tab 3 and into Tab 2's recovery — the same one-signal path the noise tool
-  // uses (§11.3). Defaults to 0: the clean identity is still the first thing a learner sees.
+  // of it is (slow humps and big symmetric events with no spike underneath).
+  //
+  // GLOBAL (ADR-0050), and owned here because its control is app chrome, not any tab's rail:
+  // one number, one place, on every tab that carries a signal. It is applied ONCE, wherever
+  // the signal is — Tab 1 mixes it into its synthesis, Tab 2 into whatever it has loaded —
+  // which is why the Tab 2 handoff below deliberately carries the UNCONTAMINATED trace.
+  // Defaults to 0: the clean identity is still the first thing a learner sees.
   let apIndepMix = $state(0); // 0 … 1
 
   function selectKernel(id) {
@@ -124,11 +128,15 @@
   const output = $derived(convolveOnGrid(raster.samples, grid, kernel));
 
   // The measured signal = the convolution PLUS whatever AP-independent calcium the dial
-  // asks for. Everything downstream (the plot, the SNR, the noise realization, the Tab 2
-  // handoff, Tab 3's inference) reads this rather than `output`, so one dial contaminates
-  // the whole path — which is the point: a kernel that only ever meets kernel-shaped data
+  // asks for. The plot, the SNR readout, the noise realization and Tab 3's inference all
+  // read this rather than `output` — a kernel that only ever meets kernel-shaped data
   // teaches the wrong lesson (FOUNDATIONS §7).
-  const contaminated = $derived(mixApIndependent(output.samples, grid, spikeTimes, apIndepMix));
+  //
+  // The span is the OUTPUT's, not the grid's: the convolution tail runs past the window and
+  // the handoff CSV carries that tail, so placing events against the grid alone would put
+  // Tab 1's last event somewhere Tab 2's copy of the same signal would not.
+  const outGrid = $derived({ t0: grid.t0, dt: grid.dt, n: output.samples.length });
+  const contaminated = $derived(mixApIndependent(output.samples, outGrid, spikeTimes, apIndepMix));
 
   const kernelEntry = $derived(KERNEL_LIBRARY.find((k) => k.id === kernelId));
   const gridTimes = $derived(Array.from(grid.times));
@@ -145,6 +153,14 @@
   // draws a new realization. Recomputes on output.samples / noiseLevel / noiseSeed.
   const noisyOut = $derived.by(() =>
     sigma > 0 ? Array.from(addAWGN(contaminated.samples, sigma, mulberry32(noiseSeed))) : null,
+  );
+
+  // The SAME noise realization on the UNCONTAMINATED trace — the fluorescence Tab 2 is
+  // handed. The dial is global and applied exactly once: Tab 2 mixes AP-independent calcium
+  // into whatever it has loaded, so shipping it already-contaminated would place every event
+  // twice. Same seed ⇒ the two traces differ only by the events, never by the noise.
+  const noisyClean = $derived.by(() =>
+    sigma > 0 ? Array.from(addAWGN(output.samples, sigma, mulberry32(noiseSeed))) : null,
   );
 
   // SNR = peak of the CLEAN output / σ. Loop over samples (don't spread a big array
@@ -169,7 +185,11 @@
   let handoff = $state(null);
   function buildHandoffCsv() {
     const t = outTimes;
-    const y = noisyOut ?? outValues; // measurement fluorescence = noisy realization when noise is on
+    // Measurement fluorescence = the noisy realization when noise is on — but WITHOUT the
+    // AP-independent events. The dial is global and Tab 2 applies it to whatever it loads
+    // (ADR-0050), so the events are placed there, from the same spike train on the same
+    // span, rather than shipped and then placed a second time.
+    const y = noisyClean ?? Array.from(output.samples);
     const sp = spikeTimes;
     const rows = ['time,spikes,dFF0'];
     for (let i = 0; i < t.length; i++) {
@@ -280,21 +300,30 @@
     </button>
   </nav>
 
+  <!-- The AP-independent dial: app chrome, not a rail control, so it is in the SAME place on
+       every tab that carries a signal and never behind a fold. The premise it breaks
+       (`calcium = spikes ⊗ kernel`) is assumed by all three of them, so the means of
+       breaking it should not have to be hunted for on any of them. Hidden on Tab 0, whose
+       premise figure is a composed argument rather than a signal this governs. -->
+  {#if tab !== 0}
+    <ApIndependentBar bind:mix={apIndepMix} {tab} />
+  {/if}
+
   {#if tab === 0}
     <Help onNavigate={navFromHelp} />
   {:else if tab === 2}
     {#if challenge2}
       <BeatTheColonel {wide} />
     {:else}
-      <Tab2 {wide} {handoff} />
+      <Tab2 {wide} {handoff} {apIndepMix} />
     {/if}
   {:else if tab === 3}
     {#if challenge3}
       <GuessTheSpikes {wide} />
     {:else}
-      <!-- apIndepMix is BOUND, not copied: Tab 3 deconvolves the very signal Tab 1
-           synthesized (§11.3), so two independent dials would be two different traces
-           wearing one name. The slider appears in both rails and moves one value. -->
+      <!-- Tab 3 deconvolves the very signal Tab 1 synthesized (§11.3), so it takes the
+           contaminated trace and the dial's numbers read-only — the one control that sets
+           them is the strip above, on every tab. -->
       <Tab3
         {wide}
         {grid}
@@ -306,7 +335,7 @@
         {gridTimes}
         {rasterSamples}
         spikeCount={raster.placed}
-        bind:apIndepMix
+        {apIndepMix}
         apIndepEvents={contaminated.events.length}
         apIndepShare={contaminated.share}
       />
@@ -388,28 +417,6 @@
           </p>
         </div>
 
-        <!-- AP-independent calcium (FOUNDATIONS §3). Next to the noise tool because both are
-             ways the measured trace departs from `input ⊗ kernel` — but this one is not
-             random, and no amount of averaging or regularization removes it. -->
-        <div class="field">
-          <label for="apindep">AP-independent calcium</label>
-          <div class="params">
-            <label class="slider">
-              <span>Mix</span>
-              <input id="apindep" type="range" min="0" max="1" step="0.01" bind:value={apIndepMix} />
-              <output>{apIndepMix.toFixed(2)}</output>
-            </label>
-          </div>
-          <div class="ends"><span>0 · all kernel</span><span>all AP-independent · 1</span></div>
-          <p class="hint">
-            Calcium with no spike underneath — slow humps and big near-symmetric events,
-            modeled on <em>_80</em> ROI 1 (FOUNDATIONS §3). At 0 every sample is input ⊗
-            kernel; raising it fades the AP-linked signal out and places events in the widest
-            spike-free stretches, so at 1 the spike train explains nothing.
-            {#if apIndepMix > 0}<strong>{contaminated.events.length}</strong> placed — they
-              travel with the signal into Tabs 2 and 3.{/if}
-          </p>
-        </div>
 
         <details class="advanced">
           <summary>Advanced — timebase (global)</summary>
@@ -662,16 +669,6 @@
   .slider > output { grid-area: out; font-family: var(--mono); font-size: 12px; text-align: right; }
   .slider > input { grid-area: rng; width: 100%; }
   .noise-readout { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
-  /* End labels under a slider whose ENDS carry the meaning — a bare 0…1 says nothing
-     about which way is "the kernel explains everything". */
-  .ends {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 10.5px;
-    color: var(--text);
-    margin-top: -2px;
-  }
   .reseed {
     font: inherit;
     font-size: 13px;

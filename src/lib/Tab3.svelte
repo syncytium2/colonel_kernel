@@ -28,11 +28,9 @@
     gridTimes = [],
     rasterSamples = [],
     spikeCount = 0,
-    // AP-independent calcium: BOUND to Tab 1's dial, because this tab deconvolves Tab 1's
-    // signal (§11.3). The slider is repeated here rather than duplicated — the value is the
-    // same one — so the contamination can be raised from the tab where its consequence
-    // (spikes inferred under calcium no spike caused) is visible.
-    apIndepMix = $bindable(0),
+    // AP-independent calcium — read-only here. The dial is global app chrome (ADR-0050);
+    // this tab reports what it did to the signal it is inverting.
+    apIndepMix = 0,
     apIndepEvents = 0,
     apIndepShare = 0,
   } = $props();
@@ -105,33 +103,24 @@
       </p>
     </div>
 
-    <!-- AP-independent calcium (FOUNDATIONS §3) — the same dial as Tab 1's, on the same
-         signal. It belongs here too because this is where its consequence is starkest:
-         naive inversion has no way to say "no spike caused this", so it answers a hump
-         with spikes that were never fired. -->
-    <div class="field">
-      <label for="apindep3">AP-independent calcium</label>
-      <div class="params">
-        <label class="slider">
-          <span>Mix</span>
-          <input id="apindep3" type="range" min="0" max="1" step="0.01" bind:value={apIndepMix} />
-          <output>{fx(apIndepMix, 2)}</output>
-        </label>
+    <!-- The dial itself is in the strip above the tabs, the same place on every tab. What
+         belongs HERE is its consequence, which is starkest on this tab: naive inversion has
+         no way to say "no spike caused this", so it answers a hump with spikes that were
+         never fired, and nothing in its output marks which ones. -->
+    {#if apIndepMix > 0}
+      <div class="note">
+        <strong>AP-independent calcium is mixed in ({fx(apIndepMix, 2)}).</strong>
+        {apIndepEvents} event{apIndepEvents === 1 ? '' : 's'} in this trace had no spike
+        underneath, carrying {Math.round(apIndepShare * 100)}% of its variance. The
+        deconvolution is not told, and cannot be — it has only the trace and the kernel.
       </div>
-      <div class="ends"><span>0 · all kernel</span><span>all AP-independent · 1</span></div>
-      <p class="hint">
-        Calcium with no spike underneath — slow humps and big near-symmetric events, modeled
-        on <em>_80</em> ROI 1. The deconvolution is not told; it invents spikes under them.
-        {#if apIndepMix > 0}<strong>{apIndepEvents}</strong> placed, carrying
-          {Math.round(apIndepShare * 100)}% of the trace's variance.{/if}
-      </p>
-    </div>
+    {/if}
 
     <div class="note subtle">
       Trace + kernel come from <strong>Tab 1</strong>. Change the spikes, kernel,
       or noise there, then return here to see how recovery copes. The
-      AP-independent dial above is <em>the same dial</em> as Tab 1's — one signal,
-      two rails.
+      <em>AP-independent calcium</em> dial above the tabs works on this trace from
+      any tab — one signal, one dial.
     </div>
   {/snippet}
 
@@ -274,15 +263,6 @@
   .slider > span { grid-area: lab; font-size: 12.5px; }
   .slider > output { grid-area: out; font-family: var(--mono); font-size: 12px; text-align: right; }
   .slider > input { grid-area: rng; width: 100%; }
-  /* End labels under a slider whose ENDS carry the meaning (matches Tab 1's rail). */
-  .ends {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 10.5px;
-    color: var(--text);
-    margin-top: -2px;
-  }
 
   .sum-eq { font-family: var(--mono); font-size: 15px; color: var(--text-h); }
   .sum-sub { font-size: 12.5px; color: var(--text); margin-top: 3px; }

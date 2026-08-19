@@ -125,7 +125,15 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   band `⚠ … synthetic` while it is off zero. Measured payoff: the default handoff's
   retained-kernel R² goes **0.89 → −0.56** at mix 0.45, and a real 37-ROI recording's
   reconstruction R² **0.42 → −0.61** at 0.40.
-  [ADR-0049](docs/adr/0049-ap-independent-calcium-slider.md). **Not yet deployed.**
+  [ADR-0049](docs/adr/0049-ap-independent-calcium-slider.md). **Deployed 2026-08-18.**
+- **…and the dial moved to the chrome the same day
+  ([ADR-0050](docs/adr/0050-ap-independent-dial-is-global-chrome.md))** — three per-tab
+  sliders in three rail positions, one inside Tab 2's collapsed Advanced fold, is three
+  places to hunt for one idea; and Tab 2's slider could read 0.00 over a trace Tab 1 had
+  already contaminated through the handoff. Now **one global value** in a full-width strip
+  under the tab row, identical position on Tabs 1–3, hidden on Tab 0 — applied **exactly
+  once**, which is why the handoff now carries the *uncontaminated* trace and Tab 2 places
+  the events itself. Each tab keeps its own statement of consequence.
 
 Core suite: **260 passing**, plus `npm run template-acceptance`.
 Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-08-05.**

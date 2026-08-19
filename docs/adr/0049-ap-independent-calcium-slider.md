@@ -2,7 +2,14 @@
 
 ## Status
 
-Accepted
+Accepted — **§5 superseded by [ADR-0050](0050-ap-independent-dial-is-global-chrome.md)**
+(2026-08-18). The dial's *scope and placement* changed the day it shipped: three per-tab
+sliders in three different rail positions, one of them inside a collapsed fold, meant three
+places to hunt for one idea. It is now a single global value in a strip under the tab row,
+applied exactly once — which also required the Tab 1 → Tab 2 handoff to carry the
+uncontaminated trace. Everything else below stands: the mixing model, the derived onsets, the
+fade-in, the `_80` amplitudes and morphologies, and Tab 0's exclusion.
+
 (**Extends canon.** FOUNDATIONS §11.2's control-scope list gains a second signal-model dial
 beside noise injection; §3's AP-independent phenomenon becomes something the app can *do*, not
 only something it documents. Changes no earlier decision. Tab 0's premise figure is deliberately

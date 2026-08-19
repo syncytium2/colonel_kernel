@@ -57,7 +57,18 @@
   // SAME loadCsv path a file uses, exactly once (see the guarded $effect below). A file
   // the user drops does NOT change the id, so it is never re-clobbered; a fresh Tab 2
   // entry carries a new id and reloads the current Tab 1 signal.
-  let { wide = false, handoff = null } = $props();
+  let {
+    wide = false,
+    handoff = null,
+    // AP-independent calcium (FOUNDATIONS §3, modeled on _80 ROI 1): 0 = the loaded trace as
+    // it is, every event assumed kernel-explained; 1 = a trace whose calcium the spike train
+    // cannot account for at all. GLOBAL and set from the strip above the tabs (ADR-0050) —
+    // this tab applies it to whatever is loaded, so the cost of a known violation is measured
+    // on THIS recording's §3 checks rather than argued in the abstract. The Tab 1 handoff
+    // arrives UNCONTAMINATED for that reason: the events are placed here, once.
+    // A what-if dial, never a correction.
+    apIndepMix = 0,
+  } = $props();
 
   // Pipeline constants — match the validated lab driver / machinery check.
   // User-settable kernel + STA windows (2026-07-03). Were consts WIN=5 / staWinS=2; now state so
@@ -161,12 +172,6 @@
 
   let lambdaLog = $state(LOG_LO); // log10(λ); default λ = 0.002 (sweep floor / UI default)
   let noiseLevel = $state(0); // × cohort-typical σ, 0–10, default 0/off (ADR-0015)
-  // AP-independent calcium (FOUNDATIONS §3, modeled on _80 ROI 1): 0 = the loaded trace as
-  // it is, every event assumed kernel-explained; 1 = a trace whose calcium the spike train
-  // cannot account for at all. Tab-local and default 0, exactly like the noise slider — this
-  // ADDS a known violation to whatever is loaded so its cost is measured on THIS recording's
-  // §3 checks, not argued in the abstract. It is a what-if dial, never a correction.
-  let apIndepMix = $state(0); // 0 … 1
   const lambda = $derived(10 ** lambdaLog);
 
   // ADR-0035 region-protocol windowing — user-adjustable (minutes); defaults mirror
@@ -1206,24 +1211,19 @@
                 <input type="range" min="0" max="10" step="0.5" bind:value={noiseLevel} />
                 <output>{noiseLevel.toFixed(1)}×</output>
               </label>
-              <!-- AP-independent calcium (FOUNDATIONS §3) — a what-if dial, never a
-                   correction. It injects the violation this recording's kernel is supposed
-                   to be free of, so the §3 checks can be watched failing on data whose
-                   answer is known. -->
-              <label class="ctl">
-                <span>AP-independent calcium</span>
-                <input type="range" min="0" max="1" step="0.01" bind:value={apIndepMix} />
-                <output>{apIndepMix.toFixed(2)}</output>
-              </label>
-              <div class="ctl-ends"><span>0 · all kernel</span><span>all AP-independent · 1</span></div>
-              <p class="ctl-note">
-                Adds calcium with no AP underneath — slow humps and big near-symmetric events,
-                modeled on <em>_80</em> ROI 1 — and fades the loaded trace out as it rises, so
-                at 1 the spike train explains none of what is plotted.
-                {#if apIndepMix > 0 && contaminated}<strong>{contaminated.events.length}</strong>
-                  placed, {Math.round(contaminated.share * 100)}% of the trace's variance. The
-                  recovery below is running on the contaminated trace.{/if}
-              </p>
+              <!-- The AP-independent dial is NOT here: it is in the strip above the tabs,
+                   the same place on every tab (ADR-0050). It used to sit in this fold, which
+                   is the one place a control that must always be at hand cannot be. What
+                   remains is the statement of what it did to THIS recording. -->
+              {#if apIndepMix > 0 && contaminated}
+                <p class="ctl-note">
+                  <strong>AP-independent calcium is mixed in ({apIndepMix.toFixed(2)}).</strong>
+                  {contaminated.events.length} synthetic event{contaminated.events.length === 1 ? '' : 's'}
+                  with no AP underneath, {Math.round(contaminated.share * 100)}% of the trace's
+                  variance — the recovery and all four §3 checks are running on the
+                  contaminated trace.
+                </p>
+              {/if}
               {#if hasRegions}
                 <p class="ctl-note">Region windows (ADR-0035) — baseline uses the last <em>max</em>; treatments delay by <em>delay</em> then run to <em>max</em>; hiK uses the whole period.</p>
                 <label class="ctl">
@@ -1372,9 +1372,8 @@
                  where the control is: a contaminated recovery must never be mistakable for
                  a measurement of the loaded file. -->
             {#if apIndepMix > 0}
-              <span class="contam" title="Synthetic AP-independent calcium is mixed into this trace — the recovery below is not a measurement of the loaded file">
+              <span class="contam" title="Synthetic AP-independent calcium is mixed into this trace — the recovery below is not a measurement of the loaded file. Clear it with the dial above the tabs.">
                 ⚠ AP-independent mix {apIndepMix.toFixed(2)} — synthetic
-                <button class="linkbtn" onclick={() => (apIndepMix = 0)}>clear</button>
               </span>
             {/if}
             {#if zoomRange}
@@ -1956,15 +1955,6 @@
     color: var(--text);
     opacity: 0.75;
     font-style: italic;
-  }
-  /* End labels under a slider whose ENDS carry the meaning (matches Tabs 1 & 3). */
-  .ctl-ends {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 10.5px;
-    color: var(--text);
-    margin-top: -4px;
   }
   /* Contamination badge — deliberately loud, and always visible while the dial is off zero. */
   .contam {
