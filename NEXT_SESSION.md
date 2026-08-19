@@ -115,7 +115,19 @@ All four tabs are built and live. Since the last handoff update (2026-07-08):
   the built bundle with `scripts/screenshot.mjs` (zero console errors, app mounts over the
   static summary). **Not yet deployed.**
 
-Core suite: **240 passing**, plus `npm run template-acceptance`.
+- **AP-independent calcium is now a dial, not just a claim (2026-08-18, branch
+  `ap-independent-slider`)** — Tabs 1, 2 and 3 each get a 0 → 1 slider: `0` = every sample is
+  calcium a kernel explains, `1` = the spike train explains none of it. The AP-linked part
+  fades as events accumulate in the widest spike-free stretches, modeled on `_80` ROI 1
+  (§3) — the two morphologies move out of `premise-sim.js` into `core/ap-independent.js` and
+  are re-exported, so Tab 0's figure and the new control share one definition. Tabs 1/3 share
+  one bound value (one signal, two rails); Tab 2's is tab-local and badges the reconstruction
+  band `⚠ … synthetic` while it is off zero. Measured payoff: the default handoff's
+  retained-kernel R² goes **0.89 → −0.56** at mix 0.45, and a real 37-ROI recording's
+  reconstruction R² **0.42 → −0.61** at 0.40.
+  [ADR-0049](docs/adr/0049-ap-independent-calcium-slider.md). **Not yet deployed.**
+
+Core suite: **260 passing**, plus `npm run template-acceptance`.
 Deployed state: see [DEPLOYED.md](DEPLOYED.md) — **current as of 2026-08-05.**
 
 **History was rewritten on 2026-07-31 (dated 07-30 in the commits).** The reverted

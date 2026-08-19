@@ -36,6 +36,15 @@ import { loadCsv } from './load-csv.js';
 import { spikeTriggeredAverage } from './sta.js';
 import * as XLSX from 'xlsx';
 import { simulatePremise, SIM, EVENT_SHAPES } from './premise-sim.js';
+import {
+  AP_INDEPENDENT_SHAPES,
+  AP_INDEPENDENT_DEFAULTS,
+  candidateOnsets,
+  apIndependentEvents,
+  apIndependentTrace,
+  referenceAmplitude,
+  mixApIndependent,
+} from './ap-independent.js';
 import { loadWorkbook, windowRegion, regionsOf, regionViewToLoadedRegion, regionType, regionAnalysisWindow, SOLUTION_DELAY_S, REGION_MIN_S, REGION_MAX_S } from './load-xlsx.js';
 import { recoverRegion, spikeSufficiency } from './region-recovery.js';
 
@@ -979,6 +988,143 @@ ok('spikeSufficiency: at/above floor → sufficient', spikeSufficiency(25, 0.2, 
     ok('premise-sim: the slow event outlasts the narrow one several times over',
       hs.dn > hn.dn * 4, `slow ${hs.dn}s vs narrow ${hn.dn}s`);
   }
+}
+
+// --- AP-independent mixing (the per-tab slider's model) ---------------------
+// The slider claims something specific at each end — 0: every sample is calcium a
+// kernel explains; 1: none of it is — and something specific in between: events
+// ACCUMULATE where no spike can account for them. Each of those is a testable
+// property, and each is load-bearing: an event that lands on a spike is not a
+// demonstration of AP-independent calcium, it is a demonstration of a big response.
+{
+  const grid = makeGrid({ sampleRate: 10, duration: 300 });
+  const spikes = [];
+  for (let t = 12; t < 295; t += 9.7) spikes.push(round2(t)); // regular-ish 0.1 Hz train
+  const raster = rasterize(spikes, grid);
+  const apKernel = buildKernel('calcium', { tauRise: 0.2, tauDecay: 0.4 }, grid.dt, 0.1);
+  const apLinked = convolveOnGrid(raster.samples, grid, apKernel).samples.slice(0, grid.n);
+  const mixed = (m, opts) => mixApIndependent(apLinked, grid, spikes, m, opts);
+
+  // --- the two ends of the slider ---
+  const at0 = mixed(0);
+  ok('ap-independent: mix 0 leaves the trace untouched',
+    at0.samples === apLinked && at0.events.length === 0 && at0.share === 0);
+
+  const at1 = mixed(1);
+  let apLeft = 0;
+  for (let i = 0; i < grid.n; i++) apLeft += Math.abs(at1.samples[i] - at1.apIndependent[i]);
+  ok('ap-independent: mix 1 leaves NO AP-linked calcium — the spikes explain nothing',
+    apLeft === 0 && at1.share === 1);
+
+  // --- events accumulate, and only accumulate ---
+  const counts = [0, 0.1, 0.25, 0.5, 0.75, 1].map((m) => mixed(m).events.length);
+  ok('ap-independent: event count is non-decreasing in mix',
+    counts.every((c, i) => i === 0 || c >= counts[i - 1]), counts.join(' → '));
+  ok('ap-independent: mix 1 places the declared density',
+    counts[counts.length - 1] === Math.round((AP_INDEPENDENT_DEFAULTS.ratePerMin * 300) / 60),
+    `${counts[counts.length - 1]} events in 5 min`);
+
+  // Dragging the slider must never RESHUFFLE what is already on screen — an event that
+  // jumped or changed height as a later one arrived would read as the slider editing the
+  // past. Times and amplitudes are keyed to rank, so the earlier set is a prefix.
+  const early = mixed(0.5).events;
+  const later = mixed(1).events;
+  const stable = early.every((e) =>
+    later.some((f) => f.atS === e.atS && approx(f.amp, e.amp, 1e-12) && f.shape === e.shape));
+  ok('ap-independent: raising the mix only ADDS events — it never moves the existing ones', stable);
+
+  // --- the newest event fades in, so the slider is continuous, not a staircase ---
+  const fractional = mixed(0.55).events.filter((e) => e.weight > 0 && e.weight < 1);
+  ok('ap-independent: at most one event is mid-fade at any slider position',
+    fractional.length <= 1, `${fractional.length} fractional`);
+  {
+    const a = mixed(0.30).samples, b = mixed(0.31).samples;
+    let worst = 0;
+    for (let i = 0; i < grid.n; i++) worst = Math.max(worst, Math.abs(a[i] - b[i]));
+    ok('ap-independent: a 0.01 slider step never jumps the trace by a whole event',
+      worst < 0.05, `worst step ${worst.toFixed(4)} dF/F₀`);
+  }
+
+  // --- placement: no spike may be able to explain an event ---
+  {
+    const p = AP_INDEPENDENT_DEFAULTS;
+    const worst = Math.min(
+      ...at1.events.map((e) => Math.min(...spikes.map((t) => Math.abs(t - e.atS)))),
+    );
+    ok('ap-independent: every event onset sits in a spike-free stretch',
+      worst >= Math.min(p.settleAfterSpikeS, p.clearBeforeSpikeS), `nearest spike ${worst.toFixed(2)}s`);
+    // Best-first: the FIRST event the slider brings in is the least ambiguous one there is.
+    const ranked = candidateOnsets(spikes, { t0: 0, tEnd: 300 }, p);
+    ok('ap-independent: candidate onsets are ranked by clearance, best first',
+      ranked.every((c, i) => i === 0 || c.clearanceS <= ranked[i - 1].clearanceS));
+    ok('ap-independent: a spike-free window is one long stretch, not zero',
+      candidateOnsets([], { t0: 0, tEnd: 300 }, p).length > 1);
+  }
+
+  // --- modeled on _80: big, and the wrong shape ---
+  {
+    const ref = referenceAmplitude(apLinked);
+    const [lo, hi] = AP_INDEPENDENT_DEFAULTS.ampRange;
+    ok('ap-independent: events are _80-scaled — every one taller than the AP-linked events',
+      at1.events.every((e) => e.amp >= lo * ref && e.amp <= hi * ref) && lo > 1,
+      `ref ${ref.toFixed(3)} dF/F₀`);
+    ok('ap-independent: both _80 morphologies are in play by the second event',
+      new Set(mixed(0.25).events.map((e) => e.shape)).size === 2);
+    ok('ap-independent: every event names a defined shape',
+      at1.events.every((e) => AP_INDEPENDENT_SHAPES[e.shape] !== undefined));
+  }
+
+  // --- what the slider is FOR: the spike train stops explaining the trace ---
+  {
+    const corr = (a, b) => {
+      let ma = 0, mb = 0;
+      for (let i = 0; i < grid.n; i++) { ma += a[i]; mb += b[i]; }
+      ma /= grid.n; mb /= grid.n;
+      let num = 0, va = 0, vb = 0;
+      for (let i = 0; i < grid.n; i++) {
+        const x = a[i] - ma, y = b[i] - mb;
+        num += x * y; va += x * x; vb += y * y;
+      }
+      return num / Math.sqrt(va * vb);
+    };
+    const rs = [0, 0.25, 0.5, 0.75, 1].map((m) => corr(apLinked, mixed(m).samples));
+    ok('ap-independent: correlation with the AP-linked truth falls monotonically',
+      rs.every((r, i) => i === 0 || r < rs[i - 1]), rs.map((r) => r.toFixed(2)).join(' → '));
+    ok('ap-independent: at mix 1 the truth is uncorrelated with what is measured',
+      Math.abs(rs[rs.length - 1]) < 0.2, rs[rs.length - 1].toFixed(3));
+  }
+
+  // --- reproducibility + the loaded-data path ---
+  ok('ap-independent: seeded output is reproducible',
+    mixed(0.4).samples.every((v, i) => v === mixed(0.4).samples[i]));
+  ok('ap-independent: a different seed places different events',
+    mixed(0.4, { seed: 99 }).events[0].amp !== mixed(0.4).events[0].amp);
+  {
+    // A loaded ROI column carries NaN gaps and an arbitrary baseline; both must survive.
+    const withGaps = Float64Array.from(apLinked);
+    withGaps[100] = NaN;
+    const r = mixApIndependent(withGaps, grid, spikes, 0.5);
+    ok('ap-independent: NaN gaps in a loaded column stay gaps', Number.isNaN(r.samples[100]));
+
+    const spiky = Float64Array.from(apLinked);
+    spiky[7] = 50; // one artifact sample
+    ok('ap-independent: the reference amplitude ignores a single outlier',
+      approx(referenceAmplitude(spiky), referenceAmplitude(apLinked), 1e-9));
+  }
+
+  // Stamping is convolution with an impulse: one event at t reproduces its own shape.
+  {
+    const e = [{ atS: 50, amp: 0.2, shape: 'narrow' }];
+    const trace = apIndependentTrace(grid, e);
+    let pk = 0, ipk = 0;
+    for (let i = 0; i < trace.length; i++) if (trace[i] > pk) { pk = trace[i]; ipk = i; }
+    ok('ap-independent: an event peaks at its stated amplitude, at its stated time',
+      approx(pk, 0.2, 1e-9) && approx(grid.times[ipk], 50, grid.dt));
+  }
+}
+
+function round2(v) {
+  return Math.round(v * 100) / 100;
 }
 
 // --- summary ----------------------------------------------------------------

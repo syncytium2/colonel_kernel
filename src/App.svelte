@@ -18,6 +18,7 @@
     sigmaForLevel,
     addAWGN,
     mulberry32,
+    mixApIndependent,
   } from './lib/core/index.js';
 
   // --- tab selection ---
@@ -96,6 +97,15 @@
   let noiseLevel = $state(3); // 0 … NOISE_LEVEL_MAX, cohort-typical σ multiples
   let noiseSeed = $state(1); // reseed → new realization; stable across unrelated re-renders
 
+  // AP-independent calcium (FOUNDATIONS §3, modeled on _80 ROI 1). The forward model above
+  // is the tool's NULL HYPOTHESIS — every calcium event is this kernel stamped once per
+  // spike — and this dial is how far it fails: 0 = all of it is kernel-explained, 1 = none
+  // of it is (slow humps and big symmetric events with no spike underneath). It sits on the
+  // Tab 1 pipeline rather than in the plot layer, so the contamination is IN the signal that
+  // flows on to Tab 3 and into Tab 2's recovery — the same one-signal path the noise tool
+  // uses (§11.3). Defaults to 0: the clean identity is still the first thing a learner sees.
+  let apIndepMix = $state(0); // 0 … 1
+
   function selectKernel(id) {
     kernelId = id;
     params = defaultParams(id); // reset params to the new shape's defaults
@@ -113,11 +123,18 @@
   const kernel = $derived(buildKernel(kernelId, params, grid.dt, kernelAmp));
   const output = $derived(convolveOnGrid(raster.samples, grid, kernel));
 
+  // The measured signal = the convolution PLUS whatever AP-independent calcium the dial
+  // asks for. Everything downstream (the plot, the SNR, the noise realization, the Tab 2
+  // handoff, Tab 3's inference) reads this rather than `output`, so one dial contaminates
+  // the whole path — which is the point: a kernel that only ever meets kernel-shaped data
+  // teaches the wrong lesson (FOUNDATIONS §7).
+  const contaminated = $derived(mixApIndependent(output.samples, grid, spikeTimes, apIndepMix));
+
   const kernelEntry = $derived(KERNEL_LIBRARY.find((k) => k.id === kernelId));
   const gridTimes = $derived(Array.from(grid.times));
   const rasterSamples = $derived(Array.from(raster.samples));
   const outTimes = $derived(Array.from(output.times));
-  const outValues = $derived(Array.from(output.samples));
+  const outValues = $derived(Array.from(contaminated.samples));
 
   // --- measurement noise (ADR-0031) ---
   const sigma = $derived(sigmaForLevel(noiseLevel));
@@ -127,14 +144,14 @@
   // an unrelated control never reshuffles the noise — only a reseed or level change
   // draws a new realization. Recomputes on output.samples / noiseLevel / noiseSeed.
   const noisyOut = $derived.by(() =>
-    sigma > 0 ? Array.from(addAWGN(output.samples, sigma, mulberry32(noiseSeed))) : null,
+    sigma > 0 ? Array.from(addAWGN(contaminated.samples, sigma, mulberry32(noiseSeed))) : null,
   );
 
   // SNR = peak of the CLEAN output / σ. Loop over samples (don't spread a big array
   // into Math.max). Honest & teachable: a taller kernel raises the peak → raises SNR.
   const signalPeak = $derived.by(() => {
     let m = 0;
-    for (const v of output.samples) {
+    for (const v of contaminated.samples) {
       const a = Math.abs(v);
       if (a > m) m = a;
     }
@@ -275,6 +292,9 @@
     {#if challenge3}
       <GuessTheSpikes {wide} />
     {:else}
+      <!-- apIndepMix is BOUND, not copied: Tab 3 deconvolves the very signal Tab 1
+           synthesized (§11.3), so two independent dials would be two different traces
+           wearing one name. The slider appears in both rails and moves one value. -->
       <Tab3
         {wide}
         {grid}
@@ -286,6 +306,9 @@
         {gridTimes}
         {rasterSamples}
         spikeCount={raster.placed}
+        bind:apIndepMix
+        apIndepEvents={contaminated.events.length}
+        apIndepShare={contaminated.share}
       />
     {/if}
   {:else if tab === 1 && challenge1}
@@ -365,6 +388,29 @@
           </p>
         </div>
 
+        <!-- AP-independent calcium (FOUNDATIONS §3). Next to the noise tool because both are
+             ways the measured trace departs from `input ⊗ kernel` — but this one is not
+             random, and no amount of averaging or regularization removes it. -->
+        <div class="field">
+          <label for="apindep">AP-independent calcium</label>
+          <div class="params">
+            <label class="slider">
+              <span>Mix</span>
+              <input id="apindep" type="range" min="0" max="1" step="0.01" bind:value={apIndepMix} />
+              <output>{apIndepMix.toFixed(2)}</output>
+            </label>
+          </div>
+          <div class="ends"><span>0 · all kernel</span><span>all AP-independent · 1</span></div>
+          <p class="hint">
+            Calcium with no spike underneath — slow humps and big near-symmetric events,
+            modeled on <em>_80</em> ROI 1 (FOUNDATIONS §3). At 0 every sample is input ⊗
+            kernel; raising it fades the AP-linked signal out and places events in the widest
+            spike-free stretches, so at 1 the spike train explains nothing.
+            {#if apIndepMix > 0}<strong>{contaminated.events.length}</strong> placed — they
+              travel with the signal into Tabs 2 and 3.{/if}
+          </p>
+        </div>
+
         <details class="advanced">
           <summary>Advanced — timebase (global)</summary>
           <div class="adv-grid">
@@ -385,15 +431,26 @@
 
       <!-- SUMMARY — readouts beside the kernel (a time band here would break ADR-0030). -->
       {#snippet summary()}
-        <div class="sum-eq">output = input ⊗ kernel</div>
+        <div class="sum-eq">
+          output = input ⊗ kernel{#if apIndepMix > 0}&nbsp;+ AP-independent calcium{/if}
+        </div>
         <div class="sum-sub">
-          Synthesized dF/F₀ trace{#if noiseLevel > 0}&nbsp;with measurement noise (ADR-0031){/if}.
+          Synthesized dF/F₀ trace{#if noiseLevel > 0}&nbsp;with measurement noise (ADR-0031){/if}{#if apIndepMix > 0}, {contaminated.events.length}
+            event{contaminated.events.length === 1 ? '' : 's'} the kernel cannot account for{/if}.
         </div>
         <div class="readouts">
           <div class="ro"><div class="k">Kernel peak</div><div class="v">{kernelAmp.toFixed(2)} <small>dF/F₀</small></div></div>
           <div class="ro"><div class="k">Noise σ</div><div class="v">{sigma.toFixed(4)} <small>dF/F₀</small></div></div>
           <div class="ro"><div class="k">SNR</div><div class="v">{noiseLevel === 0 ? 'clean' : Number.isFinite(snr) ? '≈ ' + Math.round(snr) : '—'}</div></div>
           <div class="ro"><div class="k">Spikes</div><div class="v">{raster.placed}</div></div>
+          <!-- The share of the trace's variance no kernel fit can reach, however good the
+               kernel. Variance, not peak: it is the number Tab 2's R² is about to lose. It
+               runs well ahead of the dial — a couple of minute-long humps outweigh thirty
+               one-second transients — and that gap is itself the point. -->
+          <div class="ro" title="Share of the trace's variance carried by AP-independent events — the part no kernel fit can reach, however good the kernel">
+            <div class="k">AP-indep.</div>
+            <div class="v">{apIndepMix === 0 ? 'none' : Math.round(contaminated.share * 100) + '%'}</div>
+          </div>
         </div>
         <!-- FOUNDATIONS §11.3: this synthesized signal is what Tab 2 recovers by default (the
              ground-truth loop — the kernel is known, so recovery can be scored against it). -->
@@ -602,6 +659,16 @@
   .slider > output { grid-area: out; font-family: var(--mono); font-size: 12px; text-align: right; }
   .slider > input { grid-area: rng; width: 100%; }
   .noise-readout { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
+  /* End labels under a slider whose ENDS carry the meaning — a bare 0…1 says nothing
+     about which way is "the kernel explains everything". */
+  .ends {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 10.5px;
+    color: var(--text);
+    margin-top: -2px;
+  }
   .reseed {
     font: inherit;
     font-size: 13px;
