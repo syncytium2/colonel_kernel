@@ -1,6 +1,6 @@
 ---
 # canonical: syncytium2/murderboard skills/murderboard/SKILL.md
-# vendored from https://github.com/syncytium2/murderboard @ 635c5a8 — do NOT edit here; update by re-copying.
+# vendored from https://github.com/syncytium2/murderboard @ 729fb06 — do NOT edit here; update by re-copying.
 name: murderboard
 description: Run the murderboard — the adversarial critical-review process — on a document deliverable before it ships. Use whenever the deliverable is an explainer, methods section, manuscript/abstract/cover-letter text, a figure or its caption/labels, a report, a slide deck, or a human-facing handoff. Also use when asked to "murderboard", "critically review", or "check this before I send it". Not for source code (that is the code-review path), quick conversational answers, or throwaway diagnostics.
 ---
@@ -111,7 +111,14 @@ step 3 — if it did not, the fixes are not in the file you are about to ship.
 
 ## 7. Emit the run record, then let it be checked
 
-Write the report to `docs/reviews/<artifact-stem>_<YYYY-MM-DD>.md`, opening with this header:
+**Lead with the problem, not the ledger.** The record is a document deliverable like any
+other: open with what was at stake and — where the subject is visual — a figure showing
+it, then what was found, then what would validate it and how it generalises. The header
+and role ledger below are an **appendix**: required, checkable, and not the first thing a
+reader meets. A record ordered by process proves the roles ran and tells nobody what was
+learned (see *The run record is a deliverable* in the process file).
+
+Write the report to `docs/reviews/<artifact-stem>_<YYYY-MM-DD>.md`, carrying this header:
 
 ```markdown
 # Murderboard run — <artifact>

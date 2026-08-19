@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vendored from https://github.com/syncytium2/murderboard @ 635c5a8 — do NOT edit here; update by re-copying.
+# vendored from https://github.com/syncytium2/murderboard @ 729fb06 — do NOT edit here; update by re-copying.
 # murderboard_roster.sh — derive the review-team roster FROM the process file, and check
 # that a review report actually accounts for every role.
 #
