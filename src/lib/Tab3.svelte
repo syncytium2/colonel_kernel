@@ -55,6 +55,10 @@
   const report = $derived.by(() => inferenceReport(recovered, rasterSamples));
 
   // --- co-registered recording-time x (ADR-0030), same idiom as Tab 1 ---
+  // Co-registration (ADR-0030) is held by IDENTICAL axis geometry on every band, and a
+  // y-LABEL is part of that geometry, not decoration: labelling two of the three bands and
+  // not the first shifted its plot 22px left of the others (measured 408…1435 vs 430…1435)
+  // and a spike stopped dropping straight onto its response. All three carry a y-label.
   const PLOT_PAD_R = 32;
   let zoomRange = $state(null);
   function handleZoom(min, max) {
@@ -74,7 +78,10 @@
   const fx = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 </script>
 
-<Shell {wide}>
+<!-- compactTop: this tab's square shows the ASSUMED kernel — an input the user picked on Tab 1,
+     not a result — so it does not earn 42vh of the viewport while the recovered input, which is
+     what this tab exists to show, is squeezed underneath it. -->
+<Shell {wide} compactTop>
   {#snippet rail()}
     <div class="rail-title">
       <strong>Tab 3 · Spike inference</strong>
@@ -133,15 +140,14 @@
       <div class="ro"><div class="k">Peak / true</div><div class="v">{Number.isFinite(report.peakRatio) ? '×' + fx(report.peakRatio, 1) : '—'}</div></div>
       <div class="ro"><div class="k">Corr. w/ truth</div><div class="v">{fx(report.correlation, 2)}</div></div>
     </div>
+    <!-- Kept short on purpose: this panel shares a compacted top row with the kernel square,
+         so prose that runs long scrolls out of sight instead of being read. -->
     <p class="sum-foot">
-      A real spike count can't be negative — yet naive inversion produces
-      <strong>{pct(report.negativeFraction)}</strong> negative samples. That, and
-      the ringing below, is why honest spike inference needs more than a division.
+      A real spike count can't be negative — yet naive inversion returns
+      <strong>{pct(report.negativeFraction)}</strong> negative samples.
       {#if apIndepMix > 0}
-        With the AP-independent dial at <strong>{fx(apIndepMix, 2)}</strong>,
-        {apIndepEvents} event{apIndepEvents === 1 ? '' : 's'} in this trace had no spike
-        underneath at all — every spike the inversion returns there is invented, and
-        nothing in the output marks which ones.
+        And {apIndepEvents} event{apIndepEvents === 1 ? '' : 's'} here had no spike beneath
+        {apIndepEvents === 1 ? 'it' : 'them'}: every spike recovered there is invented.
       {/if}
     </p>
   {/snippet}
@@ -172,6 +178,7 @@
           color="var(--series-trace)"
           xRange={xView}
           yAxisSize={48}
+          yLabel="dF/F₀"
           padRight={PLOT_PAD_R}
           syncKey="tab3-rec-x"
           cursorPoints={true}
@@ -183,22 +190,54 @@
       </div>
     </div>
 
-    <!-- TRUE vs RECOVERED, superimposed. They were two stacked bands, which cost a third of
-         the column and — because the bottom band is the one carrying the x-axis and its label,
-         ~60px out of an equal share — left the recovered trace with an 8px-tall plot: too
-         short to read, and short enough to make a positive peak look like a negative one.
-         Overlaying them is also the better comparison: the recovered estimate is in the SAME
-         units as the input it estimates, so on one shared y-axis the reader sees directly that
-         naive deconvolution returns ~30% of a unit spike's height, smeared, with ringing
-         between the spikes. That gap IS the lesson (FOUNDATIONS §2) and two separate y-axes
-         were hiding it. -->
-    <div class="band axis">
+    <!-- THE SHOWPIECE — the recovered input, on its own y-scale and the tallest band here.
+         ADR-0043 had superimposed it on the true spikes to make one point (naive inversion
+         returns ~0.3 of a unit spike) and paid for it with another: unit-height stems own the
+         shared axis, so the recovered trace — the whole output of this tab — was drawn inside
+         its bottom third, and the ringing and NEGATIVE LOBES that are the tab's actual lesson
+         (FOUNDATIONS §2) were a few pixels of wobble at the baseline. The magnitude point
+         does not need the axis to make it: it is a number in the readout above (peak/true)
+         and is stated in this band's own header. The ringing does need the axis.
+
+         Separate does NOT mean unlabeled: the header says the scale is this band's own, so
+         nothing here implies the recovered input is as tall as a spike (ADR-0024/0029). -->
+    <div class="band showpiece">
       <div class="band-head">
-        <span class="plot-label">Input — true spikes vs recovered</span>
-        <span class="legend">
-          <span class="key"><i class="stem"></i>true spikes ({spikeCount})</span>
-          <span class="key"><i class="line"></i>recovered — naive deconvolution</span>
+        <span class="plot-label">Recovered input — naive deconvolution</span>
+        <span class="caption">
+          own y-scale{#if Number.isFinite(report.peakRatio)}&nbsp;· peaks at ×{fx(report.peakRatio, 1)} of a unit spike{/if}
         </span>
+      </div>
+      <div class="band-body">
+        <Plot
+          fill
+          xs={gridTimes}
+          ys={recovered}
+          color="var(--series-you)"
+          xRange={xView}
+          yAxisSize={48}
+          yLabel="recovered"
+          padRight={PLOT_PAD_R}
+          syncKey="tab3-rec-x"
+          cursorPoints={true}
+          zoomable
+          onZoom={handleZoom}
+          dblClickReset
+          zeroLine
+          showXAxis={false}
+        />
+      </div>
+    </div>
+
+    <!-- The truth, as a short strip. It carries one bit per sample, so height beyond
+         legibility buys nothing — the same reasoning (and the same capped-not-fixed strip)
+         as Tab 1's raster and Tab 0's premise figure. It draws the x-axis for all three
+         bands; co-registration is held by identical padRight/yAxisSize, not by every band
+         drawing an axis (ADR-0030), so a spike still drops straight onto its response. -->
+    <div class="band raster">
+      <div class="band-head">
+        <span class="plot-label">Input — true spikes ({spikeCount})</span>
+        <span class="caption">the answer the deconvolution above is trying to reach</span>
       </div>
       <div class="band-body">
         <Plot
@@ -207,17 +246,15 @@
           ys={rasterSamples}
           kind="stems"
           color="var(--series-spikes)"
-          ys2={recovered}
-          color2="var(--series-you)"
           xRange={xView}
           yAxisSize={48}
+          yLabel="spikes"
           padRight={PLOT_PAD_R}
           syncKey="tab3-rec-x"
           cursorPoints={true}
           zoomable
           onZoom={handleZoom}
           dblClickReset
-          zeroLine
           xLabel="time (s)"
         />
       </div>
@@ -288,7 +325,7 @@
   .sq-body { flex: 1; min-height: 0; }
 
   .band {
-    flex: 1 1 0;
+    /* flex is set below, with the basis-is-chrome rule */
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -309,17 +346,44 @@
   .caption { font-weight: 400; color: var(--text); font-size: 11px; }
   .band-body { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 4px; }
 
-  /* The band carrying the x-axis pays for it out of its own share. uPlot spends ~60px on the
-     tick row plus the "time (s)" label, so with a plain equal split the axis band's PLOT ends
-     up that much shorter than its neighbour's — which is how the recovered trace came to be
-     drawn 8px tall. Equal flex-grow with a 60px head start on the basis hands that back, so
-     the two PLOTS match rather than the two containers. */
-  .band.axis { flex: 1 1 60px; }
+  /* THE PROPORTION IS THE ARGUMENT. This tab exists to show what naive inversion returns,
+     so the recovered input gets the most height of the three; the measured trace is context;
+     the spike raster carries one bit per sample and needs only enough to be read.
 
-  /* Inline key — two series in one band, so identity is never left to color alone. */
-  .band-head .legend { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 11px; color: var(--text); }
-  .band-head .key { display: inline-flex; align-items: center; gap: 5px; }
-  .band-head .key i { width: 14px; display: inline-block; }
-  .band-head .key i.stem { height: 9px; width: 3px; border-radius: 1px; background: var(--series-spikes); }
-  .band-head .key i.line { height: 3px; border-radius: 2px; background: var(--series-you); }
+     A CAP on the raster, not a fixed height — Tab 1's lesson (ADR-0040): these bands divide a
+     viewport, so a fixed strip would hold its height while the plots above shrank, inverting
+     the priority on a short screen. Capping lets all three shrink together.
+
+     The cap counts the AXIS. This band draws the x-axis and its "time (s)" label, plus the
+     band's own header and padding — chrome that comes out of its own share (ADR-0043/0045),
+     so the cap buys markedly less plot than its number suggests. Measure `.u-over`, never
+     the container.
+
+     `flex: 0 1 auto` does NOT work here, measured: the band body is `min-height: 0`, so a
+     content-sized basis collapses the plot to 3px.
+
+     BASIS = CHROME, GROW = PLOT. Equal flex-grow on three bands does not give three
+     comparable plots, because chrome is not equal between them — measured here: 82px for a
+     band with no x-axis (26px header + 4 margin + 16 padding + 2 border + 34 inside uPlot)
+     and 145px for the one that draws the x-axis and its "time (s)" label. With `flex: 1 1 0`
+     the raster's whole 149px share vanished into chrome and its stems got 4px. So each band
+     declares its own chrome as the flex BASIS and its share of what is left over as the
+     GROW: the ratios below (1 : 2.4 : 0.7) are then ratios of actual PLOT height, which is
+     the thing being argued about. Generalizes ADR-0043's `flex: 1 1 60px` head start.
+     Verify by measuring `.u-over`, never the container. */
+  .band { flex: 1 1 82px; }
+  .band.showpiece { flex: 2.4 1 82px; }
+  .band.raster { flex: 0.7 1 145px; }
+
+  /* On a short viewport the chrome IS the problem — three bands spend ~309px of a ~360px
+     band area on headers, padding and the x-axis before a single sample is drawn. So the
+     chrome shrinks (and the basis with it), rather than the plots going to slivers. */
+  @media (max-height: 820px) {
+    .band { padding: 4px 12px; flex-basis: 62px; }
+    .band.showpiece { flex-basis: 62px; }
+    .band.raster { flex-basis: 125px; }
+    .band-head { font-size: 11px; line-height: 1.25; }
+    .band-head .caption { display: none; }
+    .band-body { margin-top: 2px; }
+  }
 </style>

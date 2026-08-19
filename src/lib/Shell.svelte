@@ -12,13 +12,19 @@
   //
   // `wide` = the shared width preference: false caps the shell (comfortable line
   // lengths, sane kernel size on ultrawide); true lets it run full-bleed.
-  let { wide = false, rail, summary, kernelPanel, bands } = $props();
+  // `compactTop` shrinks the fixed top row. The default height is sized for tabs whose
+  // kernel square is the RESULT (Tab 2's recovered kernel, Tab 1's authored one) — there it
+  // earns 42vh. On a tab where the square only shows an input the user already chose, that
+  // 42vh is taken straight out of the time bands: Tab 3 measured 399px of top row against
+  // 397px for THREE bands, which left its axis-carrying raster with a 0px plot. Opt-in, so
+  // no existing tab moves.
+  let { wide = false, compactTop = false, rail, summary, kernelPanel, bands } = $props();
 </script>
 
 <div class="shell" class:capped={!wide}>
   <aside class="rail">{@render rail?.()}</aside>
   <div class="plots">
-    <div class="top-row">
+    <div class="top-row" class:compact={compactTop}>
       <section class="summary">{@render summary?.()}</section>
       <section class="kernel-sq">{@render kernelPanel?.()}</section>
     </div>
@@ -69,6 +75,21 @@
     flex: none;
     /* the kernel is primary — give the square a generous side (= this row's height) */
     height: clamp(300px, 42vh, 480px);
+  }
+  /* Compact: the square stays square and readable, and the height it gives up goes to the
+     bands. Same clamp shape, scaled down — never a fixed px, which would stop yielding on a
+     short viewport (ADR-0040's cap-not-fix lesson). */
+  .top-row.compact {
+    height: clamp(190px, 24vh, 300px);
+  }
+  /* SHORT viewport, not narrow: a 700px-tall window has ~360px for the bands once the nav,
+     the AP-independent strip and this row are paid for, and on a three-band tab that is the
+     difference between readable plots and 10px slivers. The floor yields here rather than
+     holding a square nobody is looking at. (Width has its own breakpoint below.) */
+  @media (max-height: 820px) {
+    .top-row.compact {
+      height: clamp(130px, 20vh, 200px);
+    }
   }
   .summary {
     flex: 1 1 auto;
