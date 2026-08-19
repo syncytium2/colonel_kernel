@@ -487,7 +487,10 @@
       {#snippet bands()}
         <div class="band">
           <div class="band-head">
-            <span class="plot-label">Output — input ⊗ kernel</span>
+            <!-- The label must not still say "input ⊗ kernel" once part of the trace is
+                 calcium no spike caused — that is the one claim this band cannot make. -->
+            <span class="plot-label">Output — input ⊗ kernel{#if apIndepMix > 0}&nbsp;+ {contaminated.events.length}
+                AP-independent event{contaminated.events.length === 1 ? '' : 's'}{/if}</span>
             {#if noiseLevel > 0}<span class="caption">teal = clean · faint = noisy ({noiseLevel.toFixed(1)}× σ)</span>{/if}
           </div>
           <!-- uPlot fixes its series count at init (Plot.svelte): remount via {#key} only when
