@@ -1112,6 +1112,42 @@ ok('spikeSufficiency: at/above floor → sufficient', spikeSufficiency(25, 0.2, 
       approx(referenceAmplitude(spiky), referenceAmplitude(apLinked), 1e-9));
   }
 
+  // --- timescale: the same model in a 30-second game round ---
+  // The challenge rounds run 30–60 s with sub-second kernels. At timescale 1 the model is
+  // unusable there — nothing gets PLACED (a 5 s pre-onset clearance rejects every gap a
+  // fast round has) and what would be placed is not an EVENT but a baseline shift (the slow
+  // morphology trails for ~86 s). Both failures are silent, so both are pinned.
+  {
+    const fast = makeGrid({ sampleRate: 10, duration: 30 });
+    const fastSpikes = [2, 5, 5.3, 9, 14, 14.25, 14.5, 20, 26];
+    const fastLinked = convolveOnGrid(
+      rasterize(fastSpikes, fast).samples,
+      fast,
+      buildKernel('calcium', { tauRise: 0.1, tauDecay: 0.4 }, fast.dt, 0.1),
+    ).samples.slice(0, fast.n);
+    const opts = { timescale: 0.4 / 2.7, ratePerMin: 5 };
+
+    ok('ap-independent: at timescale 1 a 30 s round can place nothing',
+      mixApIndependent(fastLinked, fast, fastSpikes, 1).events.length === 0);
+    const scaled = mixApIndependent(fastLinked, fast, fastSpikes, 1, opts);
+    ok('ap-independent: a scaled timescale places events in that same round',
+      scaled.events.length > 0, `${scaled.events.length} events`);
+    ok('ap-independent: scaled events still sit clear of every spike',
+      scaled.events.every((e) => Math.min(...fastSpikes.map((t) => Math.abs(t - e.atS))) >=
+        AP_INDEPENDENT_DEFAULTS.settleAfterSpikeS * opts.timescale - 1e-9));
+
+    // The slow morphology has to still BE an event: bounded, and over well inside the round.
+    const slowOnly = apIndependentTrace(fast, [{ atS: 10, amp: 0.2, shape: 'slow' }], opts);
+    let last = 0;
+    for (let i = 0; i < slowOnly.length; i++) if (slowOnly[i] > 0.2 * 0.05) last = i;
+    ok('ap-independent: a scaled slow event ends inside the round, not past it',
+      last * fast.dt < 25, `still elevated at ${(last * fast.dt).toFixed(1)}s of 30s`);
+    ok('ap-independent: an explicit clearance overrides timescale rather than scaling twice',
+      apIndependentEvents({ t0: 0, tEnd: 30 }, fastSpikes, 1, 0.1,
+        { ...opts, clearBeforeSpikeS: 9 }).length <
+      apIndependentEvents({ t0: 0, tEnd: 30 }, fastSpikes, 1, 0.1, opts).length);
+  }
+
   // Stamping is convolution with an impulse: one event at t reproduces its own shape.
   {
     const e = [{ atS: 50, amp: 0.2, shape: 'narrow' }];

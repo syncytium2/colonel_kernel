@@ -29,9 +29,12 @@
     mulberry32,
     rSquared,
     poissonSpikes,
+    mixApIndependent,
   } from './core/index.js';
 
-  let { wide = false } = $props();
+  // The AP-independent dial (ADR-0050) reaches the games too — here it decides how much of
+  // the recording neither you nor the Colonel can fit, whatever kernel either of you brings.
+  let { wide = false, apIndepMix = 0 } = $props();
 
   // Fixed, game-sized timebase (short recording → snappy + readable).
   const DURATION = 60; // s
@@ -102,25 +105,34 @@
     const target = new Float64Array(grid.n);
     for (let i = 0; i < grid.n; i++) target[i] = conv[hiddenKernel.zeroIndex + i] ?? 0;
 
+    // Calcium with NO spike under it. This round type predates the AP-independent dial and
+    // used to roll its own: 1–2 copies of the round's OWN kernel dropped at a random sample,
+    // which could land straight on a spike (where it reads as a big coupled event, not as a
+    // violation) and was the wrong shape to be one — an event that fits the kernel is exactly
+    // the event a kernel fit CAN explain. It now goes through the shared model, so these are
+    // the `_80` morphologies in spike-free stretches, and the dial can drive any round.
+    //
+    // `uncoupled` survives as a FLOOR, not a switch: ~1 in 3 rounds is decoupled whatever the
+    // dial says, because "does this recording even have a kernel?" is the question this game
+    // is asking and it must keep being asked when the dial is at zero.
+    const effMix = Math.max(apIndepMix, uncoupled ? 0.3 : 0);
+    const apMixed = mixApIndependent(target, grid, spikes, effMix, {
+      timescale: hiddenParams.tauDecay / 2.7, // 60 s round, sub-second kernel
+      ratePerMin: 4,
+      seed: roundSeed * 7919 + 17,
+    });
+    const withAp = apMixed.samples;
+
     if (uncoupled) {
-      // 1–2 spurious calcium transients with NO spike (calcium without APs)...
-      const bumps = 1 + (rand() < 0.5 ? 1 : 0);
-      for (let b = 0; b < bumps; b++) {
-        const at = Math.floor(rand() * grid.n);
-        const z = hiddenKernel.zeroIndex;
-        for (let k = 0; k < hiddenKernel.samples.length; k++) {
-          const idx = at + (k - z);
-          if (idx >= 0 && idx < grid.n) target[idx] += hiddenKernel.samples[k] * (1.2 + rand());
-        }
-      }
-      // ...and a gain drop over a stretch (APs without proportional calcium).
+      // ...and a gain drop over a stretch (APs without proportional calcium) — a DIFFERENT
+      // violation from AP-independent calcium, and not one this dial models, so it stays.
       const s0 = Math.floor(rand() * grid.n * 0.5);
       const s1 = Math.min(grid.n, s0 + Math.floor(grid.n * 0.25));
-      for (let i = s0; i < s1; i++) target[i] *= 0.3;
+      for (let i = s0; i < s1; i++) withAp[i] *= 0.3;
     }
 
     // measurement noise (calibrated cohort σ; a level that bites at this peak)
-    const noisy = addAWGN(target, sigmaForLevel(2.5), mulberry32(roundSeed * 40503 + 7));
+    const noisy = addAWGN(withAp, sigmaForLevel(2.5), mulberry32(roundSeed * 40503 + 7));
     const targetTrace = Float64Array.from(noisy.slice(0, grid.n));
 
     // the Colonel: regularized deconvolution from the SAME known spikes + target
@@ -141,6 +153,7 @@
 
     return {
       spikes, raster, hiddenKernel, uncoupled,
+      effMix, apEvents: apMixed.events,
       target: targetTrace,
       colonelKernel, colonelRecon, colonelR2, colonelTimeMs,
       nSpikes: spikes.length,
@@ -161,7 +174,10 @@
 
   // --- verdict + tally ---
   const verdict = $derived.by(() => {
-    if (round.uncoupled) return 'uncoupled';
+    // A round the dial has decoupled is decoupled, however it got that way — the verdict
+    // reads the effective mix, not just the round's own roll. At dial 0 that is the roll,
+    // so nothing about the unmodified game changes.
+    if (round.effMix >= 0.3) return 'uncoupled';
     if (!Number.isFinite(userR2) || !Number.isFinite(round.colonelR2)) return 'tie';
     if (userR2 > round.colonelR2 + 1e-4) return 'you';
     if (round.colonelR2 > userR2 + 1e-4) return 'colonel';
@@ -285,7 +301,8 @@
     {#if phase === 'revealed'}
       <div class="verdict {verdict}">
         {#if verdict === 'uncoupled'}
-          🤝 Uncoupled round — the trace holds a calcium event no spike explains, so
+          🤝 Uncoupled round — the trace holds {round.apEvents.length === 1 ? 'a calcium event' : `${round.apEvents.length} calcium events`}
+          no spike explains, so
           <strong>no single kernel can fully fit it</strong> and this round counts for nobody. Whatever
           score either of you posts only reflects the coupled part of the trace, not a real kernel. That's
           the science: sometimes there is no clean kernel to find — which is exactly what the real tool

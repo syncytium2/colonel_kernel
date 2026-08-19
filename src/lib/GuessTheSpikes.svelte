@@ -25,9 +25,14 @@
     poissonSpikes,
     spikeMatch,
     peakPickSpikes,
+    mixApIndependent,
   } from './core/index.js';
 
-  let { wide = false } = $props();
+  // The AP-independent dial (ADR-0050) reaches the games too. It has to: this one asks you to
+  // find the spike under every event, and its hardest honest answer is "there isn't one".
+  // Without the dial the game can only ever be won by a good eye; with it, a perfect eye
+  // still places spikes that were never fired — which is the point Tab 3 makes in prose.
+  let { wide = false, apIndepMix = 0 } = $props();
 
   const DURATION = 40;
   const RATE = 10;
@@ -95,7 +100,17 @@
       0.1,
     );
     const raster = rasterize(spikes, grid, { amplitudeMode: 'unit' });
-    const clean = sliceGrid(convolveOnGrid(raster.samples, grid, kernel).samples, kernel.zeroIndex);
+    const apLinked = sliceGrid(convolveOnGrid(raster.samples, grid, kernel).samples, kernel.zeroIndex);
+
+    // AP-independent calcium, before the noise — it is signal, not measurement error.
+    // `timescale` fits the events to THIS round: a 40 s round with a sub-second kernel has
+    // no room for a 12 s-decay hump or a 5 s pre-onset clearance (ap-independent.js).
+    // `ratePerMin` is raised from the recording default because a 40 s round would otherwise
+    // round down to a single event at the top of the dial.
+    const apOpts = { timescale: kernel.params.tauDecay / 2.7, ratePerMin: 5, seed: roundSeed * 7919 + 31 };
+    const mixed = mixApIndependent(apLinked, grid, spikes, apIndepMix, apOpts);
+    const clean = mixed.samples;
+
     // advanced hides the kernel AND runs a noisier trace (read `advanced` so the round
     // re-derives when the mode changes)
     const noiseLevel = advanced ? NOISE_ADVANCED : NOISE_NORMAL;
@@ -110,7 +125,10 @@
     const machineTimeMs = performance.now() - tMach;
     const machineMatch = spikeMatch(machineSpikes, spikes, MATCH_TOL);
 
-    return { spikes, kernel, target, nSpikes: spikes.length, machineSpikes, machineTimeMs, machineMatch };
+    return {
+      spikes, kernel, target, nSpikes: spikes.length, machineSpikes, machineTimeMs, machineMatch,
+      apEvents: mixed.events,
+    };
   });
 
   // reconstruction uses the GIVEN kernel (normal) or YOUR kernel (advanced)
@@ -273,10 +291,24 @@
         <span class="you">Your spikes</span> (up) and the <span class="true">true spikes</span>
         (down) are overlaid below. A good R² with the <em>wrong</em> spikes is exactly why
         inference is hard{#if advanced} — doubly so when the kernel is unknown too{/if}.
+        {#if round.apEvents.length}
+          <strong>{round.apEvents.length}</strong> event{round.apEvents.length === 1 ? '' : 's'} in this
+          round had no spike beneath {round.apEvents.length === 1 ? 'it' : 'them'} at all — every
+          spike you or the machine put there was a false positive, and nothing in the trace said so.
+        {/if}
       </p>
     {:else}
+      <!-- "Every bump needs a spike near its onset" is the instruction this game runs on, and
+           the dial makes it FALSE. Withdraw it rather than let the round trap a player with a
+           rule it has quietly stopped honouring — without giving the count away. -->
       <p class="play-note">
-        Reconstruction R² updates live. Every bump needs a spike near its onset.
+        Reconstruction R² updates live.
+        {#if round.apEvents.length}
+          <strong>Careful:</strong> AP-independent calcium is mixed in, so <em>not</em> every bump
+          has a spike under it.
+        {:else}
+          Every bump needs a spike near its onset.
+        {/if}
         <br /><span class="muted">{round.nSpikes} true spikes hidden · match tolerance ±{MATCH_TOL}s{#if !advanced} · the machine also gets a go{/if}</span>
       </p>
     {/if}

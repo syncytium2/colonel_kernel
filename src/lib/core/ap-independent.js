@@ -90,8 +90,29 @@ export const AP_INDEPENDENT_DEFAULTS = {
   /** Spacing of candidate onsets inside one spike-free stretch. Wide enough that two
    *  chosen events never stack into a single unreadable lump. */
   slotS: 12,
-  seed: 80241004,
+  /**
+   * Multiplier on every DURATION in this model — the event shapes and the three clearances
+   * above. 1 is the reference world these numbers were measured in: `_80` ROI 1, whose AP
+   * kernel decays with τ ≈ 2.7 s over an 18-minute recording.
+   *
+   * The challenge rounds are not that world. They run 30–60 s with τ ≈ 0.3–1.0 s kernels, and
+   * at timescale 1 the `slow` morphology — 12 s decay, ~86 s of support — stops being an
+   * EVENT there and becomes a baseline shift across the whole round, while a 5 s pre-onset
+   * clearance rejects every gap a 30 s round has, so nothing gets placed at all. Scaling
+   * keeps the RATIOS that make the morphologies mean something (symmetric-and-brief vs
+   * slow-and-trailing, each against the AP kernel it is not) while fitting the round.
+   * Callers set it from their own kernel: `tauDecay / 2.7`.
+   */
+  timescale: 1,
 };
+
+/** Shape params with every time constant scaled — see `timescale`. */
+function scaleShape(shape, k) {
+  if (!(k > 0) || k === 1) return shape;
+  const params = {};
+  for (const [key, v] of Object.entries(shape.params)) params[key] = v * k;
+  return { kernel: shape.kernel, params };
+}
 
 /**
  * Candidate onset times, ranked by how defensible they are.
@@ -167,7 +188,7 @@ export function candidateOnsets(spikeTimes, span, p) {
  *          chronological
  */
 export function apIndependentEvents(span, spikeTimes, mix, refAmp, opts = {}) {
-  const p = { ...AP_INDEPENDENT_DEFAULTS, ...opts };
+  const p = withTimescale(opts);
   const m = clamp01(mix);
   if (!(m > 0) || !(refAmp > 0)) return [];
 
@@ -207,13 +228,15 @@ export function apIndependentEvents(span, spikeTimes, mix, refAmp, opts = {}) {
  * @param {{atS:number, amp:number, shape:string, weight?:number}[]} events
  * @returns {Float64Array} the AP-independent component alone, length grid.n
  */
-export function apIndependentTrace(grid, events) {
+export function apIndependentTrace(grid, events, opts = {}) {
   const out = new Float64Array(grid.n);
   if (!events || !events.length) return out;
+  const timescale = opts.timescale == null ? AP_INDEPENDENT_DEFAULTS.timescale : opts.timescale;
   const built = new Map();
   for (const e of events) {
-    const shape = AP_INDEPENDENT_SHAPES[e.shape];
-    if (!shape) throw new Error(`ap-independent: unknown event shape '${e.shape}'`);
+    const raw = AP_INDEPENDENT_SHAPES[e.shape];
+    if (!raw) throw new Error(`ap-independent: unknown event shape '${e.shape}'`);
+    const shape = scaleShape(raw, timescale);
     if (!built.has(e.shape)) built.set(e.shape, buildKernel(shape.kernel, shape.params, grid.dt, 1));
     const k = built.get(e.shape);
     const scale = e.amp * (e.weight == null ? 1 : e.weight);
@@ -279,7 +302,7 @@ export function mixApIndependent(trace, grid, spikeTimes, mix, opts = {}) {
   const span = { t0: grid.t0, tEnd: grid.t0 + (grid.n - 1) * grid.dt };
   const refAmp = opts.refAmp != null ? opts.refAmp : referenceAmplitude(trace);
   const events = apIndependentEvents(span, spikeTimes, m, refAmp, opts);
-  const indep = apIndependentTrace(grid, events);
+  const indep = apIndependentTrace(grid, events, opts);
 
   // The AP-linked part fades as the AP-independent part arrives. Without the fade, mix = 1
   // would be "kernel-explained calcium PLUS humps", which is not what the top of the slider
@@ -313,6 +336,21 @@ function varianceShare(trace, indep, keep, n) {
   }
   const tot = va + vi;
   return tot > 0 ? vi / tot : 0;
+}
+
+/**
+ * Resolve options, applying `timescale` to the clearances an explicit option did not set.
+ * An explicit value always wins — a caller that says `clearBeforeSpikeS: 2` means 2 seconds,
+ * not 2 × timescale.
+ */
+function withTimescale(opts) {
+  const p = { ...AP_INDEPENDENT_DEFAULTS, ...opts };
+  const k = p.timescale;
+  if (!(k > 0) || k === 1) return p;
+  for (const key of ['settleAfterSpikeS', 'clearBeforeSpikeS', 'slotS']) {
+    if (opts[key] == null) p[key] = AP_INDEPENDENT_DEFAULTS[key] * k;
+  }
+  return p;
 }
 
 const clamp01 = (x) => (Number.isFinite(x) ? Math.min(1, Math.max(0, x)) : 0);

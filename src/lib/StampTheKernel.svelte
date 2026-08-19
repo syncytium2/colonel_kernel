@@ -25,9 +25,14 @@
     convolveOnGrid,
     rSquared,
     mulberry32,
+    mixApIndependent,
   } from './core/index.js';
 
-  let { wide = false } = $props();
+  // The AP-independent dial (ADR-0050) reaches the games too. Here it puts something in the
+  // target that NO number of stamps can build — which is the forward-direction statement of
+  // the same fact Tab 2 states as a failed fit: if the trace holds calcium no spike caused,
+  // `spikes ⊗ kernel` cannot reproduce it, and no amount of play makes it.
+  let { wide = false, apIndepMix = 0 } = $props();
 
   const DURATION = 30; // s
   const RATE = 10;
@@ -39,7 +44,11 @@
   // Pinned y-axis. An empty series would auto-range to 0–100 and read as broken, and in
   // Advanced an axis that grew to fit the hidden target would hand over the burst peak
   // being predicted. Derived from constants, so identical in every round (ADR-0046).
-  const Y_RANGE = [-0.03, KERNEL_PEAK * 3.5];
+  // AP-independent events are BIGGER than anything the spikes make (that is what makes them
+  // legible as violations), so the pinned top has to make room for them — but still from
+  // CONSTANTS and the dial, never from the round's own data, or in Advanced the axis would
+  // hand over the hidden burst peak it is pinned to conceal.
+  const Y_RANGE = $derived([-0.03 - 0.05 * apIndepMix, KERNEL_PEAK * (3.5 + 4 * apIndepMix)]);
 
   let roundSeed = $state(1);
   let phase = $state('play');
@@ -100,8 +109,17 @@
     });
     spikes.sort((a, b) => a - b);
     const raster = rasterize(spikes, grid, { amplitudeMode: 'unit' });
-    const target = sliceGrid(convolveOnGrid(raster.samples, grid, kernel).samples, kernel.zeroIndex);
-    return { spikes, kernel, target, nSpikes: spikes.length };
+    const apLinked = sliceGrid(convolveOnGrid(raster.samples, grid, kernel).samples, kernel.zeroIndex);
+    // `timescale` fits the events to a 30 s round with a sub-second kernel; `ratePerMin` is
+    // raised so the top of the dial is more than one event in half a minute. Scoring is
+    // untouched — this round is scored on spikes LEFT BEHIND (ADR-0047), not on R², so an
+    // unmatchable target cannot fail a player who stamped everything.
+    const mixed = mixApIndependent(apLinked, grid, spikes, apIndepMix, {
+      timescale: kernel.params.tauDecay / 2.7,
+      ratePerMin: 5,
+      seed: roundSeed * 7919 + 53,
+    });
+    return { spikes, kernel, target: mixed.samples, apLinked, apEvents: mixed.events, nSpikes: spikes.length };
   });
 
   const remaining = $derived(round.spikes.filter((s) => !stamped.includes(s)));
@@ -250,9 +268,19 @@
         {:else}👍 {remaining.length} spike{remaining.length === 1 ? '' : 's'} left unstamped. Look at
           the bursts: two deltas a few pixels apart still need two kernels.{/if}
       </div>
+      <!-- Both claims below are FALSE once the dial is up: a perfect round no longer matches
+           the target, and a shortfall no longer implies an un-stamped spike. Say the true
+           thing instead — it is a better lesson than the one it replaces. -->
       <p class="reveal-note">
-        Your trace is <em>the stamped deltas ⊗ the same kernel</em> — a real convolution, so where it
-        falls short of the <span class="target">target</span>, a spike is still un-stamped underneath.
+        {#if round.apEvents.length}
+          Your trace is <em>the stamped deltas ⊗ the same kernel</em>. It cannot match the
+          <span class="target">target</span> here however you play:
+          <strong>{round.apEvents.length}</strong> event{round.apEvents.length === 1 ? '' : 's'} in it
+          had no spike to stamp. Stamps only make calcium where an AP is.
+        {:else}
+          Your trace is <em>the stamped deltas ⊗ the same kernel</em> — a real convolution, so where it
+          falls short of the <span class="target">target</span>, a spike is still un-stamped underneath.
+        {/if}
       </p>
     {:else}
       <p class="play-note">

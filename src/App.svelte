@@ -313,13 +313,13 @@
     <Help onNavigate={navFromHelp} />
   {:else if tab === 2}
     {#if challenge2}
-      <BeatTheColonel {wide} />
+      <BeatTheColonel {wide} {apIndepMix} />
     {:else}
       <Tab2 {wide} {handoff} {apIndepMix} />
     {/if}
   {:else if tab === 3}
     {#if challenge3}
-      <GuessTheSpikes {wide} />
+      <GuessTheSpikes {wide} {apIndepMix} />
     {:else}
       <!-- Tab 3 deconvolves the very signal Tab 1 synthesized (§11.3), so it takes the
            contaminated trace and the dial's numbers read-only — the one control that sets
@@ -341,7 +341,7 @@
       />
     {/if}
   {:else if tab === 1 && challenge1}
-    <StampTheKernel {wide} />
+    <StampTheKernel {wide} {apIndepMix} />
   {:else}
     <Shell {wide}>
       <!-- LEFT RAIL — tools (was the top controls card; folded into the 20% rail). -->
