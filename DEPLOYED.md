@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-08-19 01:27 UTC |
-| **Commit** | `dbf6fdf` — Merge ap-independent-slider: the AP-independent calcium dial goes live |
-| **Bundle** | `assets/index-CWHSUd8-.js` |
-| **Worker version** | `9b2066bc-ad13-439d-977c-5e69ee42d277` |
+| **Deployed at** | 2026-08-19 01:49 UTC |
+| **Commit** | `b28a561` — The AP-independent dial moves to the chrome: one control, one place (ADR |
+| **Bundle** | `assets/index-CmcAZe3A.js` |
+| **Worker version** | `7f1d7201-ee29-4942-bbcb-57afe8442dab` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
