@@ -4,6 +4,8 @@
 // These assert the trivial cases a human can confirm on paper, so the
 // foundation is proven before any UI or animation depends on it.
 
+import { readFileSync } from 'node:fs';
+import { METHODS_ANCHORS, LAMBDA_EXPLAINER_URL } from '../methods-url.js';
 import { makeGrid, gridFromTimeColumn } from './timebase.js';
 import { rasterize } from './rasterize.js';
 import { buildKernel, defaultParams } from './kernels.js';
@@ -1161,6 +1163,33 @@ ok('spikeSufficiency: at/above floor → sufficient', spikeSufficiency(25, 0.2, 
 
 function round2(v) {
   return Math.round(v * 100) / 100;
+}
+
+// --- deep-link anchors ------------------------------------------------------
+// src/lib/methods-url.js builds every in-app link to the Methods reference from a
+// handful of `#anchor` fragments. Nothing else checks that those anchors still name
+// real headings, so a rename in public/methods.html silently degrades the links to
+// "top of a 600-line document" — the failure is invisible in the build, in the tests,
+// and in a screenshot. This is the cheapest place to catch it: deploy runs it.
+{
+  const html = readFileSync(new URL('../../../public/methods.html', import.meta.url), 'utf8');
+  for (const [name, url] of Object.entries(METHODS_ANCHORS)) {
+    const frag = url.split('#')[1];
+    ok(
+      `methods-url: ${name} anchor #${frag} exists in public/methods.html`,
+      new RegExp(`id=["']${frag}["']`).test(html),
+    );
+  }
+  // The in-app anchor needs the same guard, and for the same reason: both λ sliders point
+  // at #lambda, and renaming that section would degrade them to "top of Tab 0" with a green
+  // build, green tests and a clean screenshot. Excluding it here because it lives in a
+  // different file than the others would be exactly the gap this block was written to close.
+  const help = readFileSync(new URL('../Help.svelte', import.meta.url), 'utf8');
+  const frag = LAMBDA_EXPLAINER_URL.replace('#', '');
+  ok(
+    `methods-url: in-app anchor #${frag} exists in Help.svelte`,
+    new RegExp(`id=["']${frag}["']`).test(help),
+  );
 }
 
 // --- summary ----------------------------------------------------------------

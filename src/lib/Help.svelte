@@ -42,7 +42,8 @@
 
   // Relative link (not root-absolute) so it resolves correctly under any base
   // path, and opens in a new tab so the reader keeps their place in the app.
-  const METHODS_URL = 'methods.html';
+  // Shared with the λ sliders on Tabs 2 and 3, which link to the same document.
+  import { METHODS_URL, METHODS_REGULARIZATION_URL, METHODS_CHECKS_URL } from './methods-url.js';
 
   // Born-on / last-updated, baked in at build time from git (vite.config define).
   // The CSP forbids a runtime GitHub call, so these are fixed when the bundle is built.
@@ -156,6 +157,89 @@
         <a href={methodsSvg} target="_blank" rel="noopener">Open full size ↗</a>
       </figcaption>
     </figure>
+  </section>
+
+  <!-- The one control a first-timer meets with no referent: λ, on Tab 2 (inside the
+       Advanced fold) and on Tab 3. Both sliders route BACK here via onExplainLambda,
+       and this section hands off onward to the equations — without it a naive reader
+       met a Greek letter and a slider and nothing else.
+
+       The claims here are load-bearing and were checked against the shipped solver,
+       not against intuition. Three of them are counter-intuitive enough to be worth
+       protecting from a well-meaning edit:
+         - λ does NOT visibly flatten the kernel anywhere on Tab 2's slider. Across the
+           whole exposed range (0.002–3) the recovered peak moves ~2% and the lag not
+           at all; a "bland bump" needs λ ≈ 3000, a thousandfold past the maximum.
+         - The Laplacian penalty is exactly zero at DC and grows as ω⁴, so λ has no
+           grip on slow structure. Measured: a 58% DC error sat unchanged across seven
+           orders of magnitude of λ. That is methods.html §12's "Laplacian low-frequency
+           blindness", and it is why "survives the sweep" cannot mean "is real".
+         - On Tab 3 the same machinery smooths the SPIKE TRAIN, not the kernel — the
+           opposite of the sparsity prior OASIS/MLspike use, which is why raising λ
+           there makes the answer worse rather than cleaner. -->
+  <section class="plain lam" id="lambda">
+    <h2>The dial marked &lambda;</h2>
+    <p>
+      Building a trace from spikes and a kernel is <strong>convolution</strong> &mdash; stamping
+      the same calcium shape down once per spike. Going the other way, from the trace back to
+      the kernel, is <strong>deconvolution</strong>, and it is not a clean reversal. A real
+      trace carries noise, and undoing a convolution <em>amplifies</em> it. Left completely
+      unchecked, the answer reproduces your recording almost perfectly and is still physically
+      impossible: Tab 3 lets you watch that happen, and see that about half the numbers it
+      hands back, frame by frame, are negative. A spike count cannot be negative &mdash; and
+      raising &lambda; barely dents it.
+    </p>
+    <p>
+      So the tool asks a narrower question &mdash; not &ldquo;which kernel reproduces this
+      trace?&rdquo; but &ldquo;which reasonably <em>smooth</em> kernel reproduces this
+      trace?&rdquo; That added insistence on smoothness is the tool&rsquo;s
+      <strong>regularization</strong>, and <strong>&lambda;</strong> (lambda) sets how hard you
+      insist. It ships with a working default, but it is one of the few controls whose right
+      value is genuinely yours to judge, which is why the tool shows it rather than burying it.
+    </p>
+    <p>Three things to know before you turn it:</p>
+    <ul>
+      <li>Of the three recovery methods in the picture above, it touches only the first
+        &mdash; <strong>free-vector</strong>, which solves for the kernel one sample at a time.
+        The <strong>parametric</strong> fit, which fits a rise-and-decay curve, has no &lambda;
+        at all; the <strong>shaped</strong> method carries its own fixed penalties. The
+        stability check sweeps &lambda; for you across the whole range, so it does not follow
+        where you leave the slider.</li>
+      <li>On Tab 2 it smooths the recovered <strong>kernel</strong>, on a log slider from
+        0.002 to 3. On Tab 3 the same machinery is pointed at the <strong>spikes</strong>
+        instead, from 0 to 1 &mdash; and smoothness is the wrong thing to want from a spike
+        train, which is why no &lambda; there ever gives you a clean count. The dedicated tools
+        take other routes entirely: supervised training against ground truth (CASCADE), a
+        biophysical model of the indicator (MLspike), or a count forced to stay non-negative
+        plus a penalty for not being sparse &mdash; for assuming most time points carry no
+        spike at all (OASIS).</li>
+      <li>The two numbers are not comparable. On Tab 2 &lambda; is weighed against the spike
+        train&rsquo;s own energy; on Tab 3, against the kernel&rsquo;s &mdash; about ten
+        thousand times smaller here. That is why the sliders carry different ranges, and why
+        carrying a value from one to the other means nothing.</li>
+    </ul>
+    <p>
+      Sweeping &lambda; is part of the <strong>stability</strong> check, one of the four
+      goodness-of-fit checks Tab 2 reports, and its job is narrower than it looks: a bump that
+      shows up at one &lambda; and vanishes at the next is an artifact of the smoothing, not a
+      finding. <strong>But steadiness is not proof.</strong> The penalty only ever pushes on
+      fast wiggles: it has no grip at all on slow structure, so a drifting baseline, or a step
+      that appears <em>before</em> the spike that supposedly caused it, sits unmoved from one
+      end of the slider to the other. Those are exactly the artifacts a sweep cannot rule out.
+      A steady sweep buys you the absence of one kind of error &mdash; whether there is a
+      kernel here at all is what the other three checks are for.
+    </p>
+    <p>
+      You will find the dial on Tab 3, and on Tab 2 inside the <strong>Advanced</strong> panel.
+    </p>
+    <p class="lam-more">
+      <a class="out-link" href={METHODS_REGULARIZATION_URL} target="_blank" rel="noopener"
+        >The equations behind &lambda; <span aria-hidden="true">↗</span></a
+      >
+      <a class="out-link" href={METHODS_CHECKS_URL} target="_blank" rel="noopener"
+        >The four goodness-of-fit checks <span aria-hidden="true">↗</span></a
+      >
+    </p>
   </section>
 
   <section class="cards">
@@ -309,7 +393,10 @@
 
   section { margin: 30px 0; }
   h2 { font-size: 21px; color: var(--text-h); margin: 0 0 12px; }
-  .plain p, p.plain { font-size: 16.5px; line-height: 1.62; color: var(--text); max-width: 66ch; }
+  /* app.css zeroes `p` margins globally (tight control panels want that); prose does not,
+     and without this every multi-paragraph section on this tab runs together into one slab. */
+  .plain p, p.plain { font-size: 16.5px; line-height: 1.62; color: var(--text); max-width: 66ch; margin: 0 0 14px; }
+  .plain p:last-child, p.plain:last-child { margin-bottom: 0; }
 
   /* --- explainer figure (the "help document") --- */
   .fig { margin: 16px 0 0; }
@@ -384,6 +471,23 @@
     font-size: 15px;
     color: var(--text);
   }
+
+  /* --- the λ section --- */
+  .lam ul {
+    margin: 4px 0 14px;
+    padding-left: 22px;
+    max-width: 66ch;
+  }
+  .lam li {
+    font-size: 16.5px;
+    line-height: 1.62;
+    color: var(--text);
+    margin: 6px 0;
+  }
+  /* Two exits (equations, the four checks). `.out-link` is the shared style in
+     app.css — underlined, so it does not rest on the accent colour alone, which
+     falls below AA contrast on the light background at this size. */
+  .lam-more { margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 8px 26px; }
 
   /* --- steps --- */
   .steps ol { margin: 0; padding-left: 22px; }

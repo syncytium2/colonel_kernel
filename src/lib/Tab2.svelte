@@ -42,6 +42,7 @@
     mixApIndependent,
   } from './core/index.js';
   import methodsSvg from './assets/methods_explainer.svg?url'; // "About the methods" modal (data-safe explainer)
+  import { LAMBDA_EXPLAINER_URL } from './methods-url.js'; // "?" beside the λ slider
   // Per-recording summary + Save-as-PDF (summaries & export, Phase 1). The builder is
   // SheetJS-free (region helpers are injected via xlsxApi), so importing it here does
   // NOT pull SheetJS into the main chunk (FOUNDATIONS §6 code-split).
@@ -1201,11 +1202,38 @@
           </button>
           {#if advancedOpen}
             <div class="rail-bd">
-              <label class="ctl">
-                <span>Regularization λ (log)</span>
-                <input type="range" min={LOG_LO} max={LOG_HI} step="0.01" bind:value={lambdaLog} />
+              <!-- A div, not a label, because of the "?": a wrapping <label> would put a
+                   second interactive element inside the label's own hit area, so a click on
+                   help would also drive the slider. The explicit for/id pairing keeps the
+                   label association without that nesting. (Verified: clicking "?" leaves
+                   lambdaLog untouched.)
+
+                   The "?" opens Tab 0's λ section in a NEW BROWSER TAB, and the ↗ says so.
+                   It must not switch tabs in place: this tab is mounted under {#if tab === 2},
+                   so leaving it unmounts the reader's loaded recording, ROI selection, open
+                   folds and λ value. Measured: an in-place jump returned λ 2.000 to its
+                   0.0020 default. The Method "?" beside it opens a modal and stays put, so
+                   the two are deliberately marked differently.
+
+                   `.field-lab` is the existing class for a label with a "?" beside it; the
+                   "?" must sit INLINE after the label text, not in its own flex column —
+                   at rail widths ~940-1220px the label wraps to two lines and a centered
+                   flex child orphans into the gutter, reading as a note on the value. -->
+              <div class="ctl">
+                <span class="field-lab"
+                  ><label for="lam-reg">Regularization λ</label
+                  ><a
+                    class="help-btn"
+                    href={LAMBDA_EXPLAINER_URL}
+                    target="_blank"
+                    rel="noopener"
+                    aria-label="What is the regularization strength λ? Opens the explainer in a new tab."
+                    title="What is λ? (opens in a new tab)">?</a
+                  ></span
+                >
+                <input id="lam-reg" type="range" min={LOG_LO} max={LOG_HI} step="0.01" bind:value={lambdaLog} />
                 <output>{lambda < 0.1 ? lambda.toFixed(4) : lambda.toFixed(3)}</output>
-              </label>
+              </div>
               <label class="ctl">
                 <span>Noise (× cohort σ)</span>
                 <input type="range" min="0" max="10" step="0.5" bind:value={noiseLevel} />
@@ -1617,15 +1645,26 @@
     cursor: pointer;
   }
 
-  /* "About the methods" — help affordance + explainer modal */
+  /* "About the methods" — help affordance + explainer modal.
+     NOT inline-flex: the "?" has to sit in normal inline flow so that when the label
+     wraps (narrow rail, ~940-1220px viewport) it trails the last word instead of being
+     centred in the gutter between the two lines. `gap` therefore becomes a margin. */
   .field-lab {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    display: inline;
+  }
+  .field-lab .help-btn {
+    margin-left: 6px;
   }
   .help-btn {
+    position: relative; /* anchors the enlarged ::after hit box below */
+    text-decoration: none; /* the λ one is an <a>; without this it inherits the link underline */
     width: 16px;
     height: 16px;
+    box-sizing: border-box; /* a <button> gets this from the UA sheet; be explicit */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: baseline;
     line-height: 1;
     padding: 0;
     border-radius: 50%;
@@ -1640,6 +1679,17 @@
     background: var(--accent, #6b46c1);
     color: #fff;
     border-color: var(--accent, #6b46c1);
+  }
+  /* 16px is the visual circle; the HIT box is grown to 24px (WCAG 2.2 §2.5.8) by an
+     overlay rather than padding, so the layout is unmoved. Measured clearance to the
+     adjacent .seg button group: 5.6px — keep it if this grows. */
+  .help-btn::after {
+    content: '';
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
   }
   .methods-modal-bg {
     position: fixed;
