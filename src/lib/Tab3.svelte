@@ -14,6 +14,7 @@
   // synthesized fluorescence is the "measured" trace. Nothing here is clamped —
   // the ringing and negative lobes are the lesson.
   import Shell from './Shell.svelte';
+  import { LAMBDA_EXPLAINER_URL } from './methods-url.js';
   import Plot from './Plot.svelte';
   import { inferSpikes, inferenceReport } from './core/index.js';
 
@@ -107,6 +108,13 @@
       <p class="hint">
         λ = 0 is the raw inverse — watch it explode into noise. Raising λ tames
         the ringing but blurs the spikes and never restores a clean count.
+        <!-- Tab 0's plain-language λ section, not the equations: the reader who asks
+             "what is λ?" at a slider is by construction the naive reader that section
+             was written for, and it hands off to the maths itself. Opens in a new
+             browser tab so this tab's signal and settings survive the trip. -->
+        <a class="lam-link out-link" href={LAMBDA_EXPLAINER_URL} target="_blank" rel="noopener"
+          >What is λ? <span aria-hidden="true">↗</span></a
+        >
       </p>
     </div>
 
@@ -288,6 +296,9 @@
   .field { display: flex; flex-direction: column; gap: 6px; }
   label { font-size: 14px; color: var(--text-h); font-weight: 500; }
   .hint { font-size: 13px; color: var(--text); }
+  /* Colour + underline come from the global .out-link (app.css); only the no-wrap
+     is local, so the "↗" cannot orphan onto its own line at the end of the hint. */
+  .lam-link { white-space: nowrap; }
   .params { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
   .slider {
     display: grid;

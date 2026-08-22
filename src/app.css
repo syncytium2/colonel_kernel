@@ -5,6 +5,11 @@
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
   --accent: #aa3bff;
+  /* Link text only. --accent is tuned as a UI accent (borders, fills, active chrome)
+     where the 3:1 non-text threshold applies; as TEXT on white it measures 4.394:1 and
+     fails WCAG 1.4.3's 4.5:1. This is the same hue darkened to 6.15:1, used by
+     .out-link so body-size links clear AA. Non-text uses of the accent keep --accent. */
+  --link-accent: #8c2ad6;
   /* Faint noisy-realization overlay on Tab 1's output band (ADR-0031). A muted
      slate-teal = 40% clean teal (#2a9d8f) + 60% --text, precomputed to a concrete
      rgb so it is canvas-safe (uPlot draws it via ctx.strokeStyle; color-mix() in a
@@ -56,6 +61,11 @@
     --border: #2e303a;
     --code-bg: #1f2028;
     --accent: #c084fc;
+    /* Link text. The light theme darkens the accent to clear 4.5:1 on white; doing that
+       in BOTH themes would be a fix that breaks what it was not aimed at — #8c2ad6 on
+       this surface measures 2.91:1, worse than where it started. Dark keeps the light
+       accent, which already passes at 6.77:1. Re-measure both when either changes. */
+    --link-accent: #c084fc;
     /* Lighter slate-teal for dark bg legibility: 40% #2a9d8f + 60% --text (#9ca3af). */
     --noise-trace: rgb(110, 161, 162);
     --accent-bg: rgba(192, 132, 252, 0.15);
@@ -114,6 +124,27 @@ code {
   border-radius: 4px;
   color: var(--text-h);
   background: var(--code-bg);
+}
+
+/* A link that leaves the app (the Methods reference, the λ explainer). Global for the
+   same reason the plot palette above is: it was near-identical rules in separate
+   components (Help's exits, Tab 3's λ link) and it changes here or nowhere. Two
+   consumers today — Tab 2's "?" is the circular glyph button, not one of these.
+
+   --link-accent, not --accent: the UI accent is rgb(170,59,255), which is 4.39:1 on
+   white. That fails WCAG 1.4.3 (4.5:1) for anything under 18.66px bold — which is all
+   of this link text. Underlining alone does NOT fix it: underlines satisfy 1.4.1 (Use
+   of Color), a different criterion. So the light theme gets a darkened accent that
+   actually clears the ratio, and keeps the underline for 1.4.1. Dark mode's accent
+   already passes at 6.77:1 and is left alone. */
+.out-link {
+  color: var(--link-accent, var(--accent));
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.out-link:hover {
+  text-decoration-thickness: 2px;
 }
 
 /* Print: when the summary report is open (SummaryReport flags <html>), print ONLY

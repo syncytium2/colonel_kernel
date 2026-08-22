@@ -33,9 +33,29 @@
     if (h === 'tab2') return 2;
     if (h === 'tab1') return 1;
     if (h === 'tab0' || h === 'help' || h === 'start') return 0;
+    // #lambda — the λ explainer, deep-linked from the "?" beside either λ slider.
+    // It is a Tab 0 section, so it lands on Tab 0 and scrolls (see below).
+    if (h === 'lambda') return 0;
     return 0;
   }
   let tab = $state(initialTab());
+
+  // Deep link to the λ section. The two "?" controls open `#lambda` in a NEW BROWSER TAB
+  // rather than switching tabs in place, and that is the whole point: Tab 2 is mounted
+  // under `{#if tab === 2}`, so navigating away UNMOUNTS it and takes the reader's loaded
+  // recording, ROI selection, open folds and λ setting with it. An in-place jump was
+  // measured doing exactly that — λ 2.000 → back at the 0.0020 default on return — which
+  // is the opposite of what a help affordance should cost someone mid-analysis.
+  $effect(() => {
+    if (typeof location === 'undefined') return;
+    if (location.hash.replace('#', '') !== 'lambda') return;
+    requestAnimationFrame(() => {
+      const el = document.getElementById('lambda');
+      if (!el) return;
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    });
+  });
 
   // --- controls (FOUNDATIONS §11) ---
   // Surfaced by default: place spikes, shape the kernel, see the output.
