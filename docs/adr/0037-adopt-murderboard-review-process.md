@@ -89,3 +89,50 @@ the review so it cannot be half-executed. The "do not edit in place" contract ap
 `docs/session_protocol.md` are vendored from `interface2 @ 46da2c3` / `@ 7065f5e`, and interface2
 has since landed the hook's deadline discipline (`2a0c299`) plus the ADR-0020 board split
 (`7717ac3`). That is a different upstream and a separate re-vendor.
+
+### 2026-08-22 — murderboard is public; the session-protocol upstream moved into it
+
+Two corrections to the Decision above, and one item from the 2026-08-06 ⚠ is now actionable.
+
+**1. `syncytium2/murderboard` is no longer private.** It went public on 2026-08-21 under
+**Apache-2.0**. The Decision above describes it as "(private)"; that is now wrong, and it is
+left in place because the original record is the point of this log. Practical consequence: the
+upstream is now a URL anyone can open, so the vendoring instructions and the provenance stamps
+resolve for readers outside this account.
+
+**2. The ⚠ at the foot of the 2026-08-06 entry is resolvable, and its diagnosis changed.**
+That entry recorded `.claude/hooks/session-start.sh` and `docs/session_protocol.md` as vendored
+from `interface2` — currently `@ 0303691` here — and treated the fix as "a different upstream
+and a separate re-vendor."
+
+The deeper problem was not staleness. `interface2` is private and on GitLab, so
+`murderboard_freshness.sh` **could never answer anything but `2` (unknown)** for those two
+files. The gate this repo installed to stop silent drift was structurally unable to fire on
+them. A gate that cannot report is the failure mode the 2026-08-06 entry was written about,
+one level up.
+
+Murderboard adopted both files as **canonical** on 2026-08-21, precisely so the pointer would
+resolve for public consumers. So the fix is no longer "re-vendor from interface2 when you can
+reach it" — it is:
+
+- re-vendor `docs/session_protocol.md` and `.claude/hooks/session-start.sh` from
+  `syncytium2/murderboard`, stamping `vendored from syncytium2/murderboard @ <short-sha>`;
+- add a second `SessionStart` freshness entry for them:
+
+  ```
+  bash tools/murderboard_freshness.sh --hook --label session-protocol \
+       --slug syncytium2/murderboard \
+       --file docs/session_protocol.md --file .claude/hooks/session-start.sh
+  ```
+
+That gate can then return `0`/`1` for the first time since it was installed.
+
+**3. The review substance here is current; only the pair above is behind.** Between this repo's
+stamp (`729fb06`) and murderboard `f26414a` there are **no changes to `doc_review_process.md`
+or `SKILL.md`** — no rules are missing and no murderboard run in this window under-covered.
+What changed upstream is the session-protocol pair, the two hooks' provenance headers, and the
+addition of CI. A re-vendor of the five-file set is therefore optional and low-value right now;
+the pair in item 2 is the one worth doing.
+
+**Not changed by any of this:** the "do not edit vendored copies in place" contract, the
+adoption reasoning in the Decision, or anything about `data/` and `darkroom/`.
