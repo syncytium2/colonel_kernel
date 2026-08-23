@@ -108,7 +108,7 @@ version control. Don't conflate them.
 
 ## Deploying (non-negotiable)
 
-**Deploy only via `npm run deploy`**, from a **full clone** on **`master`** with a clean tree.
+**Deploy only via `npm run deploy`**, from a **full clone** on **`main`** with a clean tree.
 The script is the runbook — it gates on those preconditions, runs the tests, builds clean,
 verifies the CSP is in the shipped HTML, checks the Tab 0 "Born" date was baked from the true
 root commit, deploys, polls past Cloudflare's edge cache until both URLs serve the new bundle,
