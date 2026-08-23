@@ -152,6 +152,15 @@ time since this gate was installed. That it can still go red is not taken on fai
 `murderboard_freshness.sh --selftest` passes all 18 checks here, the first of which is
 `stale stamp FIRES`.
 
+⚠ **`.claude/settings.json` is `skip-worktree` here, and that nearly ate this fix.** The first
+attempt at the repoint edited the working tree, `git status` reported clean, `git add -A` added
+nothing, and the commit went out without it. The bit is an *index* flag, not a shared property:
+a fresh clone and CI materialize the **committed** blob, so a working-tree edit fixes the gate
+for the person who made it and nobody else — the same shape as the defect above, one level
+down, in the file that configures it. Two consequences worth keeping: the fix must be
+**committed** to reach anyone, and **an existing checkout will not receive it on merge** —
+apply it by hand there, or clear the bit locally first.
+
 ⚠ **Expect this pair to re-flag on the next murderboard commit.** The gate compares the stamp
 against the upstream repo's `HEAD`, not against the history of the watched files, so *any*
 commit upstream marks every consumer stale. That is item 3 below, restated as a mechanism: the
