@@ -14,7 +14,7 @@ for the in-app "summarize a dataset" feature; uses the shipped core
 > data-safe) is also tracked in `docs/img/` + bundled at `src/lib/assets/`.
 
 ## Depends on
-- The **ADR-0035** region-windowing (`windowRegion(..., {protocol})`) — on `master`.
+- The **ADR-0035** region-windowing (`windowRegion(..., {protocol})`) — on `main`.
 - Node (repo deps incl. `xlsx`) for the `.mjs` dumpers; the `darkroom/venv` Python
   (matplotlib + numpy) for the renderers.
 - Local data (paths hardcoded at the top of `slice_lib.mjs` and `batch_dump.mjs` — edit

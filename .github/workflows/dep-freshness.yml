@@ -9,7 +9,7 @@ name: dependency-freshness
 # not apply — reaching npm/cdn.sheetjs.com here is expected and fine.
 #
 # NOTE: scheduled workflows fire only from the DEFAULT branch. This becomes active
-# once merged to master; use the "Run workflow" button (workflow_dispatch) to test.
+# once merged to main; use the "Run workflow" button (workflow_dispatch) to test.
 
 on:
   schedule:

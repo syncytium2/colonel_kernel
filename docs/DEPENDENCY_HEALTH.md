@@ -117,7 +117,7 @@ Because the stack is identical, adoption is mostly copy-and-adjust:
    security updates). The committed `npm audit` step is a belt-and-suspenders backstop for this.
 
 **Activation note (applies to both repos):** GitHub reads scheduled workflows and the Dependabot config
-from the **default branch only**. Both go live when the change is merged to `master`, not from a feature
+from the **default branch only**. Both go live when the change is merged to `main`, not from a feature
 branch. Use the Actions tab's **Run workflow** button to test on demand once merged.
 
 ## References

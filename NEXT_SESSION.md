@@ -178,8 +178,8 @@ are stale.
   **Optional follow-up:** also set it to Disable in the dashboard (account → Web Analytics →
   Manage site) for defense in depth — the two are independent. Note the injection is
   **user-agent gated**, so verify as a browser, never with a plain curl.
-- **Deploy model.** Still manual (`npm run deploy`). Auto-deploy on push to `master` remains
-  undecided — WIP lands on `master` often, so it would want a `deploy` branch or a build gate.
+- **Deploy model.** Still manual (`npm run deploy`). Auto-deploy on push to `main` remains
+  undecided — WIP lands on `main` often, so it would want a `deploy` branch or a build gate.
 
 **Raised by the 2026-08-10 AI-visibility work:**
 
@@ -374,9 +374,9 @@ are stale.
 
 ## Conventions that bite
 
-- **Canon → `master`.** FOUNDATIONS, ADRs, the ADR index, and this file live on `master` only.
+- **Canon → `main`.** FOUNDATIONS, ADRs, the ADR index, and this file live on `main` only.
   Code goes to a short-lived feature branch, merged back `--no-ff`.
-- **Deploy only via `npm run deploy`**, from a full clone on `master`. See
+- **Deploy only via `npm run deploy`**, from a full clone on `main`. See
   [DEPLOY_CLOUDFLARE.md](DEPLOY_CLOUDFLARE.md).
 - **Repo hygiene:** `git ls-files data/ darkroom/` must be empty before any push.
 - **Figures go in gitignored `darkroom/`**, never the repo or a temp dir.

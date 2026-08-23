@@ -32,8 +32,8 @@ step "Preflight"
   fail "shallow clone — Born date would be wrong. Run: git fetch --unshallow"
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-[[ "$BRANCH" != "master" ]] &&
-  fail "on '$BRANCH', not master. Ship from master after merging (WIP lands on master often)."
+[[ "$BRANCH" != "main" ]] &&
+  fail "on '$BRANCH', not main. Ship from main after merging (WIP lands on main often)."
 
 [[ -n "$(git status --porcelain)" ]] &&
   fail "working tree dirty — commit or stash first, so DEPLOYED.md records a real commit."

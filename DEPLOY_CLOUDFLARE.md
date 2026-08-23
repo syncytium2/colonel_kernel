@@ -29,7 +29,7 @@ What it does, and why each gate exists:
 
 1. **Preflight** — refuses a shallow clone (the Tab 0 "Born" date is baked from
    `git log --max-parents=0`, which returns HEAD in a truncated history), refuses a
-   non-`master` branch (WIP lands on `master` often; ship after merging), and refuses a
+   non-`main` branch (WIP lands on `main` often; ship after merging), and refuses a
    dirty tree (so `DEPLOYED.md` records a real commit).
 2. **Core tests** — 217 checks.
 3. **Clean build** — `rm -rf dist && npm run build`; the strict CSP is injected at build
@@ -84,8 +84,8 @@ intentionally unrestricted for HMR — ADR-0008).
 
 - **Deploys are MANUAL** — you run `npm run deploy`. Nothing auto-deploys on push.
 - Optional future change: connect the repo in Cloudflare (Workers & Pages →
-  `colonel-kernel` → **Builds → Connect to Git**) so pushes to `master`
-  auto-build + deploy. Weigh against the fact that WIP lands on `master` often —
+  `colonel-kernel` → **Builds → Connect to Git**) so pushes to `main`
+  auto-build + deploy. Weigh against the fact that WIP lands on `main` often —
   auto-deploy would want a `deploy` branch or a build gate first. Note that
   Cloudflare's builder clones **shallow**, so it would need `fetch-depth: 0`
   equivalent or the build guard will (correctly) reject it.
