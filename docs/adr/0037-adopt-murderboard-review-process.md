@@ -90,7 +90,7 @@ the review so it cannot be half-executed. The "do not edit in place" contract ap
 has since landed the hook's deadline discipline (`2a0c299`) plus the ADR-0020 board split
 (`7717ac3`). That is a different upstream and a separate re-vendor.
 
-### 2026-08-22 — murderboard is public; the session-protocol upstream moved into it
+### 2026-08-23 — murderboard is public; the session-protocol gate answered from one laptop
 
 Two corrections to the Decision above, and one item from the 2026-08-06 ⚠ is now actionable.
 
@@ -102,22 +102,43 @@ resolve for readers outside this account.
 
 **2. The ⚠ at the foot of the 2026-08-06 entry is resolvable, and its diagnosis changed.**
 That entry recorded `.claude/hooks/session-start.sh` and `docs/session_protocol.md` as vendored
-from `interface2` — currently `@ 0303691` here — and treated the fix as "a different upstream
-and a separate re-vendor."
+from `interface2` — `@ 0303691` here — and treated the fix as "a different upstream and a
+separate re-vendor."
 
-The deeper problem was not staleness. `interface2` is private and on GitLab, so
-`murderboard_freshness.sh` **could never answer anything but `2` (unknown)** for those two
-files. The gate this repo installed to stop silent drift was structurally unable to fire on
-them. A gate that cannot report is the failure mode the 2026-08-06 entry was written about,
-one level up.
+> **Correction, 2026-08-23.** A first draft of this entry claimed the gate "could never answer
+> anything but `2` (unknown)" for those two files, and that the fix was to *add* a second
+> `SessionStart` entry. Both were wrong, and both were checkable in under a minute. The entry
+> is corrected rather than reworded, because an ADR that records a plausible diagnosis nobody
+> ran is the same defect it is describing.
+
+The second `SessionStart` entry **already existed** — it has been in `.claude/settings.json`
+since the gate was installed, configured as `--slug defazio/interface2` with two `--clone`
+fallbacks to local checkouts. And the gate **does** fire. Run here, it says:
+
+```
+--- !! SESSION-PROTOCOL IS STALE — re-vendor before relying on it ---
+   vendored: 0303691   upstream: c711e73   (via local-clone)
+```
+
+The real defect is narrower and worse-shaped than "cannot fire". That verdict was resolvable
+**only from a private working copy that happens to sit on this laptop**. On CI, on a fresh
+clone, on a collaborator's machine, in a cloud session — no local `interface2`, no route to a
+private GitLab repo, so the answer degrades to `2`, and in `--hook` mode (which must never
+touch the network, by design) `2` means **silent**. The gate was green-or-red for exactly one
+person and mute for everyone else, which is the *distribution* of the failure the 2026-08-06
+entry was about, not its absence. Compounding it: what the stamp was compared against was that
+working copy's `HEAD` — whatever happened to be checked out — not a published ref.
 
 Murderboard adopted both files as **canonical** on 2026-08-21, precisely so the pointer would
-resolve for public consumers. So the fix is no longer "re-vendor from interface2 when you can
-reach it" — it is:
+resolve for public consumers. **Applied in this change:**
 
-- re-vendor `docs/session_protocol.md` and `.claude/hooks/session-start.sh` from
-  `syncytium2/murderboard`, stamping `vendored from syncytium2/murderboard @ <short-sha>`;
-- add a second `SessionStart` freshness entry for them:
+- re-vendored `docs/session_protocol.md` and `.claude/hooks/session-start.sh` from
+  `syncytium2/murderboard @ a24153f`, stamped accordingly. The hook's body is byte-identical
+  to the copy it replaces — only the provenance header moved. The protocol doc did change:
+  it drops `interface2`'s own orphaned-pointer backlog and corrects the companion-hook path,
+  neither of which was ever true for this repo;
+- **repointed** the existing `SessionStart` entry at the public upstream and deleted the
+  `--clone` crutch, so the answer no longer depends on whose machine is asking:
 
   ```
   bash tools/murderboard_freshness.sh --hook --label session-protocol \
@@ -125,14 +146,28 @@ reach it" — it is:
        --file docs/session_protocol.md --file .claude/hooks/session-start.sh
   ```
 
-That gate can then return `0`/`1` for the first time since it was installed.
+Verified after the change — `session-protocol: current (@ a24153f, via remote)`. **`via
+remote`** is the load-bearing word: the upstream resolved from a published ref for the first
+time since this gate was installed. That it can still go red is not taken on faith either;
+`murderboard_freshness.sh --selftest` passes all 18 checks here, the first of which is
+`stale stamp FIRES`.
+
+⚠ **Expect this pair to re-flag on the next murderboard commit.** The gate compares the stamp
+against the upstream repo's `HEAD`, not against the history of the watched files, so *any*
+commit upstream marks every consumer stale. That is item 3 below, restated as a mechanism: the
+alert means "you are behind", never "you are missing a rule", and telling those apart is a
+judgment call the gate deliberately leaves to a human.
 
 **3. The review substance here is current; only the pair above is behind.** Between this repo's
 stamp (`729fb06`) and murderboard `f26414a` there are **no changes to `doc_review_process.md`
 or `SKILL.md`** — no rules are missing and no murderboard run in this window under-covered.
 What changed upstream is the session-protocol pair, the two hooks' provenance headers, and the
 addition of CI. A re-vendor of the five-file set is therefore optional and low-value right now;
-the pair in item 2 is the one worth doing.
+the pair in item 2 was the one worth doing, and is done.
+
+I would rather state that explicitly than let "you are two commits behind" imply a coverage gap
+that does not exist. The freshness gate cannot make that distinction — see the ⚠ in item 2 —
+so someone has to, and the place to record the answer is here.
 
 **Not changed by any of this:** the "do not edit vendored copies in place" contract, the
 adoption reasoning in the Decision, or anything about `data/` and `darkroom/`.
