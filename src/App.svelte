@@ -39,6 +39,8 @@
     return 0;
   }
   let tab = $state(initialTab());
+  // Bound to <Help> so the #lambda hash handler can open the fold that section sits in.
+  let helpRef = $state(null);
 
   // Deep link to the λ section. The two "?" controls open `#lambda` in a NEW BROWSER TAB
   // rather than switching tabs in place, and that is the whole point: Tab 2 is mounted
@@ -46,15 +48,20 @@
   // recording, ROI selection, open folds and λ setting with it. An in-place jump was
   // measured doing exactly that — λ 2.000 → back at the 0.0020 default on return — which
   // is the opposite of what a help affordance should cost someone mid-analysis.
+  // The λ section lives inside a collapsed <details> on Tab 0, so arriving at it means
+  // OPENING that fold, not just scrolling — a scroll alone lands on a shut summary and
+  // the reader sees nothing they clicked for. Help.svelte owns that logic (it also
+  // serves the in-page "bring your own recording" jump); this just calls it once the
+  // section exists. Retried across a few frames because Tab 0 mounts asynchronously.
+  // Read helpRef SYNCHRONOUSLY in the effect body so Svelte tracks it — the effect then
+  // re-runs the moment `bind:this` lands. Reading it only inside a rAF callback made it
+  // invisible to the dependency tracker and needed a 30-frame poll to compensate, which is
+  // re-deriving reactivity the framework already provides.
   $effect(() => {
-    if (typeof location === 'undefined') return;
+    const help = helpRef;
+    if (!help || typeof location === 'undefined') return;
     if (location.hash.replace('#', '') !== 'lambda') return;
-    requestAnimationFrame(() => {
-      const el = document.getElementById('lambda');
-      if (!el) return;
-      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-      el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-    });
+    requestAnimationFrame(() => help.revealAndScroll('lambda', { instant: true }));
   });
 
   // --- controls (FOUNDATIONS §11) ---
@@ -314,10 +321,17 @@
         {challenge3 ? '← Back to Learn' : '🎯 Guess the spikes'}
       </button>
     {/if}
-    <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
-    <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
-      {wide ? '▥ Fit width' : '▤ Full width'}
-    </button>
+    <!-- Shared plot-width preference — the plotting tabs obey it (2026-07-03 layout
+         unification). NOT rendered on Tab 0: `wide` is passed to Tabs 1/2/3 and Shell, never
+         to Help, so on Tab 0 the control flipped its own label and changed nothing — a
+         promise the page could not keep. Whether Tab 0's premise figure SHOULD be able to
+         take the full window is a live question (it currently gets ~26% of the canvas); if
+         that is built, render this again and pass `wide` into Help. -->
+    {#if tab !== 0}
+      <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
+        {wide ? '▥ Fit width' : '▤ Full width'}
+      </button>
+    {/if}
   </nav>
 
   <!-- The AP-independent dial: app chrome, not a rail control, so it is in the SAME place on
@@ -330,7 +344,7 @@
   {/if}
 
   {#if tab === 0}
-    <Help onNavigate={navFromHelp} />
+    <Help bind:this={helpRef} onNavigate={navFromHelp} />
   {:else if tab === 2}
     {#if challenge2}
       <BeatTheColonel {wide} {apIndepMix} />

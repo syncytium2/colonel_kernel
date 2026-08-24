@@ -18,6 +18,14 @@
   --accent-bg: rgba(170, 59, 255, 0.1);
   --accent-border: rgba(170, 59, 255, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
+  /* Tab 0 premise figure: the band marking an AP-independent event. See PremiseFigure.svelte —
+     on white this composites darker than the page and reads as a highlight. */
+  --premise-shade: rgba(240, 168, 0, 0.17);
+  /* A SOLID accent fill that carries white text. Distinct from --accent (a non-text UI
+     accent, 4.39:1 under white) and from --link-accent (accent-coloured TEXT, which in dark
+     mode is a light purple and would fail badly as a fill). White on this is 7.45:1, and the
+     same value works on both grounds, so the primary CTA passes AA in either theme. */
+  --accent-solid: #7a1fc4;
 
   /* PLOT SERIES PALETTE — one color per QUANTITY, identical on every tab.
      These exist because the hexes used to be literals scattered across seven
@@ -71,6 +79,13 @@
     --accent-bg: rgba(192, 132, 252, 0.15);
     --accent-border: rgba(192, 132, 252, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);
+    /* Much fainter here, deliberately: a warm wash on this ground composites BRIGHTER than
+       the background, the same polarity as the spike ticks, and a 7px-wide bright bar in the
+       raster reads as a tick — exactly where the caption says there are none. */
+    --premise-shade: rgba(240, 168, 0, 0.07);
+    /* Same value as light: white-on-it is 7.45:1 either way, and a lighter fill here would
+       fail (white on the dark --accent #c084fc is 2.64:1). */
+    --accent-solid: #7a1fc4;
     /* Chart purple is a shade deeper than the UI accent here, and only here: the
        dark --accent (#c084fc, OKLCH L 0.72) sits above the L 0.48–0.67 band a
        series mark needs against this surface. UI chrome keeps #c084fc. */
@@ -145,6 +160,22 @@ code {
 }
 .out-link:hover {
   text-decoration-thickness: 2px;
+}
+
+/* Available to assistive technology, absent from the visual layout. Global for the same
+   reason .out-link is: the obvious re-derivation of this is `display: none`, which silently
+   removes the text from the accessibility tree — exactly what a canvas figure's only
+   description must not do. Clip, do not hide. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Print: when the summary report is open (SummaryReport flags <html>), print ONLY

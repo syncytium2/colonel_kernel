@@ -19,7 +19,12 @@ k_true = dexp(lag, 0.25, 1.5, 1.0)
 rng = np.random.default_rng(7)
 
 fig = plt.figure(figsize=(15, 9.6))
-fig.suptitle("Four ways to ask if there is a calcium kernel", fontsize=24, weight="bold", y=0.982)
+# THREE recovery methods, plus a check — not four methods. methods.html §6 is "Three
+# parallel recovery methods" and §7 files the spike-triggered average separately as the
+# "validation partner": it assumes no kernel and solves no inverse problem. Titling it a
+# fourth method quietly converts an independence check into a fourth estimate.
+fig.suptitle("Three ways to recover a calcium kernel — and one check on them",
+             fontsize=23, weight="bold", y=0.982)
 fig.text(0.5, 0.923, "the kernel = the calcium bump caused by ONE action potential",
          ha="center", fontsize=13, color="#555", style="italic")
 
@@ -54,9 +59,12 @@ fig.text(0.353, 0.675, "convolve", fontsize=9, ha="center", color="#888")
 fig.text(0.655, 0.745, "=", fontsize=28, ha="center", va="center", color="#333")
 
 # ── BOTTOM: 2×2 method cards ─────────────────────────────────────────────────────
-gs = fig.add_gridspec(2, 2, left=0.05, right=0.97, top=0.57, bottom=0.10, hspace=0.46, wspace=0.16)
+# bottom=0.145, not 0.10: the footer grew to two lines (the AGREE line plus the
+# "illustrative, not computed" disclosure) and the first version of that collided with the
+# bottom-left panel's "lag from spike (s)" label.
+gs = fig.add_gridspec(2, 2, left=0.05, right=0.97, top=0.57, bottom=0.145, hspace=0.46, wspace=0.16)
 
-def card(gpos, color, name, tag_lines, good, watch, draw):
+def card(gpos, color, name, tag_lines, good, watch, draw, pic_title="recovered kernel"):
     sub = gpos.subgridspec(1, 2, width_ratios=[1.25, 1], wspace=0.10)
     axtxt = fig.add_subplot(sub[0]); axpic = fig.add_subplot(sub[1])
     axtxt.set_xlim(0, 1); axtxt.set_ylim(0, 1); axtxt.axis("off")
@@ -70,8 +78,12 @@ def card(gpos, color, name, tag_lines, good, watch, draw):
     axpic.plot(lag, k_true, color=TRUE, lw=2, ls="--", zorder=1)
     draw(axpic)
     axpic.set_xlim(-5, 5); axpic.set_yticks([]); axpic.tick_params(labelsize=7)
-    axpic.set_xlabel("time after spike (s)", fontsize=8)
-    axpic.set_title("recovered kernel", fontsize=8, color="#888")
+    # "time after spike" spanning -5..+5 is a contradiction on its face, and the negative
+    # half is the most load-bearing part of a recovered kernel here: ADR-0009 retains it
+    # deliberately, and the shaped method carries a dedicated acausal penalty on it.
+    axpic.set_xlabel("lag from spike (s)", fontsize=8)
+    # the STA panel is not a recovery; it must not carry the same title as the three that are
+    axpic.set_title(pic_title, fontsize=8, color="#888")
 
 def d_dec(ax):
     ax.plot(lag, k_true + 0.06*rng.standard_normal(lag.size) - 0.05*lag/5, color=C_DEC, lw=1.6)
@@ -99,12 +111,23 @@ def d_sta(ax):
                 color=C_STA, lw=0.6, alpha=0.28)
     blur = np.convolve(k_true, np.ones(25)/25, mode="same")
     ax.plot(lag, blur/blur.max(), color=C_STA, lw=2.6)
+# The old caveat ("blurs when spikes crowd") named the wrong failure mode. The shipped
+# spikeTriggeredAverage REJECTS a spike whose neighbour is within half a window (and skips
+# the first and last), so a crowded recording does not blur — it starves. Measured at the
+# shipped 1 s window: 31/33 spikes accepted at 0.1 Hz, but only 10 of 1515 at 5 Hz.
 card(gs[1, 1], C_STA, "STA",
-     ["Snip the calcium around", "every spike and just", "average the snippets."],
-     "simple, assumption-free", "blurs when spikes crowd", d_sta)
+     ["Snip the calcium around each", "ISOLATED spike, subtract its", "own baseline, average those."],
+     "assumes no kernel at all", "discards spikes with close neighbours", d_sta,
+     pic_title="spike-triggered average")
 
-fig.text(0.5, 0.035, "If a real kernel exists, all four roughly AGREE.   Disagreement is the diagnostic.",
-         ha="center", fontsize=13.5, weight="bold", color="#333")
+fig.text(0.5, 0.052, "If a real kernel exists, the three methods and the check roughly AGREE.   Disagreement is the diagnostic.",
+         ha="center", fontsize=12.5, weight="bold", color="#333")
+# Say what these panels are. They are drawn from one k_true array — the free-vector panel is
+# k_true plus noise and a tilt, the STA panel is a box blur — so the agreement they show is a
+# property of the drawing, not a result. Without this line the figure's bold bottom line reads
+# as evidence for a claim it cannot test.
+fig.text(0.5, 0.016, "Illustrative sketches of each method's characteristic behaviour — drawn, not computed by the solvers.",
+         ha="center", fontsize=10, color="#777", style="italic")
 
 fig.savefig("darkroom/methods_explainer.pdf")
 fig.savefig("darkroom/methods_explainer.png", dpi=140)

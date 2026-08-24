@@ -58,7 +58,19 @@
   // 30 s decay swallowed a later spike burst that rides on that tail, which read as if those
   // spikes belonged to the unexplained event — the opposite of the claim. The narrow band
   // marks where it STARTS, which is where "no spike caused this" is actually shown.
-  const SHADE = 'rgba(240, 168, 0, 0.17)';
+  // THEME-AWARE, and it has to be. On white, a warm wash at 0.17 composites DARKER than the
+  // page and reads as a highlight. On the dark surface the same wash composites BRIGHTER than
+  // the background — the same polarity as the white spike ticks — so at the full-record view,
+  // where each band is ~7px wide, it renders as a fat tick sitting exactly where the caption
+  // says the row is empty. A warm colour cannot be made darker than a near-black ground, so
+  // the dark theme gets a much fainter wash: enough to find when zoomed (where the band is
+  // wide), too faint to read as a mark when it is 7px.
+  // Read once at init, like every other themed value in the app — nothing here re-themes live.
+  const SHADE = (() => {
+    if (typeof window === 'undefined') return 'rgba(240, 168, 0, 0.17)';
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--premise-shade').trim();
+    return v || 'rgba(240, 168, 0, 0.17)';
+  })();
   const regions = sim.independentEvents.map((e) => ({
     x0: e.atS - 3,
     x1: e.atS + 9,
@@ -166,15 +178,30 @@
   </figcaption>
 
   <!-- The bands are canvas: no text for a screen reader, no keyboard path to the zoom.
-       This is the accessible equivalent, and the rendered figure is the static fallback. -->
+       This is the accessible equivalent, and the rendered figure is the static fallback.
+
+       The description is VISUALLY HIDDEN, not removed: sighted readers already have the
+       figure and its caption two lines above, so showing it made the page restate the
+       same 90 words a third time. Clipped rather than `display: none` — the latter drops
+       it out of the accessibility tree, which would delete the only text description of
+       a canvas. The static-render link stays visible; it is a real affordance. -->
   <p class="alt">
-    A simulated recording: {sim.spikes.length} action potentials in {sim.clusters.length}
-    bursts of one to five, shown as ticks in a band beneath the calcium trace. Each burst
-    produces a transient roughly proportional to the number of spikes in it. Three further
-    calcium events have no action potentials beneath them at all — one tall, brief and
-    symmetric, one rising slowly and decaying for most of a minute, and a third brief one.
-    Neither shape matches the spike-driven transients.
-    <a href={premisePng} target="_blank" rel="noopener">Open the rendered figure ↗</a>
+    <span class="sr-only">
+      A simulated recording: {sim.spikes.length} action potentials in {sim.clusters.length}
+      bursts of one to five, shown as ticks in a band beneath the calcium trace. Each burst
+      produces a transient roughly proportional to the number of spikes in it. Three further
+      calcium events have no action potentials beneath them at all — one tall, brief and
+      symmetric, one rising slowly and decaying for most of a minute, and a third brief one.
+      None of the three matches the shape of the spike-driven transients.
+    </span>
+    <!-- ⚠ The static PNG disagrees with the live figure it falls back for: it shades each
+         event across its WHOLE decay, and those bands visibly contain spikes, contradicting
+         the caption above. It also uses red ticks on a blue trace where the live bands are
+         black on teal. Regenerating it is a darkroom job; until then it is labelled. -->
+    <a class="out-link" href={premisePng} target="_blank" rel="noopener"
+      >Open the rendered figure <span aria-hidden="true">↗</span></a
+    >
+    <span class="alt-note">(a static, earlier rendering &mdash; shading differs)</span>
   </p>
 </figure>
 
@@ -213,7 +240,7 @@
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--bg);
-    color: var(--accent);
+    color: var(--link-accent, var(--accent));
     font-weight: 600;
     cursor: pointer;
   }
@@ -239,13 +266,15 @@
   }
 
   .alt {
-    margin: 10px 0 0;
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
+    margin: 8px 0 0;
     font-size: 13px;
     line-height: 1.55;
     color: var(--text-muted, var(--text));
     max-width: 78ch;
   }
-  .alt a { font-weight: 600; margin-left: 4px; white-space: nowrap; }
+  /* `.sr-only` lives in app.css beside `.out-link` — same reason that rule does: the next
+     component to need it would otherwise re-derive it, and the obvious re-derivation
+     (`display: none`) silently drops the text out of the accessibility tree. */
+  .alt a { white-space: nowrap; }
+  .alt-note { margin-left: 8px; opacity: 0.8; }
 </style>

@@ -105,7 +105,9 @@
           <td class="req">required</td>
           <td>
             A <code>time</code> column in seconds, then one column per ROI, one row per
-            frame. <code>time</code> starts at 0 and strictly increases. Don't store the
+            frame. <code>time</code> must strictly increase — a file where it does not is
+            rejected — and should start at 0, since spike times and region bounds are read
+            on that same clock. Don't store the
             frame interval — it is derived from <code>time</code>. The first ROI column is
             taken as the targeted cell.
           </td>
@@ -114,7 +116,8 @@
           <td><code>spikes</code></td>
           <td class="req">required</td>
           <td>
-            One column, header exactly <code>spikes</code>, holding action-potential times
+            One column headed <code>spikes</code> (matched case-insensitively, surrounding
+            spaces ignored), holding action-potential times
             in seconds on the same clock as <code>trace.time</code>. Any length —
             it does not have to match the frame count, and must never be padded to.
           </td>
@@ -145,10 +148,14 @@
       <li>
         <strong>Region names change how a region is analyzed.</strong> A name containing
         <code>baseline</code> analyzes the <strong>last 20 minutes</strong> of the period;
-        one containing <code>high K</code> or <code>hiK</code> uses the whole period.
+        one containing <code>high K</code> or <code>hiK</code> uses the whole period; and
+        exactly <code>(full recording)</code> or <code>whole</code> — those two names only,
+        not merely containing them — takes the raw period untouched.
         <em>Any other name</em> is treated as a drug wash-in — the first 2 minutes are
-        dropped, then up to 20 minutes analyzed. Regions under 12 minutes are flagged but
-        still analyzed, and all three numbers are adjustable in Tab 2.
+        dropped, then up to 20 minutes analyzed. A region with under 12 minutes of analyzable
+        time is flagged but still analyzed, <em>except</em> a wash-in shorter than the
+        2-minute delay, which leaves nothing to analyze and is skipped. All three numbers —
+        the 2-minute delay, the 12-minute floor, the 20-minute cap — are adjustable in Tab 2.
       </li>
     </ul>
 
@@ -156,15 +163,20 @@
     <p class="plain">
       One file with a <code>time</code> column, a <code>spikes</code> column, and one or
       more ROI columns. The spike column is shorter than the others — leave the cells
-      below the last spike blank rather than padding them. A CSV carries no region table,
-      so it is always analyzed as a single region; that is the reason to prefer the
-      workbook if you have one.
+      below the last spike blank rather than padding them. <strong>Include the spike
+      column:</strong> a CSV without one still loads, with an empty spike train, and there
+      is nothing to recover a kernel from. A CSV also carries no region table, so it is
+      always analyzed as a single region; that is the reason to prefer the workbook if you
+      have one.
     </p>
   </details>
 
+  <!-- The claim used to end "makes no network requests at all", which this very button
+       falsifies: building the workbook dynamically imports the xlsx bundle from this origin.
+       FOUNDATIONS §6 forbids THIRD-PARTY requests; same-origin ones are expected. -->
   <p class="plain privacy">
     Nothing you load is uploaded, and neither is anything you download — the template is
-    built inside your browser. Colonel Kernel makes no network requests at all.
+    built inside your browser, from code served by this site and nowhere else.
   </p>
 </section>
 
@@ -200,12 +212,17 @@
   }
   .dl:hover:not(:disabled) { border-color: var(--accent-border); box-shadow: var(--shadow); }
   .dl:disabled { opacity: 0.6; cursor: progress; }
+  /* The fill is --link-accent, not --accent. White on the UI accent measures 4.39:1 in light
+     and 2.64:1 in DARK, both failing WCAG 1.4.3 for 15.5px/650 text — and this is the page's
+     primary call to action. --link-accent is the same hue darkened for exactly this reason
+     (app.css), and white on it clears AA in both themes. The 0.85-alpha sub-label went solid
+     for the same reason: it was 3.57:1 light / 2.32:1 dark. */
   .dl.primary {
-    border-color: var(--accent);
-    background: var(--accent);
+    border-color: var(--accent-solid, var(--accent));
+    background: var(--accent-solid, var(--accent));
     color: #fff;
   }
-  .dl.primary .dl-sub { color: rgba(255, 255, 255, 0.85); }
+  .dl.primary .dl-sub { color: #fff; }
   .dl-title { font-size: 15.5px; font-weight: 650; }
   .dl.primary .dl-title { color: #fff; }
   .dl-sub { font-size: 12.5px; font-family: var(--mono); color: var(--text); }
@@ -225,7 +242,7 @@
     background: none;
     border: none;
     padding: 0;
-    color: var(--accent);
+    color: var(--link-accent, var(--accent));
     font-weight: 600;
     cursor: pointer;
   }
@@ -259,8 +276,7 @@
   th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text); }
   td:first-child { white-space: nowrap; }
   .req, .opt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
-  .req { color: var(--accent); font-weight: 700; }
-  .opt { opacity: 0.7; }
+  .req { color: var(--link-accent, var(--accent)); font-weight: 700; }
   code {
     font-family: var(--mono);
     font-size: 0.92em;
