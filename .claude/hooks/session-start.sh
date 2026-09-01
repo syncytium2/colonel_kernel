@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# instrument: retrieval
 # vendored from syncytium2/murderboard @ fae0eca — do NOT edit here; update upstream and re-copy
 # CANONICAL SOURCE: syncytium2/murderboard .claude/hooks/session-start.sh — edit HERE.
 # Generic SessionStart briefing — runs at every session start / resume.
