@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # instrument: verification
-# vendored from syncytium2/armory @ 548f734. This file is a COPY; edits here are
+# vendored from syncytium2/armory @ 9913597. This file is a COPY; edits here are
 # overwritten whenever it is re-vendored. Its source repository is private, so there is
 # nowhere to send a patch: treat this file as read-only and raise anything you find as
 # an issue in THIS repository.
@@ -174,10 +174,23 @@ def selftest():
                                     "caption": "before vs after", "status": "proactive"}})
         check('"/tmp/a b.png"' in multi and "/tmp/c.pdf" in multi,
               "real multi-file send: carries every file, quotes the one with a space")
-        check("caption" not in run({"tool_name": "SendUserFile",
-                                    "tool_input": {"files": ["/tmp/x.png"],
-                                                   "caption": "before vs after"}}),
-              "ignores caption/status/display -- only `files` is load-bearing")
+        # EVERY FIELD THE SCHEMA HAS, populated at once. `display` was covered by no
+        # fixture until colonel-kernel-80 read the tool definition independently and said
+        # so -- the second-producer rule working in the direction it is supposed to.
+        # Asserted with SENTINELS, not with the field values: a first attempt tested for
+        # the word "render", which appears in this file's own fixed prose describing the
+        # 2026-09-01 probe, so the check passed on the docstring rather than on behaviour.
+        full = run({"tool_name": "SendUserFile",
+                    "tool_input": {"files": ["/tmp/x.png"], "status": "proactive",
+                                   "display": "render", "caption": "ZZCAPTIONZZ"},
+                    "tool_response": "1 file delivered to user."})
+        check("/tmp/x.png" in full, "full schema payload: still names the file")
+        check("ZZCAPTIONZZ" not in full,
+              "full schema payload: caption is not echoed into the remedy")
+        check(all(run({"tool_name": "SendUserFile",
+                       "tool_input": {"files": ["/tmp/x.png"], "display": d}})
+                  for d in ("render", "attach")),
+              "fires on both `display` values -- neither suppresses the gate")
         # If the schema ever grows a shape `files` does not match, the remedy must
         # DEGRADE, not crash -- the hook is PostToolUse and a traceback there is worse
         # than the silence it replaces.
