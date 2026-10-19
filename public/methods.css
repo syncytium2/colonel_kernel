@@ -110,6 +110,7 @@ body {
 }
 .backlink:hover { text-decoration: underline; }
 .backlink-flush { margin: 0; }
+.backlink-next { margin-left: 18px; }
 
 /* --- abstract / scope box --- */
 .abstract {
