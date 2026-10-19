@@ -5,10 +5,10 @@ this disagrees with the live site, trust the site and re-run the deploy.
 
 | | |
 |---|---|
-| **Deployed at** | 2026-08-19 04:08 UTC |
-| **Commit** | `dcd16a5` — The AP-independent dial reaches the three challenges (ADR-0052) |
-| **Bundle** | `assets/index-COK7Ua4S.js` |
-| **Worker version** | `16417296-64b3-402a-b34e-b94b514b9184` |
+| **Deployed at** | 2026-10-19 19:26 UTC |
+| **Commit** | `6290364` — A visible link back to tonydefazio.com, above the tabs and on the method |
+| **Bundle** | `assets/index-DYeqeEag.js` |
+| **Worker version** | `e18faa00-cc00-4098-8312-c4709900375f` |
 | **Live** | https://kernel.tonydefazio.com · https://colonel-kernel.tonydefazio.workers.dev |
 
 Verified at deploy time: core tests pass, CSP present in the shipped HTML and on
