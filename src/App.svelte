@@ -274,6 +274,8 @@
 </script>
 
 <main class="appmain">
+  <!-- The way back to the parent site, the same on every tonydefazio.com destination. -->
+  <p class="home"><a href="https://tonydefazio.com/">&larr; tonydefazio.com</a></p>
   <nav class="tabs">
     <button class:active={tab === 0} onclick={() => (tab = 0)} title="What this tool is + the mathematical reference">0 · Start here</button>
     <button class:active={tab === 1} onclick={() => (tab = 1)}>1 · Convolution</button>
@@ -565,6 +567,17 @@
     padding: 16px 20px;
     text-align: left;
   }
+
+  .home {
+    flex: none;
+    margin: 0;
+    font-size: 13px;
+  }
+  .home a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .home a:hover { text-decoration: underline; }
 
   /* tab nav + width toggle */
   .tabs {
