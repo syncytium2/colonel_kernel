@@ -17,15 +17,15 @@
     "template-acceptance": "node src/lib/core/template-acceptance.mjs"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^7.1.2",
-    "playwright": "^1.61.0",
-    "svelte": "^5.55.5",
-    "vite": "^8.0.12",
-    "wrangler": "^4.106.0"
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "playwright": "^1.64.1",
+    "svelte": "^5.57.2",
+    "vite": "^8.3.5",
+    "wrangler": "^4.152.0"
   },
   "dependencies": {
     "fft.js": "^4.0.4",
-    "papaparse": "^5.5.4",
+    "papaparse": "^5.7.0",
     "uplot": "^1.6.32",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
