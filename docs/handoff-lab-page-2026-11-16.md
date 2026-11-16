@@ -26,19 +26,26 @@ npm ci
 npm run test:core        # 265 pass
 npm run test:lab         # 61 pass
 npm run lab-fixture      # writes exports/SIMULATED_20261116.klab.json (gitignored, no lab data)
-npm run dev              # then open http://localhost:5173/#lab
+npm run lab-dev          # tests ports from 5181, starts on the first free one, prints the URL
 ```
 
 For real recordings, point the dev server at the folder that holds the `.klab.json` files.
-In Git Bash:
+In PowerShell, which is what Tony uses on 065:
 
-```bash
-CK_LAB_RAW_DIR="C:/Users/defazio/University of Michigan Dropbox/Richard DeFazio/data/rawF_kernel_test" npm run dev
+```powershell
+$env:CK_LAB_RAW_DIR = "C:\Users\defazio\University of Michigan Dropbox\Richard DeFazio\data\rawF_kernel_test"
+npm run lab-dev
 ```
 
+Use `npm run lab-dev`, not `npm run dev` with a port picked by hand. On 065, 5173 is usually
+cerebro's, and other sessions run colonel_kernel servers from their own worktrees, sometimes
+on old commits. `lab-dev` probes each port before using it, binds with `--strictPort`, and
+prints the checkout, branch and commit it is serving.
+
 The `LAB · Extraction` button exists only on the dev server. `scripts/lab-shot.mjs OUTDIR`
-screenshots the page (`LAB_SCHEME=dark`, `LAB_VERDICT=unsure` to exercise a save); the cloud
-session needed `PW_CHROMIUM` to name a browser, 065 may not.
+screenshots the page (`LAB_URL` names the server; `LAB_SCHEME=dark`, `LAB_VERDICT=unsure` to
+exercise a save). On 065 Playwright's headless shell may be missing; pass a full Chromium as
+`PW_CHROMIUM`.
 
 ## Update, later on 2026-11-16 (065, branch `lab-exclusions`)
 
