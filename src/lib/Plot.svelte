@@ -102,6 +102,10 @@
     // stay readable when the system colour scheme is dark.
     axisColor = null,
     gridColor = null,
+    // Long-time x axis (seconds): tick steps chosen from TIME_INCRS and labelled with their
+    // unit, seconds up to 120 s steps and minutes from 5-minute steps (Tony, 2026-11-16).
+    // False keeps uPlot's plain numeric ticks: every existing plot passes nothing.
+    timeTicks = false,
     // EDIT mode (challenge tabs): click empty space to ADD a spike, shift-click the
     // nearest to REMOVE it, drag one to MOVE it. Emits data-time (snapped to
     // editSnapDt when given). Disables zoom while on. Off by default — every existing
@@ -132,6 +136,20 @@
     if (!fill) return height;
     const h = wrap?.clientHeight || 0;
     return h > 1 ? h : height;
+  }
+
+  // Tick steps for timeTicks, in seconds: fine steps when zoomed in, then 10/20/30/60/120 s,
+  // then whole minutes.
+  const TIME_INCRS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200];
+  function timeAxis() {
+    if (!timeTicks) return {};
+    const trim = (v) => String(+v.toFixed(3));
+    return {
+      incrs: TIME_INCRS,
+      space: 70,
+      values: (u, splits, axisIdx, space, incr) =>
+        incr >= 300 ? splits.map((v) => `${trim(v / 60)} min`) : splits.map((v) => `${trim(v)} s`),
+    };
   }
 
   function axisInk() {
@@ -298,7 +316,7 @@
       ...(padRight != null ? { padding: [null, padRight, null, null] } : {}),
       hooks,
       axes: [
-        { show: showXAxis, label: xLabel || undefined, ...axisInk() },
+        { show: showXAxis, label: xLabel || undefined, ...axisInk(), ...timeAxis() },
         {
           ...axisInk(),
           ...(yAxisSize != null ? { size: yAxisSize } : {}),

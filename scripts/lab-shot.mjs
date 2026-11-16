@@ -4,8 +4,10 @@
 //   npm run dev                      (in another shell)
 //   node scripts/lab-shot.mjs OUTDIR [recording-option-index]
 //
-// Writes OUTDIR/lab-whole.png (free-vector, whole recording) and OUTDIR/lab-region.png
-// (shaped, first region), and prints any console error the page raised.
+// Writes OUTDIR/lab-default.png (free-vector, the window the page opens on: "baseline" when
+// the file has it), OUTDIR/lab-whole.png (shaped, whole recording) and OUTDIR/lab-folded.png,
+// and prints any console error the page raised. LAB_URL names the dev server (default
+// http://localhost:5173/#lab; other sessions' servers may hold that port).
 import { chromium } from 'playwright';
 
 const out = process.argv[2];
@@ -21,15 +23,15 @@ page.on('console', (m) => {
 });
 page.on('pageerror', (e) => errors.push('PAGEERROR ' + e.message));
 
-await page.goto('http://localhost:5173/#lab');
+await page.goto(process.env.LAB_URL ?? 'http://localhost:5173/#lab');
 await page.waitForSelector('.labpage select');
 await page.selectOption('.labpage select', { index: which });
 await page.waitForSelector('.labpage table', { timeout: 60000 });
 await page.waitForTimeout(3500);
-await page.screenshot({ path: `${out}/lab-whole.png`, fullPage: true });
+await page.screenshot({ path: `${out}/lab-default.png`, fullPage: true });
 
 const selects = await page.$$('.labpage .rail select');
-await selects[2].selectOption({ index: 1 }); // window: first region
+await selects[2].selectOption({ index: 0 }); // window: whole recording
 await page.waitForTimeout(2500);
 await selects[3].selectOption('shaped');
 await page.waitForTimeout(1500);
@@ -40,7 +42,7 @@ if (process.env.LAB_VERDICT) {
   await page.click(`.labpage .review button:has-text("${process.env.LAB_VERDICT}")`);
   await page.waitForSelector(`.labpage .review .saved b:has-text("${process.env.LAB_VERDICT}")`, { timeout: 10000 });
 }
-await page.screenshot({ path: `${out}/lab-region.png`, fullPage: true });
+await page.screenshot({ path: `${out}/lab-whole.png`, fullPage: true });
 
 // A folded view: controls, the STA, the table and the raw band put away.
 for (const name of ['hide controls', 'Spike-triggered average', 'Diagnostics by extraction', 'Raw fluorescence']) {

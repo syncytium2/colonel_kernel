@@ -94,7 +94,10 @@
       rec = parsed;
       fileName = name;
       roiIndex = parsed.targetIndex ?? 0;
-      windowIdx = 0;
+      // Open on the region named "baseline" when the file has one (Tony, 2026-11-16);
+      // the whole recording otherwise.
+      const b = analysisWindows(parsed).findIndex((w, i) => i > 0 && /^baseline$/i.test(w.name.trim()));
+      windowIdx = b > 0 ? b : 0;
     } catch (e) {
       rec = null;
       result = null;
@@ -535,7 +538,7 @@
           {#if !fold.raw}
             {#key `${rawBand.series.length}-${dark}-${lastBand}-${bandBoost}`}
               <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={rawBand.xs} seriesList={rawBand.series} {xRange} yAxisSize={56} padRight={16}
-                showXAxis={lastBand === 'raw'} xLabel={lastBand === 'raw' ? 'time (s)' : ''}
+                timeTicks showXAxis={lastBand === 'raw'} xLabel={lastBand === 'raw' ? 'time' : ''}
                 syncKey="labx" cursorPoints={false} yLabel="F (camera units)" height={bandHeight('raw', 170)} />
             {/key}
           {/if}
@@ -543,7 +546,7 @@
           {#if !fold.traces}
             {#key `${traceBand.series.length}-${dark}-${lastBand}-${bandBoost}`}
               <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={traceBand.xs} seriesList={traceBand.series} {xRange} yAxisSize={56} padRight={16}
-                showXAxis={lastBand === 'traces'} xLabel={lastBand === 'traces' ? 'time (s)' : ''}
+                timeTicks showXAxis={lastBand === 'traces'} xLabel={lastBand === 'traces' ? 'time' : ''}
                 syncKey="labx" cursorPoints={false} zeroLine yLabel="dF/F₀" height={bandHeight('traces', 190)} />
             {/key}
           {/if}
@@ -551,7 +554,7 @@
           {#if !fold.spikes}
             {#key dark}
               <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={Array.from(result.times)} ys={Array.from(result.spikeCounts)} kind="stems" color="var(--series-spikes)"
-                {xRange} yAxisSize={56} padRight={16} syncKey="labx" xLabel="time (s)" yLabel="spikes" height={140} />
+                {xRange} yAxisSize={56} padRight={16} syncKey="labx" timeTicks xLabel="time" yLabel="spikes" height={140} />
             {/key}
           {/if}
         </div>
