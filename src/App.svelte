@@ -26,9 +26,11 @@
   // First-time landing is Tab 0 (Start here) — the accessible on-ramp for naive
   // users. Direct/screenshot links still work: #tab1 / #tab2 / #tab3 (and #tab0/#help)
   // pick their tab explicitly.
+  const LAB_TAB = 9;
   function initialTab() {
     if (typeof location === 'undefined') return 0;
     const h = location.hash.replace('#', '');
+    if (h === 'lab' && import.meta.env.DEV) return LAB_TAB;
     if (h === 'tab3') return 3;
     if (h === 'tab2') return 2;
     if (h === 'tab1') return 1;
@@ -36,6 +38,13 @@
     return 0;
   }
   let tab = $state(initialTab());
+
+  // DEV-ONLY lab page (ADR-0053): kernels compared across extractions of RAW fluorescence.
+  // Same arrangement as Tab 2's LabPicker (ADR-0048): the ONLY reference to the component is
+  // this dynamic import behind `import.meta.env.DEV`, which Vite substitutes to `false` in a
+  // build, so no chunk is emitted and `npm run lab-check` proves it. Never import it statically.
+  let LabExtraction = $state(null);
+  if (import.meta.env.DEV) import('./lib/lab/LabExtraction.svelte').then((m) => (LabExtraction = m.default));
 
   // --- controls (FOUNDATIONS §11) ---
   // Surfaced by default: place spikes, shape the kernel, see the output.
@@ -296,6 +305,9 @@
         {challenge3 ? '← Back to Learn' : '🎯 Guess the spikes'}
       </button>
     {/if}
+    {#if LabExtraction}
+      <button class="labbtn" class:active={tab === LAB_TAB} onclick={() => (tab = LAB_TAB)} title="Lab only, dev server only: kernels from raw fluorescence">LAB · Extraction</button>
+    {/if}
     <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
     <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
       {wide ? '▥ Fit width' : '▤ Full width'}
@@ -307,12 +319,14 @@
        (`calcium = spikes ⊗ kernel`) is assumed by all three of them, so the means of
        breaking it should not have to be hunted for on any of them. Hidden on Tab 0, whose
        premise figure is a composed argument rather than a signal this governs. -->
-  {#if tab !== 0}
+  {#if tab !== 0 && tab !== LAB_TAB}
     <ApIndependentBar bind:mix={apIndepMix} {tab} />
   {/if}
 
   {#if tab === 0}
     <Help onNavigate={navFromHelp} />
+  {:else if tab === LAB_TAB}
+    {#if LabExtraction}<LabExtraction />{/if}
   {:else if tab === 2}
     {#if challenge2}
       <BeatTheColonel {wide} {apIndepMix} />
@@ -601,6 +615,10 @@
     border-color: var(--accent);
     color: var(--text-h);
     background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  }
+  /* Dashed like the lab picker (ADR-0048): this button does not exist in the shipped app. */
+  .tabs button.labbtn {
+    border: 1px dashed var(--muted, #888);
   }
   .challengebtn {
     border-color: var(--accent-border) !important;

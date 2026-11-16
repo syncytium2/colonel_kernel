@@ -85,14 +85,27 @@ function injectCspOnBuild() {
 // attack surface on the one artifact FOUNDATIONS §6 asks people to be able to audit.
 const LAB_DIR = 'exports'
 const LAB_RE = /\.(csv|xlsx)$/i
+// Lab recordings with RAW fluorescence (ADR-0053): `<slice_id>.klab.json`. They default to
+// the same gitignored folder; CK_LAB_RAW_DIR points the dev server at another one (the
+// lab's export folder), so files need not be copied into the repo tree.
+const LAB_RAW_RE = /\.klab\.json$/i
 
 function labRecordingsOnServe() {
   const here = path.dirname(fileURLToPath(import.meta.url))
-  const dir = path.join(here, LAB_DIR)
+  const sources = [
+    { list: '/__lab/recordings', file: '/__lab/file', dir: path.join(here, LAB_DIR), label: LAB_DIR, re: LAB_RE },
+    {
+      list: '/__lab/raw-recordings',
+      file: '/__lab/raw-file',
+      dir: process.env.CK_LAB_RAW_DIR ? path.resolve(process.env.CK_LAB_RAW_DIR) : path.join(here, LAB_DIR),
+      label: process.env.CK_LAB_RAW_DIR ? 'CK_LAB_RAW_DIR' : LAB_DIR,
+      re: LAB_RAW_RE,
+    },
+  ]
 
-  function list() {
+  function list(src) {
     try {
-      return readdirSync(dir).filter((f) => LAB_RE.test(f)).sort()
+      return readdirSync(src.dir).filter((f) => src.re.test(f)).sort()
     } catch {
       return null // folder absent — a clone without local data is not an error
     }
@@ -102,27 +115,29 @@ function labRecordingsOnServe() {
     name: 'lab-recordings-on-serve',
     apply: 'serve',
     configureServer(server) {
-      server.middlewares.use('/__lab/recordings', (_req, res) => {
-        const files = list()
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ dir: LAB_DIR, files: files ?? [], missing: files === null }))
-      })
+      for (const src of sources) {
+        server.middlewares.use(src.list, (_req, res) => {
+          const files = list(src)
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ dir: src.label, files: files ?? [], missing: files === null }))
+        })
 
-      server.middlewares.use('/__lab/file', (req, res) => {
-        // Serve BY BASENAME out of the listing only. Never join user input onto the path:
-        // `?name=../../.env` would otherwise walk straight out of the repo.
-        const name = new URL(req.url, 'http://lab').searchParams.get('name') || ''
-        const files = list() ?? []
-        if (!files.includes(path.basename(name))) {
-          res.statusCode = 404
-          res.end('not in ' + LAB_DIR)
-          return
-        }
-        const full = path.join(dir, path.basename(name))
-        res.setHeader('Content-Type', 'application/octet-stream')
-        res.setHeader('Content-Length', statSync(full).size)
-        res.end(readFileSync(full))
-      })
+        server.middlewares.use(src.file, (req, res) => {
+          // Serve BY BASENAME out of the listing only. Never join user input onto the path:
+          // `?name=../../.env` would otherwise walk straight out of the folder.
+          const name = new URL(req.url, 'http://lab').searchParams.get('name') || ''
+          const files = list(src) ?? []
+          if (!files.includes(path.basename(name))) {
+            res.statusCode = 404
+            res.end('not in ' + src.label)
+            return
+          }
+          const full = path.join(src.dir, path.basename(name))
+          res.setHeader('Content-Type', 'application/octet-stream')
+          res.setHeader('Content-Length', statSync(full).size)
+          res.end(readFileSync(full))
+        })
+      }
     },
   }
 }

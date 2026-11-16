@@ -18,7 +18,11 @@ cd "$(dirname "$0")/.."
 # Distinctive markers only. NOT the bare word "exports" — it appears throughout any bundle
 # as CJS interop and would make this gate cry wolf until someone disabled it.
 FOUND=0
-for marker in 'LabPicker' '__lab/recordings' '__lab/file' 'lab-recordings-on-serve'; do
+# ADR-0053 adds the raw-fluorescence lab page: its component, its endpoints, its file format
+# name and a string only its extraction module carries.
+for marker in 'LabPicker' '__lab/recordings' '__lab/file' 'lab-recordings-on-serve' \
+              'LabExtraction' '__lab/raw-recordings' '__lab/raw-file' 'colonel-lab-recording' \
+              'F0 held constant'; do
   if grep -rqF "$marker" dist/; then
     echo "  LEAKED: '$marker' is present in dist/" >&2
     grep -rlF "$marker" dist/ | sed 's/^/    /' >&2
@@ -31,13 +35,18 @@ if compgen -G 'dist/assets/*LabPicker*' >/dev/null; then
   echo "  LEAKED: a LabPicker chunk was emitted" >&2
   FOUND=1
 fi
+if compgen -G 'dist/assets/*LabExtraction*' >/dev/null; then
+  echo "  LEAKED: a LabExtraction chunk was emitted" >&2
+  FOUND=1
+fi
 
 if [[ "$FOUND" == 1 ]]; then
   echo >&2
   echo "ABORT: dev-only lab mode reached the production bundle (ADR-0048)." >&2
   echo "Check that LabPicker.svelte is imported ONLY via the dynamic import behind" >&2
   echo "import.meta.env.DEV in Tab2.svelte — a static import defeats the gating." >&2
+  echo "Likewise src/lib/lab/ (ADR-0053): reached only from the dynamic import in App.svelte." >&2
   exit 1
 fi
 
-echo "  lab mode absent from dist/ (ADR-0048)"
+echo "  lab mode absent from dist/ (ADR-0048, ADR-0053)"

@@ -11,6 +11,21 @@
 > [`docs/archive/NEXT_SESSION-history-2026-07-08.md`](docs/archive/NEXT_SESSION-history-2026-07-08.md)
 > — useful background, **not** current state.
 
+## Lab-only raw-fluorescence page (2026-11-16, branch `claude/kernel-viewer-fluorescence-a68sg6`, not merged)
+
+A dev-server-only page, `#lab`, that recovers a kernel from each extraction of one ROI's raw
+fluorescence and draws them on one lag axis ([ADR-0053](docs/adr/0053-lab-only-raw-fluorescence-page.md)).
+`npm run lab-fixture` writes a simulated recording into `exports/`; `npm run dev`, then open
+`/#lab`. `npm run test:lab` (39) covers the reader, the ported extraction steps and the
+comparison. **It has only ever run on the simulated recording.**
+
+- **Blocked on a producer:** interface2 has to write `<slice_id>.klab.json`
+  ([contract](docs/lab-recording-contract.md), proposed). The request is in interface2
+  `docs/handoffs/HANDOFF_kernel_lab_export_2026-11-16.md`.
+- **Not built:** recording a review verdict per kernel; multi-recording summary.
+- **Not reviewed:** the ADR and the contract are drafts. The murderboard freshness gate
+  could not reach upstream from the session that wrote them, so no review was run.
+
 ## Where things stand
 
 All four tabs are built and live. Since the last handoff update (2026-07-08):
