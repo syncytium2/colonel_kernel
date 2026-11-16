@@ -42,6 +42,13 @@ if (process.env.LAB_VERDICT) {
 }
 await page.screenshot({ path: `${out}/lab-region.png`, fullPage: true });
 
+// A folded view: controls, the STA, the table and the raw band put away.
+for (const name of ['hide controls', 'Spike-triggered average', 'Diagnostics by extraction', 'Raw fluorescence']) {
+  await page.click(`.labpage .foldhead:has-text("${name}")`);
+}
+await page.waitForTimeout(1500);
+await page.screenshot({ path: `${out}/lab-folded.png`, fullPage: true });
+
 console.log('console errors:', JSON.stringify(errors));
 await browser.close();
 process.exit(errors.length ? 1 : 0);

@@ -258,6 +258,24 @@
     return { m, t };
   };
 
+  // ---- folding: every block can be put away so the ones being read get the room ----
+  // Vertical blocks fold to their heading; the controls rail and the two lag panels fold
+  // sideways to a strip. Height given up by a folded block goes to the plots still open.
+  let fold = $state({});
+  const flip = (k) => (fold = { ...fold, [k]: !fold[k] });
+  const BANDS = ['raw', 'traces', 'spikes'];
+  // The time bands share one x-axis, drawn once, on the lowest band that is open.
+  const lastBand = $derived(BANDS.findLast((k) => !fold[k]) ?? null);
+  const lagOpen = $derived(!fold.kernel || !fold.sta);
+  const lagHeight = $derived(
+    300 + (fold.table ? 120 : 0) + (fold.raw ? 150 : 0) + (fold.traces ? 170 : 0) + (fold.spikes ? 110 : 0),
+  );
+  const bandBoost = $derived((lagOpen ? 0 : 140) + (fold.table ? 50 : 0));
+  const bandHeight = (k, base) => base + (k === 'spikes' ? 0 : bandBoost) + (lastBand === k && k !== 'spikes' ? 44 : 0);
+  // Kernel and STA are drawn on the SAME lag axis. The STA is only computed out to +/-2 s
+  // (ADR-0005), so its curve stops short of the frame; the frame is the kernel's.
+  const LAG_RANGE = [-5, 5];
+
   function tableTsv() {
     if (!result) return '';
     const head = ['slice_id', 'roi', 'window', 'start_s', 'end_s', 'n_spikes', 'method', 'variant', 'peak_lag_s', 'peak_amp', 'tau_decay_s', 'acausal_ratio', 'r2', 'sta_peak_lag_s', 'sta_peak_amp', 'sta_n_accepted'];
@@ -288,8 +306,23 @@
   }
 </script>
 
+{#snippet head(key, title)}
+  <button class="foldhead" aria-expanded={!fold[key]} onclick={() => flip(key)}>
+    <span class="chev">{fold[key] ? '▸' : '▾'}</span>{title}
+  </button>
+{/snippet}
+{#snippet strip(key, title)}
+  <button class="foldstrip" aria-expanded="false" title={`show ${title}`} onclick={() => flip(key)}>
+    <span class="chev">▸</span><span class="vert">{title}</span>
+  </button>
+{/snippet}
+
 <div class="labpage">
-  <aside class="rail">
+  {#if fold.rail}
+    {@render strip('rail', 'controls')}
+  {/if}
+  <aside class="rail" class:gone={fold.rail}>
+    <button class="foldhead" aria-expanded="true" onclick={() => flip('rail')}><span class="chev">◂</span>hide controls</button>
     <p class="tag">lab only · dev server only</p>
     <h2>Kernels by extraction</h2>
 
@@ -388,7 +421,10 @@
         {#if computing}<span class="busy">computing…</span>{/if}
       </header>
       {#if rec.warnings.length}
-        <ul class="warnings">{#each rec.warnings as w (w)}<li>{w}</li>{/each}</ul>
+        {@render head('notes', `Notes on this file (${rec.warnings.length})`)}
+        {#if !fold.notes}
+          <ul class="warnings">{#each rec.warnings as w (w)}<li>{w}</li>{/each}</ul>
+        {/if}
       {/if}
       {#if computeError}<p class="err">{computeError}</p>{/if}
 
@@ -397,8 +433,8 @@
       {/if}
 
       {#if result && shown.length}
-        <div class="review" class:stale>
-          <strong>Your verdict on this kernel</strong>
+        {@render head('review', `Your verdict on this kernel${fold.review ? `: ${verdict ? verdict.verdict + (stale ? ' (stale)' : '') : 'none saved'}` : ''}`)}
+        <div class="review" class:stale class:gone={fold.review}>
           {#each VERDICTS as v (v)}
             <button class:on={verdict?.verdict === v && !stale} disabled={saving} onclick={() => saveVerdict(v)}>{v}</button>
           {/each}
@@ -415,27 +451,37 @@
           {#if verdictError}<span class="err">{verdictError}</span>{/if}
         </div>
 
-        <div class="lagrow">
-          <div class="panel">
-            <h3>Recovered kernel, {METHODS.find((m) => m.id === method).label}</h3>
-            {#key `${kernelBand.series.length}-${method}-${dark}`}
-              <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={kernelBand.lag} seriesList={kernelBand.series} xRange={[-5, 5]} yAxisSize={56}
-                cursorPoints={false} zeroLine xLabel="lag (s)" yLabel={unitPeak ? 'amplitude (peak = 1)' : 'amplitude (dF/F₀ per spike)'} height={300} />
-            {/key}
-          </div>
-          <div class="panel">
-            <h3>Spike-triggered average</h3>
-            {#if staBand}
-              {#key `${staBand.series.length}-${dark}`}
-                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={staBand.lag} seriesList={staBand.series} yAxisSize={56} cursorPoints={false} zeroLine
-                  xLabel="lag (s)" yLabel={unitPeak ? 'amplitude (peak = 1)' : 'amplitude (dF/F₀)'} height={300} />
+        <div class="lagrow" class:konly={fold.sta && !fold.kernel} class:sonly={fold.kernel && !fold.sta} class:none={fold.kernel && fold.sta}>
+          {#if fold.kernel}
+            {#if fold.sta}{@render head('kernel', 'Recovered kernel')}{:else}{@render strip('kernel', 'recovered kernel')}{/if}
+          {:else}
+            <div class="panel">
+              {@render head('kernel', `Recovered kernel, ${METHODS.find((m) => m.id === method).label}`)}
+              {#key `${kernelBand.series.length}-${method}-${dark}-${lagHeight}`}
+                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={kernelBand.lag} seriesList={kernelBand.series} xRange={LAG_RANGE} yAxisSize={56} padRight={16}
+                  cursorPoints={false} zeroLine xLabel="lag (s)" yLabel={unitPeak ? 'amplitude (peak = 1)' : 'amplitude (dF/F₀ per spike)'} height={lagHeight} />
               {/key}
-            {:else}
-              <p class="note">no spike passed the STA's overlap rule in this window</p>
-            {/if}
-          </div>
+            </div>
+          {/if}
+          {#if fold.sta}
+            {#if fold.kernel}{@render head('sta', 'Spike-triggered average')}{:else}{@render strip('sta', 'spike-triggered average')}{/if}
+          {:else}
+            <div class="panel">
+              {@render head('sta', 'Spike-triggered average (computed to ±2 s; same lag axis as the kernel)')}
+              {#if staBand}
+                {#key `${staBand.series.length}-${dark}-${lagHeight}`}
+                  <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={staBand.lag} seriesList={staBand.series} xRange={LAG_RANGE} yAxisSize={56} padRight={16} cursorPoints={false} zeroLine
+                    xLabel="lag (s)" yLabel={unitPeak ? 'amplitude (peak = 1)' : 'amplitude (dF/F₀)'} height={lagHeight} />
+                {/key}
+              {:else}
+                <p class="note">no spike passed the STA's overlap rule in this window</p>
+              {/if}
+            </div>
+          {/if}
         </div>
 
+        {@render head('table', 'Diagnostics by extraction')}
+        <div class:gone={fold.table}>
         <table>
           <thead>
             <tr>
@@ -464,23 +510,32 @@
           Numbers are reported, not judged. "F0 held constant" rows are raw fluorescence under one offset and one
           gain; each differs from the row below it only in whether F0 moves with time.
         </p>
+        </div>
 
         <div class="bands">
-          <h3>Raw fluorescence: soma (strong line){rawBand.hasPen ? ', penumbra (faint line)' : ''}, running-minimum F0 of soma (orange)</h3>
-          {#key `${rawBand.series.length}-${dark}`}
-            <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={rawBand.xs} seriesList={rawBand.series} {xRange} yAxisSize={56} padRight={16} showXAxis={false}
-              syncKey="labx" cursorPoints={false} yLabel="F (camera units)" height={170} />
-          {/key}
-          <h3>Extracted traces, as recovery saw them</h3>
-          {#key `${traceBand.series.length}-${dark}`}
-            <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={traceBand.xs} seriesList={traceBand.series} {xRange} yAxisSize={56} padRight={16} showXAxis={false}
-              syncKey="labx" cursorPoints={false} zeroLine yLabel="dF/F₀" height={190} />
-          {/key}
-          <h3>Spikes per imaging frame</h3>
-          {#key dark}
-            <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={Array.from(result.times)} ys={Array.from(result.spikeCounts)} kind="stems" color="var(--series-spikes)"
-              {xRange} yAxisSize={56} padRight={16} syncKey="labx" xLabel="time (s)" yLabel="spikes" height={140} />
-          {/key}
+          {@render head('raw', `Raw fluorescence: soma (strong line)${rawBand.hasPen ? ', penumbra (faint line)' : ''}, running-minimum F0 of soma (orange)`)}
+          {#if !fold.raw}
+            {#key `${rawBand.series.length}-${dark}-${lastBand}-${bandBoost}`}
+              <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={rawBand.xs} seriesList={rawBand.series} {xRange} yAxisSize={56} padRight={16}
+                showXAxis={lastBand === 'raw'} xLabel={lastBand === 'raw' ? 'time (s)' : ''}
+                syncKey="labx" cursorPoints={false} yLabel="F (camera units)" height={bandHeight('raw', 170)} />
+            {/key}
+          {/if}
+          {@render head('traces', 'Extracted traces, as recovery saw them')}
+          {#if !fold.traces}
+            {#key `${traceBand.series.length}-${dark}-${lastBand}-${bandBoost}`}
+              <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={traceBand.xs} seriesList={traceBand.series} {xRange} yAxisSize={56} padRight={16}
+                showXAxis={lastBand === 'traces'} xLabel={lastBand === 'traces' ? 'time (s)' : ''}
+                syncKey="labx" cursorPoints={false} zeroLine yLabel="dF/F₀" height={bandHeight('traces', 190)} />
+            {/key}
+          {/if}
+          {@render head('spikes', 'Spikes per imaging frame')}
+          {#if !fold.spikes}
+            {#key dark}
+              <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={Array.from(result.times)} ys={Array.from(result.spikeCounts)} kind="stems" color="var(--series-spikes)"
+                {xRange} yAxisSize={56} padRight={16} syncKey="labx" xLabel="time (s)" yLabel="spikes" height={140} />
+            {/key}
+          {/if}
         </div>
       {/if}
     {/if}
@@ -513,7 +568,6 @@
     letter-spacing: 1px;
   }
   h2 { margin: 0; font-size: 18px; }
-  h3 { margin: 10px 0 2px; font-size: 13px; font-weight: 600; }
   .field { display: flex; flex-direction: column; gap: 3px; }
   .field span { font-size: 12px; }
   .field select, .field input { font: inherit; max-width: 100%; }
@@ -546,7 +600,24 @@
   .notebox { flex: 1 1 220px; font: inherit; color: var(--text-h); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
   .saved { font-size: 12.5px; }
   .where { font: 11px var(--mono); color: var(--text); }
+  .gone { display: none !important; }
+  .foldhead {
+    display: flex; align-items: center; gap: 6px; width: 100%; margin: 8px 0 2px; padding: 2px 0;
+    font: 600 13px var(--sans); text-align: left; color: var(--text-h);
+    background: none; border: 0; border-bottom: 1px solid var(--border); cursor: pointer;
+  }
+  .rail > .foldhead { margin-top: 0; font-weight: 400; font-size: 12px; }
+  .chev { flex: none; width: 14px; font-size: 11px; }
+  .foldstrip {
+    flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 30px; padding: 8px 0;
+    font: 600 12px var(--sans); color: var(--text-h);
+    background: none; border: 1px dashed var(--text); border-radius: 6px; cursor: pointer; align-self: stretch;
+  }
+  .vert { writing-mode: vertical-rl; }
   .lagrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .lagrow.konly { grid-template-columns: 1fr 30px; }
+  .lagrow.sonly { grid-template-columns: 30px 1fr; }
+  .lagrow.none { grid-template-columns: 1fr; gap: 0; }
   .panel { min-width: 0; }
   table { border-collapse: collapse; font-size: 12.5px; width: 100%; }
   th, td { text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--border, #ddd); white-space: nowrap; }
