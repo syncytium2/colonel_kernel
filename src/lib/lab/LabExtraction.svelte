@@ -14,7 +14,10 @@
   import { PENSUB_K } from './extraction.js';
 
   // One hue per variant (Okabe-Ito), fixed, so a variant keeps its colour on every panel.
-  const COLORS = {
+  // The app follows the system colour scheme (app.css), and uPlot draws to a canvas, so the
+  // series colours cannot come from CSS alone: the dark set is the same hues, lifted to read
+  // against the dark surface. Plots are keyed on the scheme so a switch redraws them.
+  const LIGHT = {
     frozen: '#0072B2',
     dff: '#D55E00',
     'frozen-pensub': '#56B4E9',
@@ -22,7 +25,27 @@
     'dff-prct': '#CC79A7',
     'file-dff': '#009E73',
   };
-  const TRUTH_COLOR = '#777777';
+  const DARK = {
+    frozen: '#3D8FD6',
+    dff: '#F0843C',
+    'frozen-pensub': '#9BDCFF',
+    'dff-pensub': '#F2B63A',
+    'dff-prct': '#E39BC4',
+    'file-dff': '#2CC59A',
+  };
+  const scheme = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  let dark = $state(!!scheme?.matches);
+  $effect(() => {
+    if (!scheme) return;
+    const on = (e) => (dark = e.matches);
+    scheme.addEventListener('change', on);
+    return () => scheme.removeEventListener('change', on);
+  });
+  const COLORS = $derived(dark ? DARK : LIGHT);
+  // Theme variables, resolved by Plot when it draws.
+  const TRUTH_COLOR = 'var(--series-truth)';
+  const SOMA_COLOR = 'var(--text-h)';
+  const PEN_COLOR = 'var(--text)';
   const METHODS = [
     { id: 'fv', label: 'free-vector (method 1)' },
     { id: 'shaped', label: 'shaped, with drift term (method 3)' },
@@ -163,8 +186,8 @@
     if (!result || !rec) return null;
     const { i0, i1 } = result.window;
     const col = (m) => Array.from(roiColumn(m, rec.nFrames, roiIndex).subarray(i0, i1));
-    const series = [{ ys: col(rec.traces.raw_soma), stroke: '#333333', width: 1 }];
-    if (rec.traces.raw_pen) series.push({ ys: col(rec.traces.raw_pen), stroke: '#999999', width: 1 });
+    const series = [{ ys: col(rec.traces.raw_soma), stroke: SOMA_COLOR, width: 1 }];
+    if (rec.traces.raw_pen) series.push({ ys: col(rec.traces.raw_pen), stroke: PEN_COLOR, width: 1 });
     const f0 = result.variants.find((v) => v.id === 'dff')?.f0;
     if (f0) series.push({ ys: Array.from(f0), stroke: COLORS.dff, width: 1.5 });
     return { xs: Array.from(result.times), series, hasPen: !!rec.traces.raw_pen };
@@ -321,16 +344,16 @@
         <div class="lagrow">
           <div class="panel">
             <h3>Recovered kernel, {METHODS.find((m) => m.id === method).label}</h3>
-            {#key `${kernelBand.series.length}-${method}`}
-              <Plot xs={kernelBand.lag} seriesList={kernelBand.series} xRange={[-5, 5]} yAxisSize={56}
+            {#key `${kernelBand.series.length}-${method}-${dark}`}
+              <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={kernelBand.lag} seriesList={kernelBand.series} xRange={[-5, 5]} yAxisSize={56}
                 cursorPoints={false} zeroLine xLabel="lag (s)" yLabel={unitPeak ? 'amplitude (peak = 1)' : 'amplitude (dF/F₀ per spike)'} height={300} />
             {/key}
           </div>
           <div class="panel">
             <h3>Spike-triggered average</h3>
             {#if staBand}
-              {#key staBand.series.length}
-                <Plot xs={staBand.lag} seriesList={staBand.series} yAxisSize={56} cursorPoints={false} zeroLine
+              {#key `${staBand.series.length}-${dark}`}
+                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={staBand.lag} seriesList={staBand.series} yAxisSize={56} cursorPoints={false} zeroLine
                   xLabel="lag (s)" yLabel={unitPeak ? 'amplitude (peak = 1)' : 'amplitude (dF/F₀)'} height={300} />
               {/key}
             {:else}
@@ -369,19 +392,21 @@
         </p>
 
         <div class="bands">
-          <h3>Raw fluorescence: soma (dark){rawBand.hasPen ? ', penumbra (grey)' : ''}, running-minimum F0 of soma (orange)</h3>
-          {#key rawBand.series.length}
-            <Plot xs={rawBand.xs} seriesList={rawBand.series} {xRange} yAxisSize={56} padRight={16} showXAxis={false}
+          <h3>Raw fluorescence: soma (strong line){rawBand.hasPen ? ', penumbra (faint line)' : ''}, running-minimum F0 of soma (orange)</h3>
+          {#key `${rawBand.series.length}-${dark}`}
+            <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={rawBand.xs} seriesList={rawBand.series} {xRange} yAxisSize={56} padRight={16} showXAxis={false}
               syncKey="labx" cursorPoints={false} yLabel="F (camera units)" height={170} />
           {/key}
           <h3>Extracted traces, as recovery saw them</h3>
-          {#key traceBand.series.length}
-            <Plot xs={traceBand.xs} seriesList={traceBand.series} {xRange} yAxisSize={56} padRight={16} showXAxis={false}
+          {#key `${traceBand.series.length}-${dark}`}
+            <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={traceBand.xs} seriesList={traceBand.series} {xRange} yAxisSize={56} padRight={16} showXAxis={false}
               syncKey="labx" cursorPoints={false} zeroLine yLabel="dF/F₀" height={190} />
           {/key}
           <h3>Spikes per imaging frame</h3>
-          <Plot xs={Array.from(result.times)} ys={Array.from(result.spikeCounts)} kind="stems" color="var(--series-spikes)"
-            {xRange} yAxisSize={56} padRight={16} syncKey="labx" xLabel="time (s)" yLabel="spikes" height={140} />
+          {#key dark}
+            <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={Array.from(result.times)} ys={Array.from(result.spikeCounts)} kind="stems" color="var(--series-spikes)"
+              {xRange} yAxisSize={56} padRight={16} syncKey="labx" xLabel="time (s)" yLabel="spikes" height={140} />
+          {/key}
         </div>
       {/if}
     {/if}
@@ -402,7 +427,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    border: 1px dashed var(--border, #999);
+    border: 1px dashed var(--text);
     border-radius: 8px;
     padding: 12px;
     align-self: flex-start;
@@ -429,6 +454,16 @@
   .busy { font-style: italic; }
   .warnings { margin: 0; padding-left: 18px; font-size: 12.5px; }
   .err { color: #b00020; margin: 0; }
+  @media (prefers-color-scheme: dark) {
+    .err { color: #ff8a8a; }
+  }
+  .labpage { color: var(--text-h); }
+  .field select, .field input[type='number'], .steps button, .rail > button {
+    color: var(--text-h);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
   .note, .empty { font-size: 12.5px; margin: 2px 0; }
   .lagrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .panel { min-width: 0; }

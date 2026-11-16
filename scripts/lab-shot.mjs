@@ -14,7 +14,7 @@ const which = Number(process.argv[3] ?? 1);
 
 // PW_CHROMIUM names a browser binary when the one this Playwright version expects is absent.
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
-const page = await browser.newPage({ viewport: { width: 1600, height: 1500 }, deviceScaleFactor: 1 });
+const page = await browser.newPage({ viewport: { width: 1600, height: 1500 }, deviceScaleFactor: 1, colorScheme: process.env.LAB_SCHEME === 'dark' ? 'dark' : 'light' });
 const errors = [];
 page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());

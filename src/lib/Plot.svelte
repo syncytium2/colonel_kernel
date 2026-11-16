@@ -96,6 +96,12 @@
     // When set it REPLACES the ys/ys2 path. The series COUNT is fixed at init, so the parent
     // remounts (via {#key}) when the count changes. Off by default — only the kernel band uses it.
     seriesList = null,
+    // Axis ink and grid colour (tick labels, axis titles, tick marks; grid lines). Null keeps
+    // uPlot's defaults, which are black on a faint black grid: every existing plot passes
+    // nothing and is unchanged. The lab page (ADR-0053) passes theme variables so its axes
+    // stay readable when the system colour scheme is dark.
+    axisColor = null,
+    gridColor = null,
     // EDIT mode (challenge tabs): click empty space to ADD a spike, shift-click the
     // nearest to REMOVE it, drag one to MOVE it. Emits data-time (snapped to
     // editSnapDt when given). Disables zoom while on. Off by default — every existing
@@ -126,6 +132,16 @@
     if (!fill) return height;
     const h = wrap?.clientHeight || 0;
     return h > 1 ? h : height;
+  }
+
+  function axisInk() {
+    const ink = {};
+    if (axisColor) {
+      ink.stroke = resolveColor(axisColor);
+      ink.ticks = { stroke: resolveColor(gridColor ?? axisColor) };
+    }
+    if (gridColor) ink.grid = { stroke: resolveColor(gridColor) };
+    return ink;
   }
 
   function makeOpts(width, h) {
@@ -282,8 +298,9 @@
       ...(padRight != null ? { padding: [null, padRight, null, null] } : {}),
       hooks,
       axes: [
-        { show: showXAxis, label: xLabel || undefined },
+        { show: showXAxis, label: xLabel || undefined, ...axisInk() },
         {
+          ...axisInk(),
           ...(yAxisSize != null ? { size: yAxisSize } : {}),
           ...(yLabel ? { label: yLabel, labelSize: 22, labelFont: '12px ' + getComputedStyle(document.documentElement).getPropertyValue('--sans') } : {}),
         },
