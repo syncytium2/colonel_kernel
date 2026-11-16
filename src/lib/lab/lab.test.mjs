@@ -4,10 +4,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import { barF, minBarF, dFoverF0, prctFilt, f0Samples, buildVariants } from './extraction.js';
+import { barF, minBarF, dFoverF0, prctFilt, f0Samples, buildVariants, bridgeSpans } from './extraction.js';
 import { parseLabRecording, encodeArray, roiColumn, LAB_FORMAT } from './recording.js';
 import { simulateRaw, simulatedLabRecording } from './simulate.js';
-import { analyzeVariants, analysisWindows, windowIndices } from './compare.js';
+import { analyzeVariants, analysisWindows, windowIndices, exclusionSpans } from './compare.js';
 import { verdictLine, parseVerdicts, currentVerdict, verdictKey, isStale, VERDICT_HEADER } from './verdicts.js';
 
 let passed = 0;
@@ -135,6 +135,60 @@ const file = await simulatedLabRecording();
 
   const bv = buildVariants({ soma: roiColumn(rec.traces.raw_soma, rec.nFrames, 0), pen: null, dt: rec.dt, i0: 0, i1: 100 });
   ok(bv.map((v) => v.id).join(' ') === 'frozen dff dff-prct', 'without a penumbra trace the penumbra variants are absent');
+}
+
+// ---- exclusions are honoured before any baseline (Tony, 2026-11-16) -----------------------
+{
+  const t = Float64Array.from({ length: 10 }, (_, i) => i);
+  const x = Float64Array.from([0, 1, 2, 99, 99, 99, 6, 7, 8, 9]);
+  const b = bridgeSpans(x, t, [{ startS: 3, endS: 5 }]);
+  ok(b.nBridged === 3 && b.x[3] === 3 && b.x[4] === 4 && b.x[5] === 5, 'an interior run is bridged by a straight line');
+  ok(x[3] === 99, 'bridging leaves the input untouched');
+  const e = bridgeSpans(x, t, [{ startS: 0, endS: 1 }, { startS: 8.5, endS: 20 }]);
+  ok(e.x[0] === 2 && e.x[1] === 2 && e.x[9] === 8, 'a run at either end is held at its one good neighbour');
+  await refuses(() => bridgeSpans(x, t, [{ startS: -1, endS: 20 }]), /every frame/, 'refuses to bridge a trace with no good frame');
+
+  // Scope: "ALL" is every ROI; a list names 1-based ROIs; anything else is refused.
+  const scoped = JSON.parse(JSON.stringify(file));
+  scoped.exclusions = [
+    { start_s: 700, end_s: 720, reason: 'dip', rois: 'ALL' },
+    { start_s: 900, end_s: 910, reason: 'roi 2 only', rois: [2] },
+  ];
+  const rs = await parseLabRecording(scoped);
+  ok(rs.exclusions[0].rois === null && rs.exclusions[1].rois.has(1) && rs.exclusions[1].rois.size === 1, 'exclusion scope: ALL is null, [2] is 0-based ROI index 1');
+  ok(exclusionSpans(rs, 0).length === 1 && exclusionSpans(rs, 1).length === 2, 'an exclusion naming ROI 2 applies to ROI 2 and not to ROI 1');
+  await refuses(() => { const j = JSON.parse(JSON.stringify(scoped)); j.exclusions[1].rois = [9]; return parseLabRecording(j); }, /rois must be/, 'refuses an exclusion naming a ROI the file does not have');
+  const m0 = analyzeVariants(rs, { roiIndex: 0, startS: 600, endS: 1200 }).masked.nFrames;
+  const m1 = analyzeVariants(rs, { roiIndex: 1, startS: 600, endS: 1200 }).masked.nFrames;
+  ok(m1 - m0 === 101, `the ROI-2 window masks ROI 2's frames and not ROI 1's (${m0} vs ${m1})`);
+
+  // A deep artifact inside an exclusion window must not reach F0. The running minimum carries
+  // a dip forward, so without the bridge it would pull F0 down for the rest of the window.
+  const sim = simulateRaw();
+  const dipped = new Float32Array(sim.soma);
+  for (let i = 7000; i <= 7200; i++) dipped[i] *= 0.3; // ROI 1, 700-720 s
+  const dj = JSON.parse(JSON.stringify(file));
+  const enc = await encodeArray(dipped);
+  dj.traces.raw_soma.b64 = enc.b64;
+  dj.traces.raw_soma.sha256 = enc.sha256;
+  dj.exclusions = [{ start_s: 700, end_s: 720, reason: 'artifact', rois: 'ALL' }];
+  const cj = JSON.parse(JSON.stringify(file));
+  cj.exclusions = dj.exclusions;
+  const dip = await parseLabRecording(dj);
+  const clean = await parseLabRecording(cj);
+  const o = { roiIndex: 0, startS: 600, endS: 1200 };
+  const f0 = (r, extra = {}) => analyzeVariants(r, { ...o, ...extra }).variants.find((v) => v.id === 'dff').f0;
+  const fClean = f0(clean);
+  const fDip = f0(dip);
+  const fOld = f0(dip, { bridgeExclusions: false });
+  let worstNew = 0;
+  let worstOld = 0;
+  for (let i = 0; i < fClean.length; i++) {
+    worstNew = Math.max(worstNew, Math.abs(fDip[i] - fClean[i]) / fClean[i]);
+    worstOld = Math.max(worstOld, Math.abs(fOld[i] - fClean[i]) / fClean[i]);
+  }
+  ok(worstNew < 1e-6, `an excluded artifact leaves F0 unchanged (largest relative change ${worstNew.toExponential(1)})`);
+  ok(worstOld > 0.3, `without the bridge the same artifact drags F0 down (${(100 * worstOld).toFixed(0)}%): the bug this guards`);
 }
 
 // ---- the review log ---------------------------------------------------------------------

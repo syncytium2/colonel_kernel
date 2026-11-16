@@ -24,7 +24,7 @@ viewer is lab-only, in this repository. haruspex is reference only.
 git fetch origin && git switch claude/kernel-viewer-fluorescence-a68sg6
 npm ci
 npm run test:core        # 265 pass
-npm run test:lab         # 51 pass
+npm run test:lab         # 61 pass
 npm run lab-fixture      # writes exports/SIMULATED_20261116.klab.json (gitignored, no lab data)
 npm run dev              # then open http://localhost:5173/#lab
 ```
@@ -33,22 +33,44 @@ For real recordings, point the dev server at the folder that holds the `.klab.js
 In Git Bash:
 
 ```bash
-CK_LAB_RAW_DIR="C:/Users/defazio/University of Michigan Dropbox/Richard DeFazio/data/kernel_lab" npm run dev
+CK_LAB_RAW_DIR="C:/Users/defazio/University of Michigan Dropbox/Richard DeFazio/data/rawF_kernel_test" npm run dev
 ```
 
 The `LAB · Extraction` button exists only on the dev server. `scripts/lab-shot.mjs OUTDIR`
 screenshots the page (`LAB_SCHEME=dark`, `LAB_VERDICT=unsure` to exercise a save); the cloud
 session needed `PW_CHROMIUM` to name a browser, 065 may not.
 
-## What is in flight right now
+## Update, later on 2026-11-16 (065, branch `lab-exclusions`)
 
-The session "065 interface2 cerebro" was asked on 2026-11-16 to write the interface2
-exporter and three files: `20261023_452`, `20261026_458`, `20261027_468`. The request and
-field map are in interface2 `docs/handoffs/HANDOFF_kernel_lab_export_2026-11-16.md` (same
-branch name, in that repository). It was told to stop if db4 lacks the spike pairing for
-those slices, if the archives lack the raw soma and penumbra traces, or if the archive time
-and the spike times are on different clocks. **Its outcome was not known when this was
-written.** Find out before doing anything else.
+The exporter landed: interface2 `main`, reply in interface2
+`docs/handoffs/REPLY_kernel_lab_export_2026-11-16.md`. Four files, `20261020_439`,
+`20261023_452`, `20261026_455`, `20261026_458` (Tony: "468 is not usable for this
+purpose"), 14 to 26 MB each, in `<Dropbox data root>/rawF_kernel_test/`, **not**
+`kernel_lab`. Start the dev server with `CK_LAB_RAW_DIR=".../data/rawF_kernel_test"`.
+
+**A bug was found and fixed on real data.** Exclusion windows were masked only *after* F0
+was computed, so blanked frames still set the running minimum. On `_452` the blank
+motion-correction frames 178 to 191 hold about 2,020 counts against a baseline near 6,460,
+which pinned F0 at 2,019.5 for the whole recording and made every recomputed `_452` kernel
+roughly ten times too large (free-vector peak, 0 to 1200 s, dF/F0: 0.0436 before, 0.0034
+after; the producer's own dF/F0 gives 0.0037). Now every exclusion that applies to the ROI
+(`rois` honoured) is bridged out of the raw soma and penumbra traces before F0 and the
+percentile baseline. `_439`, `_455` and `_458` moved by under 2 % except `_455` APV+CNQX
+(2 spikes, shaped up to 14 %), which has too few spikes to mean anything either way.
+
+**Validator, every ROI** (it now checks all of them, and bridges exactly the archive's
+`blank_frames` as production did): `_439` 44 of 44, `_452` 33 of 33, `_455` 18 of 18 ROIs
+agree with the stored dF/F0 to under 2e-7. So the JavaScript F0 port reproduces MATLAB, and
+`_452`'s earlier difference of 2.745 was entirely the unbridged blank frames. `_458` differs
+on all 25 ROIs by up to 0.019: its `1/mean(diff(time))` is 9.9999999979, so MATLAB's
+`floor` gives a boxcar half-width of 4 frames, not 5, the quirk haruspex ADR-0007 records.
+A half-width of 4 removes most of the difference; the rest (typically under 1e-3) fits the
+same quirk in the slope-fill threshold. The port is not tuned to it.
+
+## What was in flight when this was first written
+
+The session "065 interface2 cerebro" was asked to write the exporter. It did; see the
+update above.
 
 ## The first things to do with a real file
 

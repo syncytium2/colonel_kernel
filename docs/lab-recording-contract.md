@@ -67,7 +67,7 @@ Tony and the producer (see "Open points").
 | `spikes.gaps` | no | List of `{start_s, end_s}` on the imaging clock: stretches when the loose-patch recording was not running. The reader removes both the trace and any spikes inside them. |
 | `spikes.source` | yes | `cell`, `revision`, `file`, `sha256` (of the cerebro file's own `times`), `reviewed` (`true`, `false` or `null`, copied from cerebro's `review.reviewed`), `offset_s`, `triggered_series`. |
 | `regions` | no | List of `{name, start_s, end_s}` in seconds on the imaging clock, from db4. They must not overlap. An open-ended region ends at the last frame time. |
-| `exclusions` | no | List of `{start_s, end_s, reason}`: stretches to leave out (artifacts, blanked frames). |
+| `exclusions` | no | List of `{start_s, end_s, reason}`, optionally with `rois` (`"ALL"`, the default, or a list of 1-based ROI numbers), `rule` and `called_by`: stretches whose fluorescence cannot be trusted (artifacts, blanked frames). The reader bridges them out of the raw traces with a straight line **before** F0 or any baseline is computed, then leaves them out of kernel recovery, together with any spikes inside them (Tony, 2026-11-16). A `rois` naming a ROI the file does not have is refused. |
 | `provenance` | yes | `tool`, the producer's `commit`, `created` (UTC), and the archive variant read. |
 | `truth` | never from a producer | Simulated files only: the planted kernel. |
 
@@ -121,11 +121,10 @@ any file is refused. A simulated file to compare against: `npm run lab-fixture`.
 ## Open points
 
 1. **Where the files live: decided** (Tony, 2026-11-16). A new folder in the lab Dropbox
-   under the data root, outside `team_colonel_kernel/`, with every ROI exported. The folder
-   name `kernel_lab` is proposed and not yet confirmed. The dev server reads the folder
-   named by `CK_LAB_RAW_DIR`, and the review log `kernel_review.tsv` is written there too.
-   At about 75 MB a recording this is about 1 GB for the 14 DI and male slices; revisit
-   before the 66 senktide/TTX slices are exported.
+   under the data root, outside `team_colonel_kernel/`, with every ROI exported. Tony named
+   it `rawF_kernel_test` (interface2 `if2_paths().rawF_kernel_test`). The dev server reads
+   the folder named by `CK_LAB_RAW_DIR`, and the review log `kernel_review.tsv` is written
+   there too. The first four files are 14 to 26 MB each, not the 75 MB first estimated.
 2. **The file name.** `<slice_id>.klab.json` is a placeholder. interface2's rule is that
    output names come from the lab-wide naming scheme, which does not cover export data files
    yet; the name should follow that scheme once it does.

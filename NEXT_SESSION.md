@@ -18,12 +18,14 @@
 A dev-server-only page, `#lab`, that recovers a kernel from each extraction of one ROI's raw
 fluorescence and draws them on one lag axis ([ADR-0053](docs/adr/0053-lab-only-raw-fluorescence-page.md)).
 `npm run lab-fixture` writes a simulated recording into `exports/`; `npm run dev`, then open
-`/#lab`. `npm run test:lab` (51) covers the reader, the ported extraction steps and the
-comparison. **It has only ever run on the simulated recording.**
+`/#lab`. `npm run test:lab` (61) covers the reader, the ported extraction steps and the
+comparison.
 
-- **Blocked on a producer:** interface2 has to write `<slice_id>.klab.json`
-  ([contract](docs/lab-recording-contract.md), proposed). The request is in interface2
-  `docs/handoffs/HANDOFF_kernel_lab_export_2026-11-16.md`.
+- **Real files exist** (2026-11-16): four slices in `<data>/rawF_kernel_test/`, written by
+  interface2 `main`. All read; the F0 port matches MATLAB on every ROI of three of them.
+- **Exclusions are bridged before F0** (fixed 2026-11-16): before that, `_452`'s blank
+  frames pinned F0 and its kernels came out about ten times too large. See the handoff's
+  update.
 - **Review verdicts** (accept, reject, unsure, with a note) append to `kernel_review.tsv` in
   the recordings folder and are read back after each write. **Not built:** a
   multi-recording summary.

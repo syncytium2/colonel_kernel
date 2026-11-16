@@ -199,6 +199,59 @@ export function prctFilt(x, p, window, shift) {
   return out;
 }
 
+/**
+ * Bridge the excluded stretches of a raw trace before any baseline is computed: every frame
+ * whose time falls in a span (ends inclusive) is replaced by a straight line between the last
+ * good frame before the run and the first good frame after it. A run at either end of the
+ * recording is held flat at its one good neighbour. This is what the archive's `blankfix` did
+ * to blank motion-correction frames before production computed F0, extended to every
+ * exclusion window (Tony, 2026-11-16: baselines, deconvolution and kernels must not see them).
+ *
+ * The bridged frames are still excluded from kernel recovery by the caller; the bridge only
+ * keeps them from pulling F0 and the percentile baseline.
+ *
+ * @param {ArrayLike<number>} x raw trace, whole recording
+ * @param {ArrayLike<number>} time frame times (s), same length
+ * @param {{startS:number, endS:number}[]} spans
+ * @returns {{ x: Float64Array, nBridged: number }} a copy; x itself is not modified
+ */
+export function bridgeSpans(x, time, spans) {
+  const n = x.length;
+  const out = Float64Array.from(x);
+  if (!spans.length || n === 0) return { x: out, nBridged: 0 };
+  const bad = new Uint8Array(n);
+  let nBridged = 0;
+  for (let i = 0; i < n; i++) {
+    const t = time[i];
+    for (const s of spans) {
+      if (t >= s.startS && t <= s.endS) {
+        bad[i] = 1;
+        nBridged++;
+        break;
+      }
+    }
+  }
+  if (nBridged === n) throw new Error('bridgeSpans: every frame is excluded');
+  let i = 0;
+  while (i < n) {
+    if (!bad[i]) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < n && bad[j]) j++; // run is [i, j)
+    const a = i - 1; // last good before, or -1
+    const b = j; // first good after, or n
+    for (let k = i; k < j; k++) {
+      if (a < 0) out[k] = x[b];
+      else if (b >= n) out[k] = x[a];
+      else out[k] = x[a] + ((x[b] - x[a]) * (k - a)) / (b - a);
+    }
+    i = j;
+  }
+  return { x: out, nBridged };
+}
+
 /** Mean of the finite values of x over [i0, i1). */
 function meanOver(x, i0, i1) {
   let s = 0;
