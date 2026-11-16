@@ -431,7 +431,7 @@
         <span>{rec.nRoi} ROIs · {(rec.nFrames * rec.dt / 60).toFixed(1)} min at {(1 / rec.dt).toFixed(0)} Hz</span>
         {#if result}
           <span>{result.spikeTimes.length} spikes in window</span>
-          {#if result.masked.nFrames}<span>{result.masked.nFrames} frames masked</span>{/if}
+          {#if result.masked.nFrames}<span>{result.masked.nFrames} frames excluded for this ROI ({result.masked.spans.length} windows), bridged before F0</span>{/if}
         {/if}
         {#if rec.spikes.present}
           <span>spikes: {rec.spikes.source?.cell ?? '?'}{rec.spikes.source?.revision != null ? ` r${rec.spikes.source.revision}` : ''}, reviewed: {String(rec.spikes.source?.reviewed ?? 'not recorded')}</span>

@@ -12,6 +12,33 @@ deployed.** Seven commits, `168f910` to this one.
 > [ADR-0053](adr/0053-lab-only-raw-fluorescence-page.md) and
 > [the contract](lab-recording-contract.md) before either is treated as settled.
 
+## Update, later on 2026-11-16: read this before the rest
+
+A review from the 065 colonel_kernel session, and interface2's reply
+(interface2 `main`, `docs/handoffs/REPLY_kernel_lab_export_2026-11-16.md`), overtook parts of
+this note. What changed:
+
+- **The files exist.** Four, not three: `20261020_439`, `20261023_452`, `20261026_455`,
+  `20261026_458`, in `<Dropbox data>/rawF_kernel_test/` (Tony's name; `kernel_lab` was never
+  created). 14 to 26 MB each. `_468` was dropped: 2 spikes after Tony's review.
+- **A correctness bug is fixed** (commit after `4a4a570`). The page computed F0, dF/F0 and
+  the percentile filter over the raw trace and masked the excluded frames afterwards, so
+  blanked frames fed the baseline. Exclusions are now bridged in the raw traces before
+  anything is computed, per ROI, honouring each window's `rois`. See "Exclusions come first"
+  in the contract. Tests went from 51 to 66, including one that fails if the bridging is
+  removed.
+- **The validator now checks every ROI**, with the exclusions bridged and straight through.
+  ⚠ **It has not been rerun on the four real files.** Do that first: it is what says whether
+  `_452`'s 2.745 and `_458`'s 0.0092 were the validator's own failure to honour exclusions.
+  On a simulated file, bridging only the first second moved dF/F0 by up to 0.006 on a few
+  hundred samples, which is the size of `_458`'s difference. ⚠ That is a resemblance, not an
+  explanation: `_458` has not been looked at.
+- **Open `_439` or `_455` first**; they are the two whose dF/F0 already agreed.
+- **F/F0** (stored dF/F0 plus 1, what MLspike is fed) is not an extraction in the page. See
+  the contract's update for why, and ask Tony.
+- The 065 freshness gate can reach the murderboard upstream, so the review of the ADR and
+  the contract can be run there.
+
 ## What it is for
 
 Tony, 2026-11-16: test whether the processing between raw fluorescence and dF/F0 removes
@@ -24,7 +51,7 @@ viewer is lab-only, in this repository. haruspex is reference only.
 git fetch origin && git switch claude/kernel-viewer-fluorescence-a68sg6
 npm ci
 npm run test:core        # 265 pass
-npm run test:lab         # 51 pass
+npm run test:lab         # 66 pass
 npm run lab-fixture      # writes exports/SIMULATED_20261116.klab.json (gitignored, no lab data)
 npm run dev              # then open http://localhost:5173/#lab
 ```
@@ -33,14 +60,14 @@ For real recordings, point the dev server at the folder that holds the `.klab.js
 In Git Bash:
 
 ```bash
-CK_LAB_RAW_DIR="C:/Users/defazio/University of Michigan Dropbox/Richard DeFazio/data/kernel_lab" npm run dev
+CK_LAB_RAW_DIR="C:/Users/defazio/University of Michigan Dropbox/Richard DeFazio/data/rawF_kernel_test" npm run dev
 ```
 
 The `LAB · Extraction` button exists only on the dev server. `scripts/lab-shot.mjs OUTDIR`
 screenshots the page (`LAB_SCHEME=dark`, `LAB_VERDICT=unsure` to exercise a save); the cloud
 session needed `PW_CHROMIUM` to name a browser, 065 may not.
 
-## What is in flight right now
+## What was in flight (superseded: see the update at the top)
 
 The session "065 interface2 cerebro" was asked on 2026-11-16 to write the interface2
 exporter and three files: `20261023_452`, `20261026_458`, `20261027_468`. The request and
@@ -52,7 +79,7 @@ written.** Find out before doing anything else.
 
 ## The first things to do with a real file
 
-1. `npm run lab-validate -- "<kernel_lab folder>"`. Read every line. In particular:
+1. `npm run lab-validate -- "<the rawF_kernel_test folder>"`. Read every line. In particular:
    - **"dF/F0 recomputed from raw_soma vs dff_production"** is the first test of the
      JavaScript F0 port against MATLAB output. On the synthetic trace it matches haruspex's
      Python port bit for bit, and haruspex ADR-0007 records that the archive's stored F0
@@ -64,7 +91,7 @@ written.** Find out before doing anything else.
 2. Open the file in the page. Tony looks at it before any wider batch is exported, and
    before any conclusion is drawn from a plot.
 3. Time how long a real file takes to load and to compute. Nothing larger than the 4-ROI,
-   30-minute simulation has been loaded. A real file is about 75 MB.
+   30-minute simulation has been loaded. The real files are 14 to 26 MB.
 
 ## Where things are
 
@@ -115,13 +142,16 @@ Every block folds; the controls and the two lag panels fold sideways.
 
 - Home is this repository, lab-only.
 - Recordings go in a new Dropbox folder under the data root, every ROI exported. The name
-  `kernel_lab` was proposed and not objected to. Revisit the size before senktide/TTX.
+  He named it `rawF_kernel_test`. Revisit the size before senktide/TTX.
+- Exclusions are applied before any baseline, deconvolution or kernel, and the stored dF/F0
+  is checked on every ROI.
 - Review verdicts go in a file beside the recordings.
 - Spike detection and its integration with interface2 are cerebro's.
 
 ## Known gaps, in the order I would take them
 
-1. **No real file has been read.** Everything else waits on this.
+1. **No real file has been opened in the page**, and the validator has not been rerun on
+   the real files since it changed. Everything else waits on this.
 2. **Regions are used as marked.** The page does not apply the protocol windows of
    ADR-0035 (wash-in delay, 20-minute cap). `regionAnalysisWindow` in `core/load-xlsx.js`
    is the function to reuse. Ask Tony whether he wants the raw markers, the protocol

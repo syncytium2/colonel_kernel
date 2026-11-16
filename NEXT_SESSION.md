@@ -18,12 +18,13 @@
 A dev-server-only page, `#lab`, that recovers a kernel from each extraction of one ROI's raw
 fluorescence and draws them on one lag axis ([ADR-0053](docs/adr/0053-lab-only-raw-fluorescence-page.md)).
 `npm run lab-fixture` writes a simulated recording into `exports/`; `npm run dev`, then open
-`/#lab`. `npm run test:lab` (51) covers the reader, the ported extraction steps and the
-comparison. **It has only ever run on the simulated recording.**
+`/#lab`. `npm run test:lab` (66) covers the reader, the ported extraction steps and the
+comparison. **The cloud session that built it only ever ran it on the simulated recording.**
 
-- **Blocked on a producer:** interface2 has to write `<slice_id>.klab.json`
-  ([contract](docs/lab-recording-contract.md), proposed). The request is in interface2
-  `docs/handoffs/HANDOFF_kernel_lab_export_2026-11-16.md`.
+- **Four real files exist** in `<Dropbox data>/rawF_kernel_test/` (interface2 `main`,
+  `docs/handoffs/REPLY_kernel_lab_export_2026-11-16.md`). None has been opened in the page,
+  and the validator, which now checks every ROI and honours exclusions, has not been rerun
+  on them. Open `_439` or `_455` first.
 - **Review verdicts** (accept, reject, unsure, with a note) append to `kernel_review.tsv` in
   the recordings folder and are read back after each write. **Not built:** a
   multi-recording summary.

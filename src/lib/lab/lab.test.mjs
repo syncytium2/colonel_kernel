@@ -7,7 +7,7 @@ import path from 'node:path';
 import { barF, minBarF, dFoverF0, prctFilt, f0Samples, buildVariants } from './extraction.js';
 import { parseLabRecording, encodeArray, roiColumn, LAB_FORMAT } from './recording.js';
 import { simulateRaw, simulatedLabRecording } from './simulate.js';
-import { analyzeVariants, analysisWindows, windowIndices } from './compare.js';
+import { analyzeVariants, analysisWindows, windowIndices, frameMask, bridgeMasked, maskedSpans } from './compare.js';
 import { verdictLine, parseVerdicts, currentVerdict, verdictKey, isStale, VERDICT_HEADER } from './verdicts.js';
 
 let passed = 0;
@@ -135,6 +135,57 @@ const file = await simulatedLabRecording();
 
   const bv = buildVariants({ soma: roiColumn(rec.traces.raw_soma, rec.nFrames, 0), pen: null, dt: rec.dt, i0: 0, i1: 100 });
   ok(bv.map((v) => v.id).join(' ') === 'frozen dff dff-prct', 'without a penumbra trace the penumbra variants are absent');
+}
+
+// ---- exclusions are applied BEFORE any baseline ------------------------------------------
+{
+  ok(Array.from(bridgeMasked([1, 9, 9, 9, 5], [0, 1, 1, 1, 0])).join() === '1,2,3,4,5', 'a masked run is bridged by a straight line');
+  ok(Array.from(bridgeMasked([9, 9, 4, 6, 9], [1, 1, 0, 0, 1])).join() === '4,4,4,6,6', 'a masked run at an end holds the nearest valid sample');
+
+  // A blanked stretch: 30 frames of ROI 1's soma and penumbra forced to zero at 300 s, as a
+  // blank motion-correction frame is, with an exclusion window declared over it.
+  const sim = simulateRaw();
+  const soma = Float32Array.from(sim.soma);
+  const pen = Float32Array.from(sim.pen);
+  for (let i = 3000; i < 3030; i++) { soma[i] = 0; pen[i] = 0; }
+  const bad = JSON.parse(JSON.stringify(file));
+  bad.traces.raw_soma = { ...(await encodeArray(soma, [sim.n, 4])), order: 'column-major' };
+  bad.traces.raw_pen = { ...(await encodeArray(pen, [sim.n, 4])), order: 'column-major' };
+  const clean = await parseLabRecording(file);
+  const ref = analyzeVariants(clean, { roiIndex: 0, startS: 0, endS: 600 });
+  const refDff = ref.variants.find((v) => v.id === 'dff');
+
+  const undeclared = analyzeVariants(await parseLabRecording(bad), { roiIndex: 0, startS: 0, endS: 600 });
+  const uDff = undeclared.variants.find((v) => v.id === 'dff');
+  ok(!(Math.abs(uDff.fv.peakAmp - refDff.fv.peakAmp) < 0.2 * refDff.fv.peakAmp), 'the blanked stretch, undeclared, wrecks the dF/F0 kernel (the fixture can fail)', `${uDff.fv.peakAmp} vs ${refDff.fv.peakAmp}`);
+
+  bad.exclusions = [
+    { start_s: 299.95, end_s: 303.0, reason: 'blank frames', rois: 'ALL', rule: '', called_by: 'test' },
+    { start_s: 100, end_s: 110, reason: 'this ROI only', rois: '2', rule: '', called_by: 'test' },
+  ];
+  const rec = await parseLabRecording(bad);
+  ok(rec.exclusions[0].rois === null && rec.exclusions[1].rois.join() === '2', 'rois reads as every ROI or as a list of ROI numbers');
+  ok(maskedSpans(rec, 0).length === 1 && maskedSpans(rec, 1).length === 2, 'a window naming ROI 2 applies to ROI 2 and not to ROI 1');
+  const m0 = frameMask(rec, 0);
+  const m1 = frameMask(rec, 1);
+  ok(m0[3010] === 1 && m0[1050] === 0 && m1[1050] === 1, 'the frame mask follows the per-ROI windows');
+
+  const a = analyzeVariants(rec, { roiIndex: 0, startS: 0, endS: 600 });
+  const dff = a.variants.find((v) => v.id === 'dff');
+  ok(a.masked.nFrames === 31 || a.masked.nFrames === 30, `the declared stretch is masked (${a.masked.nFrames} frames)`);
+  ok(Number.isNaN(dff.samples[3010]) && Number.isFinite(dff.samples[2990]), 'masked samples are removed from what is drawn');
+  // F0 is a running minimum over everything earlier, so one zero frame would hold F0 at zero
+  // for the rest of the recording. Bridged first, the F0 after the stretch is the clean one.
+  ok(Math.abs(dff.f0[4000] - refDff.f0[4000]) < 1e-3 * refDff.f0[4000], 'F0 after the stretch is not pulled down by it', `${dff.f0[4000]} vs ${refDff.f0[4000]}`);
+  for (const v of a.variants) {
+    const r0 = ref.variants.find((x) => x.id === v.id);
+    ok(Math.abs(v.fv.peakAmp - r0.fv.peakAmp) < 0.1 * r0.fv.peakAmp && Math.abs(v.shaped.peakAmp - r0.shaped.peakAmp) < 0.1 * r0.shaped.peakAmp,
+      `${v.id}: with the stretch declared, the kernel is within 10% of the kernel from the undamaged recording`, `fv ${v.fv.peakAmp} vs ${r0.fv.peakAmp}; shaped ${v.shaped.peakAmp} vs ${r0.shaped.peakAmp}`);
+  }
+  const bogus = JSON.parse(JSON.stringify(bad));
+  bogus.exclusions[1].rois = 'second one';
+  const rb = await parseLabRecording(bogus);
+  ok(rb.exclusions[1].rois === null && rb.warnings.some((w) => /not understood/.test(w)), 'an unreadable rois value masks every ROI and says so');
 }
 
 // ---- the review log ---------------------------------------------------------------------

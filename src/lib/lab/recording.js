@@ -92,7 +92,7 @@ export async function encodeArray(typed, shape) {
  * @property {(Float64Array|null)} spikeTimes seconds on the imaging clock; null = no spike file
  * @property {object} spikes the file's `spikes` object without the array (provenance)
  * @property {{name:string, startS:number, endS:number}[]} regions
- * @property {{startS:number, endS:number, reason:string}[]} exclusions
+ * @property {{startS:number, endS:number, reason:string, rois:(number[]|null), rule:string, calledBy:string}[]} exclusions  rois null = every ROI
  * @property {object} production the producer's stated F0 and penumbra parameters
  * @property {(object|null)} truth simulation only: the planted kernel
  * @property {object} provenance
@@ -196,7 +196,23 @@ export async function parseLabRecording(input) {
       throw new Error(`regions '${regions[i - 1].name}' and '${regions[i].name}' overlap`);
     }
   }
-  const exclusions = span(j.exclusions, 'exclusions', (r) => ({ reason: String(r.reason ?? '') }));
+  // `rois` says which ROIs a window applies to: "ALL" (or absent), or ROI numbers, which are
+  // the numbers in the ROI labels (`roi7` is 7). A value that cannot be read is taken as ALL,
+  // with a warning: masking too much is the safe mistake.
+  const exclusions = span(j.exclusions, 'exclusions', (r) => {
+    let rois = null;
+    const raw = r.rois;
+    if (Array.isArray(raw)) rois = raw.map(Number);
+    else if (typeof raw === 'number') rois = [raw];
+    else if (typeof raw === 'string' && raw.trim() && raw.trim().toUpperCase() !== 'ALL') {
+      rois = raw.split(/[^0-9]+/).filter(Boolean).map(Number);
+    }
+    if (rois && (!rois.length || rois.some((v) => !Number.isInteger(v)))) {
+      warnings.push(`exclusion ${r.start_s}-${r.end_s} s: rois '${JSON.stringify(raw)}' not understood, applied to every ROI`);
+      rois = null;
+    }
+    return { reason: String(r.reason ?? ''), rois, rule: String(r.rule ?? ''), calledBy: String(r.called_by ?? '') };
+  });
 
   let truth = null;
   if (j.truth?.kernel) {
@@ -225,6 +241,12 @@ export async function parseLabRecording(input) {
     provenance: j.provenance ?? {},
     warnings,
   };
+}
+
+/** The number in an ROI's label (`roi7` is 7), or its 1-based column when the label has none. */
+export function roiNumber(rec, roiIndex) {
+  const m = /(\d+)\s*$/.exec(rec.rois[roiIndex].label);
+  return m ? Number(m[1]) : roiIndex + 1;
 }
 
 /** One ROI's column of a column-major nFrames x nRoi trace matrix (a view, not a copy). */

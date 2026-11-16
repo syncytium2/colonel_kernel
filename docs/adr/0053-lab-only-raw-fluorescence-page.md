@@ -62,10 +62,16 @@ A second lab-only page, `#lab`, built the way ADR-0048 built the lab picker.
 ## Consequences
 
 **What exists.** The page, a reader and validator for the file, the ported extraction steps,
-a simulated fixture, and `npm run test:lab` (51 checks). The F0 port agrees bit for bit with
+a simulated fixture, and `npm run test:lab` (66 checks). The F0 port agrees bit for bit with
 haruspex's Python port on a synthetic trace; that Python port is the one haruspex checked
 against the archive's stored F0 (haruspex ADR-0007). The percentile filter agrees with an
 independent NumPy transcription of `prctfilt.m`.
+
+**Exclusions are applied before anything is computed** (Tony, 2026-11-16, after the first
+real files). The first version masked excluded frames after F0, dF/F0 and the percentile
+filter had been computed over them. The page now bridges each excluded run in the raw soma
+and penumbra traces first, per ROI, and removes those samples again before anything is drawn
+or averaged. The contract's "Exclusions come first" is the rule.
 
 **What does not.** No MATLAB exporter, so no real file. Nothing here has been compared with
 MATLAB output directly, and nothing has been run on a recording. 

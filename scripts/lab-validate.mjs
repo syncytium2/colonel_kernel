@@ -9,6 +9,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { parseLabRecording, roiColumn } from '../src/lib/lab/recording.js';
+import { frameMask, bridgeMasked } from '../src/lib/lab/compare.js';
 import { f0RunningMin, dFoverF0 } from '../src/lib/lab/extraction.js';
 
 const args = process.argv.slice(2);
@@ -42,20 +43,44 @@ for (const f of files) {
     console.log(`     regions: ${r.regions.map((g) => `${g.name} ${g.startS}-${g.endS}`).join('; ') || 'none'}`);
 
     // Where the producer shipped its own dF/F0, say how far this reader's recomputation is
-    // from it on the target ROI. Reported, not judged: a difference is information.
+    // from it, on EVERY ROI (Tony, 2026-11-16: "all rois should be tested"), two ways:
+    //   as the page computes it  - excluded stretches bridged before F0, compared outside them
+    //   straight through         - no exclusion applied, every frame compared
+    // Reported, not judged. The first is what the page will show; the second says what the
+    // producer's own dF/F0 was computed on when the two disagree.
     if (r.traces.dff_production) {
-      const k = r.targetIndex ?? 0;
-      const soma = roiColumn(r.traces.raw_soma, r.nFrames, k);
-      const mine = dFoverF0(soma, f0RunningMin(soma, r.dt));
-      const theirs = roiColumn(r.traces.dff_production, r.nFrames, k);
-      let worst = 0;
-      let nDiff = 0;
-      for (let i = 0; i < r.nFrames; i++) {
-        const d = Math.abs(mine[i] - theirs[i]);
-        if (d > 0) nDiff++;
-        if (d > worst) worst = d;
+      const TOL = 1e-6;
+      const modes = [
+        { name: 'exclusions bridged, compared outside them', bridged: true },
+        { name: 'straight through, every frame', bridged: false },
+      ];
+      for (const mode of modes) {
+        let within = 0;
+        let worst = { diff: -1, roi: '', nDiff: 0, nCmp: 0 };
+        for (let k = 0; k < r.nRoi; k++) {
+          const mask = mode.bridged ? frameMask(r, k) : new Uint8Array(r.nFrames);
+          const soma = bridgeMasked(roiColumn(r.traces.raw_soma, r.nFrames, k), mask);
+          const mine = dFoverF0(soma, f0RunningMin(soma, r.dt));
+          const theirs = roiColumn(r.traces.dff_production, r.nFrames, k);
+          let big = 0;
+          let nDiff = 0;
+          let nCmp = 0;
+          for (let i = 0; i < r.nFrames; i++) {
+            if (mask[i] || !Number.isFinite(theirs[i])) continue;
+            nCmp++;
+            const d = Math.abs(mine[i] - theirs[i]);
+            if (d > TOL) nDiff++;
+            if (d > big) big = d;
+          }
+          if (big <= TOL) within++;
+          if (big > worst.diff) worst = { diff: big, roi: r.rois[k].label, nDiff, nCmp };
+        }
+        console.log(`     dF/F0 recomputed vs dff_production (${mode.name}): ${within} of ${r.nRoi} ROIs within ${TOL}; worst ${worst.roi}, largest difference ${worst.diff}, ${worst.nDiff} of ${worst.nCmp} samples beyond ${TOL}`);
       }
-      console.log(`     dF/F0 recomputed from raw_soma vs dff_production, ROI ${k + 1}: ${nDiff} of ${r.nFrames} samples differ, largest difference ${worst}`);
+    }
+    if (r.exclusions.length) {
+      const all = r.exclusions.filter((e) => !e.rois).length;
+      console.log(`     exclusions: ${r.exclusions.length} (${all} for every ROI, ${r.exclusions.length - all} for named ROIs)`);
     }
     for (const w of r.warnings) console.log(`     note: ${w}`);
   } catch (e) {

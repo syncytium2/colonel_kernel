@@ -42,6 +42,22 @@ Tony and the producer (see "Open points").
    paired. A paired cell with no events has `spikes` present with `n` 0.
 6. **Nothing is trimmed.** Traces cover the whole recording. Regions are markers, not cuts.
 
+## Exclusions come first
+
+Tony, 2026-11-16: *"The blanking exists because of serious issues in the calcium signal in
+those regions. mlspike or deconv will go nuts if it see that."* The traces in the file are
+untouched, so the protection is the reader's. This reader, for each ROI:
+
+1. builds a frame mask from the exclusion windows that apply to that ROI and from
+   `spikes.gaps`;
+2. replaces each masked run in the **raw** soma and penumbra traces with a straight line
+   between its neighbours, over the whole recording, **before** F0, dF/F0 or the percentile
+   filter is computed. The production F0 is a minimum over everything earlier in the
+   recording, so a single blank frame left in would hold F0 down from there to the end;
+3. drops every spike inside a masked run;
+4. gives recovery the bridged trace, and removes the masked samples from what is drawn and
+   from the spike-triggered average.
+
 ## Fields
 
 | Field | Required | Meaning |
@@ -67,7 +83,7 @@ Tony and the producer (see "Open points").
 | `spikes.gaps` | no | List of `{start_s, end_s}` on the imaging clock: stretches when the loose-patch recording was not running. The reader removes both the trace and any spikes inside them. |
 | `spikes.source` | yes | `cell`, `revision`, `file`, `sha256` (of the cerebro file's own `times`), `reviewed` (`true`, `false` or `null`, copied from cerebro's `review.reviewed`), `offset_s`, `triggered_series`. |
 | `regions` | no | List of `{name, start_s, end_s}` in seconds on the imaging clock, from db4. They must not overlap. An open-ended region ends at the last frame time. |
-| `exclusions` | no | List of `{start_s, end_s, reason}`: stretches to leave out (artifacts, blanked frames). |
+| `exclusions` | no | List of `{start_s, end_s, reason, rois, rule, called_by}`: stretches to leave out (reviewed blank windows, the first second, blank motion-correction frames). `rois` is `"ALL"` or the ROI numbers the window applies to, which are the numbers in the ROI labels (`roi7` is 7); absent means every ROI. `rule` and `called_by` are carried for the reader's information. **A reader must apply these before any baseline, deconvolution or kernel** (see below). |
 | `provenance` | yes | `tool`, the producer's `commit`, `created` (UTC), and the archive variant read. |
 | `truth` | never from a producer | Simulated files only: the planted kernel. |
 
@@ -88,6 +104,7 @@ obj.dtype = 'float32';  obj.shape = size(X);
 obj.b64   = matlab.net.base64encode(bytes);
 md = java.security.MessageDigest.getInstance('SHA-256');
 obj.sha256 = lower(reshape(dec2hex(typecast(md.digest(bytes), 'uint8'))', 1, []));
+obj.order = 'column-major';                          % every 2-D array; the reader refuses a trace without it
 ```
 
 Three things to check on the first real file, because each fails quietly:
@@ -110,21 +127,40 @@ any file is refused. A simulated file to compare against: `npm run lab-fixture`.
 
 ## What has been checked
 
-- **Reader round trip (`npm run test:lab`, 51 checks):** a simulated file reads back bit for
+- **Reader round trip (`npm run test:lab`, 66 checks):** a simulated file reads back bit for
   bit; a file with one trace value altered, a wrong version, a wrong shape, row-major traces,
   spikes on another clock, a wrong spike count, an out-of-range target, overlapping regions
   and a contradicted `dt_nominal_s` are each refused.
 - **Not checked:** any file written by MATLAB; any real recording; a file of realistic size
   in the browser (a 27-minute recording with about 290 ROIs and three trace matrices is about
-  75 MB of base64).
+  75 MB of base64). The first four real files were 14 to 26 MB; see the update below.
+
+## Update, 2026-11-16: the first real files
+
+interface2 wrote four files (`20261020_439`, `20261023_452`, `20261026_455`,
+`20261026_458`) and all four read; its account is interface2 `main`,
+`docs/handoffs/REPLY_kernel_lab_export_2026-11-16.md`. `20261027_468` was dropped (Tony:
+"468 is not usable for this purpose"). What that showed about this contract:
+
+- `time` starts at 0.0108 s in these files. Spike times count from the same imaging start.
+- The stored dF/F0 plus 1 is the F/F0 the lab's MLspike code is fed. It is the same trace as
+  dF/F0 moved by a constant, so it needs no field. ⚠ It is not offered as an extraction in the
+  page: recovery cannot tell a constant offset from signal, so it would have to be removed
+  first, which gives dF/F0 back. Whether it should appear at all is Tony's call.
+- On ROI 1, the recomputed dF/F0 matched the stored one to about 1e-7 on `_439` and `_455`
+  and differed on nearly every sample of `_452` (largest 2.745) and `_458` (largest 0.0092).
+  Those numbers came from a validator that recomputed straight through the excluded frames
+  and looked at one ROI. The validator now reports every ROI, with and without the
+  exclusions bridged. ⚠ It has not been rerun on the real files since.
 
 ## Open points
 
 1. **Where the files live: decided** (Tony, 2026-11-16). A new folder in the lab Dropbox
    under the data root, outside `team_colonel_kernel/`, with every ROI exported. The folder
-   name `kernel_lab` is proposed and not yet confirmed. The dev server reads the folder
+   name is `rawF_kernel_test` (Tony, 2026-11-16; `kernel_lab` was a proposal and was not
+   used). The dev server reads the folder
    named by `CK_LAB_RAW_DIR`, and the review log `kernel_review.tsv` is written there too.
-   At about 75 MB a recording this is about 1 GB for the 14 DI and male slices; revisit
+   The first four files are 14 to 26 MB each, not the 75 MB estimated; revisit
    before the 66 senktide/TTX slices are exported.
 2. **The file name.** `<slice_id>.klab.json` is a placeholder. interface2's rule is that
    output names come from the lab-wide naming scheme, which does not cover export data files

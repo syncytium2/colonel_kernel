@@ -13,7 +13,8 @@ import { recoverRegion } from '../core/region-recovery.js';
 import { recoverKernelShaped } from '../core/deconvolve-shaped.js';
 import { kernelDiagnostics } from '../core/kernel-diagnostics.js';
 import { buildVariants } from './extraction.js';
-import { roiColumn } from './recording.js';
+import { roiColumn, roiNumber } from './recording.js';
+import { spikeTriggeredAverage } from '../core/sta.js';
 
 const WIN_S = 5; // kernel half-window, as region-recovery.js
 
@@ -36,12 +37,22 @@ export function analysisWindows(rec) {
 }
 
 /**
- * Stretches in which the spike train or the trace cannot be trusted: the file's exclusion
- * windows, and the stretches the loose-patch recording was not running (`spikes.gaps`). A
- * silence in a gap is not a silence, so both the trace and the spikes are removed there.
+ * Stretches of one ROI that must not reach a baseline, a deconvolution or a kernel: the
+ * file's exclusion windows that apply to this ROI, and the stretches the loose-patch
+ * recording was not running (`spikes.gaps`), where a silence is not a silence.
+ *
+ * Tony, 2026-11-16: the blanking exists because the calcium signal is seriously wrong in
+ * those stretches, and a baseline or a deconvolution that sees them "will go nuts". So the
+ * mask is applied BEFORE anything is computed from the trace, not after.
+ * @param {number} [roiIndex] omit for the windows that apply to every ROI plus all others
  */
-export function maskedSpans(rec) {
-  const out = rec.exclusions.map((e) => ({ startS: e.startS, endS: e.endS, why: e.reason || 'excluded' }));
+export function maskedSpans(rec, roiIndex = null) {
+  const num = roiIndex == null ? null : roiNumber(rec, roiIndex);
+  const out = [];
+  for (const e of rec.exclusions) {
+    if (e.rois && num != null && !e.rois.includes(num)) continue;
+    out.push({ startS: e.startS, endS: e.endS, why: e.reason || 'excluded' });
+  }
   for (const g of rec.spikes?.gaps ?? []) {
     if (Number.isFinite(g.start_s) && Number.isFinite(g.end_s)) {
       out.push({ startS: g.start_s, endS: g.end_s, why: 'no loose-patch recording' });
@@ -53,6 +64,40 @@ export function maskedSpans(rec) {
 function inAny(spans, t) {
   for (const s of spans) if (t >= s.startS && t <= s.endS) return true;
   return false;
+}
+
+/** Whole-recording frame mask for one ROI: 1 where the frame is inside a masked span. */
+export function frameMask(rec, roiIndex) {
+  const spans = maskedSpans(rec, roiIndex);
+  const mask = new Uint8Array(rec.nFrames);
+  if (spans.length) for (let i = 0; i < rec.nFrames; i++) if (inAny(spans, rec.time[i])) mask[i] = 1;
+  return mask;
+}
+
+/**
+ * A copy of x with every masked run replaced by a straight line between the valid samples
+ * either side of it (a run at an end holds the nearest valid sample). This is what the
+ * archive's own blank-frame repair does, and it is what lets the running minimum, the boxcar
+ * and the percentile filter pass over a bad stretch without being pulled by it. The filled
+ * samples are placeholders: they are removed again before anything is drawn or averaged.
+ */
+export function bridgeMasked(x, mask) {
+  const n = x.length;
+  const out = Float64Array.from(x);
+  let i = 0;
+  while (i < n) {
+    if (!mask[i]) { i++; continue; }
+    let j = i;
+    while (j < n && mask[j]) j++;
+    const left = i > 0 ? out[i - 1] : NaN;
+    const right = j < n ? x[j] : NaN;
+    for (let k = i; k < j; k++) {
+      if (Number.isFinite(left) && Number.isFinite(right)) out[k] = left + ((right - left) * (k - i + 1)) / (j - i + 1);
+      else out[k] = Number.isFinite(left) ? left : right;
+    }
+    i = j;
+  }
+  return out;
 }
 
 /** RMS difference between two kernels after each is scaled to unit peak, over lags 0..+win. */
@@ -102,9 +147,12 @@ export function analyzeVariants(rec, o) {
   if (i1 - i0 < 2 * Math.round(WIN_S / rec.dt) + 2) {
     throw new Error(`window ${startS}-${endS} s holds ${i1 - i0} frames: too short for a +/-${WIN_S} s kernel`);
   }
-  const soma = roiColumn(rec.traces.raw_soma, rec.nFrames, roiIndex);
-  const pen = rec.traces.raw_pen ? roiColumn(rec.traces.raw_pen, rec.nFrames, roiIndex) : null;
-  const fileDff = rec.traces.dff_production ? roiColumn(rec.traces.dff_production, rec.nFrames, roiIndex) : null;
+  // Mask first: the excluded stretches are bridged in the RAW traces, over the whole
+  // recording, before F0, dF/F0 or the percentile filter see them.
+  const mask = frameMask(rec, roiIndex);
+  const soma = bridgeMasked(roiColumn(rec.traces.raw_soma, rec.nFrames, roiIndex), mask);
+  const pen = rec.traces.raw_pen ? bridgeMasked(roiColumn(rec.traces.raw_pen, rec.nFrames, roiIndex), mask) : null;
+  const fileDff = rec.traces.dff_production ? bridgeMasked(roiColumn(rec.traces.dff_production, rec.nFrames, roiIndex), mask) : null;
 
   const variants = buildVariants({ soma, pen, dt: rec.dt, i0, i1, pensubK, fileDff });
 
@@ -114,7 +162,7 @@ export function analyzeVariants(rec, o) {
   grid.dt = rec.dt;
   grid.sampleRate = 1 / rec.dt;
 
-  const spans = maskedSpans(rec);
+  const spans = maskedSpans(rec, roiIndex);
   const tA = times[0];
   const tB = times[times.length - 1];
   const spikeTimes = [];
@@ -123,12 +171,10 @@ export function analyzeVariants(rec, o) {
   }
   let nMasked = 0;
   const maskIdx = [];
-  if (spans.length) {
-    for (let i = 0; i < times.length; i++) {
-      if (inAny(spans, times[i])) {
-        maskIdx.push(i);
-        nMasked++;
-      }
+  for (let i = i0; i < i1; i++) {
+    if (mask[i]) {
+      maskIdx.push(i - i0);
+      nMasked++;
     }
   }
 
@@ -145,12 +191,18 @@ export function analyzeVariants(rec, o) {
     reason: spikeTimes.length >= 2 ? null : `${spikeTimes.length} spike(s) in the window: a kernel needs at least 2`,
     grid,
     spikeTimes: Float64Array.from(spikeTimes),
-    rois: variants.map((v) => {
-      const samples = Float64Array.from(v.samples);
-      for (const i of maskIdx) samples[i] = NaN;
-      return { id: v.id, samples };
-    }),
+    // Recovery is given the bridged trace: finite everywhere, with the excluded stretches
+    // flat-lined between their neighbours and every spike inside them already removed. A
+    // zero or a gap there would be a step the deconvolution has to explain.
+    rois: variants.map((v) => ({ id: v.id, samples: Float64Array.from(v.samples) })),
   };
+  // What is drawn and what the STA averages has the excluded stretches REMOVED (NaN), so no
+  // placeholder sample is ever shown or counted as data.
+  const shownSamples = variants.map((v) => {
+    const samples = Float64Array.from(v.samples);
+    for (const i of maskIdx) samples[i] = NaN;
+    return samples;
+  });
 
   const results = variants.map((v, col) => {
     if (!view.analyzable) return { ...v, analyzable: false, reason: view.reason };
@@ -160,15 +212,24 @@ export function analyzeVariants(rec, o) {
     for (let k = 0; k < n; k++) tracePad[k] = Number.isFinite(s[k]) ? s[k] : 0;
     const shaped = recoverKernelShaped(tracePad, sdPad, { windowSamples: ws, dt: rec.dt, fitLength: n });
     const shDiag = kernelDiagnostics(shaped);
+    const sta = spikeTriggeredAverage(view.spikeTimes, shownSamples[col], grid.times, { window: 2, baseline: 0.5 });
+    let staPeakLagS = NaN;
+    let staPeakAmp = NaN;
+    if (!sta.empty) {
+      let bi = 0;
+      for (let i = 1; i < sta.samples.length; i++) if (sta.samples[i] > sta.samples[bi]) bi = i;
+      staPeakLagS = sta.times[bi];
+      staPeakAmp = sta.samples[bi];
+    }
     return {
       ...v,
-      samples: view.rois[col].samples,
+      samples: shownSamples[col],
       analyzable: true,
       reason: null,
       fv: r.fv,
       pm: r.pm,
-      sta: r.sta,
-      agreement: r.agreement,
+      sta,
+      agreement: { ...r.agreement, staPeakLagS, staPeakAmp, nAccepted: sta.nAccepted, nEvents: sta.nEvents },
       shaped: {
         kernel: { samples: shaped.samples, zeroIndex: shaped.zeroIndex, dt: shaped.dt, times: shaped.times },
         drift: shaped.fit.drift,
