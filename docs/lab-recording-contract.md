@@ -110,7 +110,7 @@ any file is refused. A simulated file to compare against: `npm run lab-fixture`.
 
 ## What has been checked
 
-- **Reader round trip (`npm run test:lab`, 39 checks):** a simulated file reads back bit for
+- **Reader round trip (`npm run test:lab`, 51 checks):** a simulated file reads back bit for
   bit; a file with one trace value altered, a wrong version, a wrong shape, row-major traces,
   spikes on another clock, a wrong spike count, an out-of-range target, overlapping regions
   and a contradicted `dt_nominal_s` are each refused.
@@ -120,13 +120,17 @@ any file is refused. A simulated file to compare against: `npm run lab-fixture`.
 
 ## Open points
 
-1. **Where the files live.** Proposed: a new folder under the lab data root, outside
-   `team_colonel_kernel/`. The dev server reads the folder named by `CK_LAB_RAW_DIR`.
+1. **Where the files live: decided** (Tony, 2026-11-16). A new folder in the lab Dropbox
+   under the data root, outside `team_colonel_kernel/`, with every ROI exported. The folder
+   name `kernel_lab` is proposed and not yet confirmed. The dev server reads the folder
+   named by `CK_LAB_RAW_DIR`, and the review log `kernel_review.tsv` is written there too.
+   At about 75 MB a recording this is about 1 GB for the 14 DI and male slices; revisit
+   before the 66 senktide/TTX slices are exported.
 2. **The file name.** `<slice_id>.klab.json` is a placeholder. interface2's rule is that
    output names come from the lab-wide naming scheme, which does not cover export data files
    yet; the name should follow that scheme once it does.
-3. **Which ROIs to export.** The contract takes any subset. The target ROI is required for
-   kernel work; every ROI is needed to look for coupling in a non-targeted ROI.
+3. **Which ROIs to export: every ROI** for the DI and male cohorts (Tony, 2026-11-16). The
+   contract takes any subset; the question reopens with the folder's size before senktide/TTX.
 4. **Relation to the haruspex export contract.** haruspex `docs/contract/export_contract_v0.md`
    specifies the same content as one HDF5 file per recording, and that exporter exists on an
    interface2 branch but has not been run. This file is JSON because the page runs in a

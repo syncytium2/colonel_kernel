@@ -8,6 +8,7 @@ import { barF, minBarF, dFoverF0, prctFilt, f0Samples, buildVariants } from './e
 import { parseLabRecording, encodeArray, roiColumn, LAB_FORMAT } from './recording.js';
 import { simulateRaw, simulatedLabRecording } from './simulate.js';
 import { analyzeVariants, analysisWindows, windowIndices } from './compare.js';
+import { verdictLine, parseVerdicts, currentVerdict, verdictKey, isStale, VERDICT_HEADER } from './verdicts.js';
 
 let passed = 0;
 let failed = 0;
@@ -134,6 +135,27 @@ const file = await simulatedLabRecording();
 
   const bv = buildVariants({ soma: roiColumn(rec.traces.raw_soma, rec.nFrames, 0), pen: null, dt: rec.dt, i0: 0, i1: 100 });
   ok(bv.map((v) => v.id).join(' ') === 'frozen dff dff-prct', 'without a penumbra trace the penumbra variants are absent');
+}
+
+// ---- the review log ---------------------------------------------------------------------
+{
+  const base = { time_utc: '2026-11-16T12:00:00.000Z', slice_id: 'S1', roi: 'roi1', window: 'baseline', start_s: 0, end_s: 600, spike_cell: 'c1', spike_revision: 2, spike_sha256: 'aa', verdict: 'accept', note: 'clean\trise\nok' };
+  const l1 = verdictLine(base);
+  ok(l1.split('\t').length === 11 && !/[\r\n]/.test(l1), 'a note with a tab and a newline still makes one 11-field line');
+  const l2 = verdictLine({ ...base, time_utc: '2026-11-16T13:00:00.000Z', verdict: 'reject', note: '' });
+  const l3 = verdictLine({ ...base, roi: 'roi2', verdict: 'unsure' });
+  const rows = parseVerdicts([VERDICT_HEADER, l1, l3, l2].join('\n') + '\n');
+  ok(rows.length === 3 && rows[0].note === 'clean rise ok', 'the log parses back, note flattened to one line');
+  ok(currentVerdict(rows, verdictKey(base)).verdict === 'reject', 'the last line for a kernel is the verdict in force');
+  ok(currentVerdict(rows, verdictKey({ ...base, roi: 'roi2' })).verdict === 'unsure', 'another ROI keeps its own verdict');
+  ok(currentVerdict(rows, verdictKey({ ...base, window: 'whole recording' })) === null, 'another window has none');
+  ok(!isStale(rows[2], { cell: 'c1', revision: 2, sha256: 'aa' }), 'same spike file: not stale');
+  ok(isStale(rows[2], { cell: 'c1', revision: 3, sha256: 'bb' }), 'a new spike revision makes the verdict stale');
+  ok(isStale({ ...rows[2], spike_sha256: '' }, { cell: 'c1', revision: 3 }), 'without hashes, cell and revision decide');
+  ok(parseVerdicts('').length === 0, 'an empty log is no verdicts');
+  await refuses(() => verdictLine({ ...base, verdict: 'maybe' }), /verdict must be/, 'refuses a verdict outside accept, reject, unsure');
+  await refuses(() => verdictLine({ ...base, slice_id: '' }), /slice_id/, 'refuses a verdict with no slice');
+  await refuses(() => parseVerdicts('a\tb\n' + l1 + '\n'), /header/, 'refuses a log with another header');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -62,14 +62,21 @@ A second lab-only page, `#lab`, built the way ADR-0048 built the lab picker.
 ## Consequences
 
 **What exists.** The page, a reader and validator for the file, the ported extraction steps,
-a simulated fixture, and `npm run test:lab` (39 checks). The F0 port agrees bit for bit with
+a simulated fixture, and `npm run test:lab` (51 checks). The F0 port agrees bit for bit with
 haruspex's Python port on a synthetic trace; that Python port is the one haruspex checked
 against the archive's stored F0 (haruspex ADR-0007). The percentile filter agrees with an
 independent NumPy transcription of `prctfilt.m`.
 
 **What does not.** No MATLAB exporter, so no real file. Nothing here has been compared with
-MATLAB output directly, and nothing has been run on a recording. Review verdicts are not
-recorded by the page: it downloads the diagnostics table as a file and keeps nothing.
+MATLAB output directly, and nothing has been run on a recording. 
+
+**Review verdicts are kept in a file beside the recordings** (Tony, 2026-11-16). The page has
+accept, reject and unsure buttons and a note. Each click makes the dev server append one line
+to `kernel_review.tsv` in the recordings folder, then read the file back and return it, so
+the page shows what is on disk. A verdict is about one ROI of one recording over one window,
+and carries the spike file's cell, revision and hash; the newest line for a kernel is the one
+in force, and a verdict given on another spike file is shown as stale. This is the only write
+the dev server makes. It has been exercised on the simulated recording only.
 
 **The public artifact is unchanged.** `npm run build` then `npm run lab-check` passes with the
 new markers. Core tests are untouched (265 pass).
@@ -82,5 +89,5 @@ so a core change can break them without `test:core` saying so; `test:lab` has to
 `src/lib/lab/` still builds and still deploys, and ships the page. The gate exists for that.
 
 **What this does not decide.** Whether any of this becomes public; where lab recordings are
-stored; how review verdicts are recorded; and whether the haruspex HDF5 export and this file
+stored beyond the folder decision recorded in the contract; and whether the haruspex HDF5 export and this file
 should come from one exporter. Each is listed in the contract's open points.

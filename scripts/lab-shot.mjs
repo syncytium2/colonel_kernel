@@ -33,6 +33,13 @@ await selects[2].selectOption({ index: 1 }); // window: first region
 await page.waitForTimeout(2500);
 await selects[3].selectOption('shaped');
 await page.waitForTimeout(1500);
+// LAB_VERDICT=accept|reject|unsure also saves a verdict (it APPENDS a line to the review log
+// in the recordings folder), so the save and the read-back can be seen working.
+if (process.env.LAB_VERDICT) {
+  await page.fill('.labpage .notebox', 'written by scripts/lab-shot.mjs');
+  await page.click(`.labpage .review button:has-text("${process.env.LAB_VERDICT}")`);
+  await page.waitForSelector(`.labpage .review .saved b:has-text("${process.env.LAB_VERDICT}")`, { timeout: 10000 });
+}
 await page.screenshot({ path: `${out}/lab-region.png`, fullPage: true });
 
 console.log('console errors:', JSON.stringify(errors));

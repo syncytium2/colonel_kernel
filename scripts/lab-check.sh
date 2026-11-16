@@ -22,7 +22,7 @@ FOUND=0
 # name and a string only its extraction module carries.
 for marker in 'LabPicker' '__lab/recordings' '__lab/file' 'lab-recordings-on-serve' \
               'LabExtraction' '__lab/raw-recordings' '__lab/raw-file' 'colonel-lab-recording' \
-              'F0 held constant'; do
+              'F0 held constant' '__lab/raw-verdicts' 'kernel_review.tsv'; do
   if grep -rqF "$marker" dist/; then
     echo "  LEAKED: '$marker' is present in dist/" >&2
     grep -rlF "$marker" dist/ | sed 's/^/    /' >&2

@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { execSync } from 'node:child_process'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { appendFileSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { VERDICT_FILE, VERDICT_HEADER, verdictLine } from './src/lib/lab/verdicts.js'
 
 // Build-time git dates for the Tab 0 "born on / last updated" line. Baked in at
 // build (NOT fetched at runtime) — the strict CSP (connect-src 'none', §6) forbids
@@ -115,6 +116,46 @@ function labRecordingsOnServe() {
     name: 'lab-recordings-on-serve',
     apply: 'serve',
     configureServer(server) {
+      // The review log (ADR-0053): GET returns it, POST appends ONE verdict to it. The only
+      // write this server makes, into the folder the lab recordings are read from, to one
+      // fixed file name. A line is never changed or removed; the newest line for a kernel is
+      // the verdict in force. After writing, the file is read back and the reply is what is
+      // on disk, so the page shows what was saved and not what it meant to save.
+      const rawDir = sources[1].dir
+      const logPath = path.join(rawDir, VERDICT_FILE)
+      const readLog = () => (existsSync(logPath) ? readFileSync(logPath, 'utf8') : '')
+      server.middlewares.use('/__lab/raw-verdicts', (req, res) => {
+        const reply = (code, body) => {
+          res.statusCode = code
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+          res.end(body)
+        }
+        if (req.method === 'GET') return reply(200, readLog())
+        if (req.method !== 'POST') return reply(405, 'GET or POST')
+        let body = ''
+        req.on('data', (c) => {
+          body += c
+          if (body.length > 20000) req.destroy()
+        })
+        req.on('end', () => {
+          try {
+            if (!existsSync(rawDir)) throw new Error('the lab recordings folder does not exist')
+            const line = verdictLine({ ...JSON.parse(body), time_utc: new Date().toISOString() })
+            const before = readLog()
+            if (before && before.split('\n')[0] !== VERDICT_HEADER) {
+              throw new Error(VERDICT_FILE + ' exists with another header; not written')
+            }
+            if (!before) writeFileSync(logPath, VERDICT_HEADER + '\n', { flag: 'wx' })
+            appendFileSync(logPath, line + '\n')
+            const after = readLog()
+            if (!after.endsWith(line + '\n')) throw new Error('written, but the line did not read back')
+            reply(200, after)
+          } catch (e) {
+            reply(400, String(e?.message ?? e))
+          }
+        })
+      })
+
       for (const src of sources) {
         server.middlewares.use(src.list, (_req, res) => {
           const files = list(src)

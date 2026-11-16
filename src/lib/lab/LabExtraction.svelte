@@ -12,6 +12,7 @@
   import { parseLabRecording, roiColumn } from './recording.js';
   import { analyzeVariants, analysisWindows } from './compare.js';
   import { PENSUB_K } from './extraction.js';
+  import { VERDICTS, VERDICT_FILE, parseVerdicts, currentVerdict, verdictKey, isStale } from './verdicts.js';
 
   // One hue per variant (Okabe-Ito), fixed, so a variant keeps its colour on every panel.
   // The app follows the system colour scheme (app.css), and uPlot draws to a canvas, so the
@@ -128,6 +129,61 @@
   }
 
   const windows = $derived(rec ? analysisWindows(rec) : []);
+
+  // ---- review verdicts (kernel_review.tsv beside the recordings; see verdicts.js) ----
+  let verdictRows = $state.raw([]);
+  let verdictError = $state(null);
+  let saving = $state(false);
+  let note = $state('');
+
+  async function loadVerdicts() {
+    try {
+      const r = await fetch('/__lab/raw-verdicts');
+      verdictRows = parseVerdicts(await r.text());
+      verdictError = null;
+    } catch (e) {
+      verdictError = String(e?.message ?? e);
+    }
+  }
+  loadVerdicts();
+
+  const reviewKey = $derived(
+    rec && windows[windowIdx]
+      ? verdictKey({ slice_id: rec.sliceId, roi: rec.rois[roiIndex].label, window: windows[windowIdx].name })
+      : null,
+  );
+  const verdict = $derived(reviewKey ? currentVerdict(verdictRows, reviewKey) : null);
+  const stale = $derived(verdict ? isStale(verdict, rec?.spikes?.source) : false);
+  // The note box follows the kernel on screen: it shows the saved note, or is empty.
+  $effect(() => {
+    note = verdict?.note ?? '';
+  });
+
+  async function saveVerdict(v) {
+    const w = windows[windowIdx];
+    const src = rec.spikes?.source ?? {};
+    saving = true;
+    verdictError = null;
+    try {
+      const r = await fetch('/__lab/raw-verdicts', {
+        method: 'POST',
+        body: JSON.stringify({
+          slice_id: rec.sliceId, roi: rec.rois[roiIndex].label, window: w.name,
+          start_s: w.startS, end_s: w.endS,
+          spike_cell: src.cell ?? '', spike_revision: src.revision ?? '', spike_sha256: src.sha256 ?? '',
+          verdict: v, note,
+        }),
+      });
+      const text = await r.text();
+      if (!r.ok) throw new Error(text);
+      // What comes back is the file as read from disk after the write.
+      verdictRows = parseVerdicts(text);
+    } catch (e) {
+      verdictError = `NOT SAVED: ${e?.message ?? e}`;
+    } finally {
+      saving = false;
+    }
+  }
 
   // Recompute off the click, so the controls repaint before a long window blocks the thread.
   $effect(() => {
@@ -341,6 +397,24 @@
       {/if}
 
       {#if result && shown.length}
+        <div class="review" class:stale>
+          <strong>Your verdict on this kernel</strong>
+          {#each VERDICTS as v (v)}
+            <button class:on={verdict?.verdict === v && !stale} disabled={saving} onclick={() => saveVerdict(v)}>{v}</button>
+          {/each}
+          <input class="notebox" type="text" placeholder="note (saved with the verdict)" bind:value={note} />
+          {#if verdict}
+            <span class="saved">
+              saved: <b>{verdict.verdict}</b> at {verdict.time_utc.slice(0, 16).replace('T', ' ')} UTC
+              {#if stale} — <b>stale</b>: given on spike file {verdict.spike_cell || '?'}{verdict.spike_revision ? ` r${verdict.spike_revision}` : ''}, not the one loaded{/if}
+            </span>
+          {:else}
+            <span class="saved">none saved for this ROI and window</span>
+          {/if}
+          <span class="where">{VERDICT_FILE} in {dirLabel || 'the recordings folder'}</span>
+          {#if verdictError}<span class="err">{verdictError}</span>{/if}
+        </div>
+
         <div class="lagrow">
           <div class="panel">
             <h3>Recovered kernel, {METHODS.find((m) => m.id === method).label}</h3>
@@ -465,6 +539,13 @@
     border-radius: 4px;
   }
   .note, .empty { font-size: 12.5px; margin: 2px 0; }
+  .review { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
+  .review.stale { border-style: dashed; }
+  .review button { font: inherit; padding: 2px 12px; color: var(--text-h); background: var(--bg); border: 1px solid var(--text); border-radius: 4px; cursor: pointer; }
+  .review button.on { background: var(--accent-bg); border-color: var(--accent); font-weight: 600; }
+  .notebox { flex: 1 1 220px; font: inherit; color: var(--text-h); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
+  .saved { font-size: 12.5px; }
+  .where { font: 11px var(--mono); color: var(--text); }
   .lagrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .panel { min-width: 0; }
   table { border-collapse: collapse; font-size: 12.5px; width: 100%; }
