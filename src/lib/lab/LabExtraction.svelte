@@ -275,6 +275,24 @@
   // Kernel and STA are drawn on the SAME lag axis. The STA is only computed out to +/-2 s
   // (ADR-0005), so its curve stops short of the frame; the frame is the kernel's.
   const LAG_RANGE = [-5, 5];
+  // ...and on the SAME amplitude axis: one range covering every curve drawn in either panel,
+  // so a height read off one panel is the same height in the other.
+  const lagYRange = $derived.by(() => {
+    let lo = 0;
+    let hi = 0;
+    for (const band of [fold.kernel ? null : kernelBand, fold.sta ? null : staBand]) {
+      for (const sr of band?.series ?? []) {
+        for (const v of sr.ys) {
+          if (v == null || !Number.isFinite(v)) continue;
+          if (v < lo) lo = v;
+          if (v > hi) hi = v;
+        }
+      }
+    }
+    if (hi === lo) return null;
+    const pad = 0.06 * (hi - lo);
+    return [lo - pad, hi + pad];
+  });
 
   function tableTsv() {
     if (!result) return '';
@@ -458,7 +476,7 @@
             <div class="panel">
               {@render head('kernel', `Recovered kernel, ${METHODS.find((m) => m.id === method).label}`)}
               {#key `${kernelBand.series.length}-${method}-${dark}-${lagHeight}`}
-                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={kernelBand.lag} seriesList={kernelBand.series} xRange={LAG_RANGE} yAxisSize={56} padRight={16}
+                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={kernelBand.lag} seriesList={kernelBand.series} xRange={LAG_RANGE} yRange={lagYRange} yAxisSize={56} padRight={16}
                   cursorPoints={false} zeroLine xLabel="lag (s)" yLabel={unitPeak ? 'amplitude (peak = 1)' : 'amplitude (dF/F₀ per spike)'} height={lagHeight} />
               {/key}
             </div>
@@ -467,10 +485,10 @@
             {#if fold.kernel}{@render head('sta', 'Spike-triggered average')}{:else}{@render strip('sta', 'spike-triggered average')}{/if}
           {:else}
             <div class="panel">
-              {@render head('sta', 'Spike-triggered average (computed to ±2 s; same lag axis as the kernel)')}
+              {@render head('sta', 'Spike-triggered average (computed to ±2 s; same axes as the kernel)')}
               {#if staBand}
                 {#key `${staBand.series.length}-${dark}-${lagHeight}`}
-                  <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={staBand.lag} seriesList={staBand.series} xRange={LAG_RANGE} yAxisSize={56} padRight={16} cursorPoints={false} zeroLine
+                  <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={staBand.lag} seriesList={staBand.series} xRange={LAG_RANGE} yRange={lagYRange} yAxisSize={56} padRight={16} cursorPoints={false} zeroLine
                     xLabel="lag (s)" yLabel={unitPeak ? 'amplitude (peak = 1)' : 'amplitude (dF/F₀)'} height={lagHeight} />
                 {/key}
               {:else}
