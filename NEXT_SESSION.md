@@ -13,6 +13,8 @@
 
 ## Lab-only raw-fluorescence page (2026-11-16, branch `claude/kernel-viewer-fluorescence-a68sg6`, not merged)
 
+**Taking this over? Read [`docs/handoff-lab-page-2026-11-16.md`](docs/handoff-lab-page-2026-11-16.md) first.**
+
 A dev-server-only page, `#lab`, that recovers a kernel from each extraction of one ROI's raw
 fluorescence and draws them on one lag axis ([ADR-0053](docs/adr/0053-lab-only-raw-fluorescence-page.md)).
 `npm run lab-fixture` writes a simulated recording into `exports/`; `npm run dev`, then open
