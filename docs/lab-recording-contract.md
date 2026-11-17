@@ -1,9 +1,11 @@
 # The lab recording file: raw fluorescence and spike times for one recording
 
-> **DRAFT, version 1, proposed 2026-11-16. Not murderboarded. No producer has written a real
-> file against it yet.** The reader, its tests and a simulated file exist; the MATLAB exporter
-> does not. Treat every field as open to change until one real recording has been written,
-> validated and looked at. Decision record: [ADR-0053](adr/0053-lab-only-raw-fluorescence-page.md).
+> **DRAFT, version 2, proposed 2026-11-17. Not murderboarded.** Version 1 (2026-11-16) shipped
+> raw traces plus an `exclusions` list and left the cleaning to this page; four male files were
+> written against it. Version 2 moves all cleaning to the producer (interface2 ADR-0031, "exporters
+> screen every known artifact class"; Tony, 2026-11-17: interface2 makes every export decision,
+> consumers only run checks). The reader accepts version 2 only. Decision record:
+> [ADR-0053](adr/0053-lab-only-raw-fluorescence-page.md).
 
 One JSON file per imaging recording, named `<slice_id>.klab.json`. It is read by the lab-only
 page in this repository (`#lab`, dev server only) and by nothing in the public app.
@@ -32,32 +34,39 @@ Tony and the producer (see "Open points").
 2. **The file can prove it.** Each array may carry `sha256`, the SHA-256 of those bytes as
    lower-case hex. A reader recomputes it and refuses the file on a mismatch. A producer
    should always write it; the reader warns when it is absent.
-3. **Fluorescence is raw.** `raw_soma` and `raw_pen` are the mean fluorescence inside the ROI
-   mask and inside its penumbra ring, in camera units, from the motion-corrected stack. No
-   F0, no dF/F0, no penumbra subtraction, no filtering, no normalization.
+3. **Fluorescence is raw, and already cleaned.** `raw_soma` and `raw_pen` are the mean
+   fluorescence inside the ROI mask and inside its penumbra ring, in camera units, from the
+   motion-corrected stack. No F0, no dF/F0, no penumbra subtraction, no filtering, no
+   normalization. The one change from the archive is the producer's cleaning: every stretch
+   listed in `cleaning` with method `linear-bridge` has been replaced, in both traces, by a
+   straight line between its good neighbours (held flat at one neighbour at either end of the
+   recording), exactly as the archive's `blankfix` does.
 4. **Spike `t = 0` is imaging `t = 0`.** Spike times are in seconds on the same clock as
    `time`. The producer has already applied the offset between the loose-patch series and the
    imaging start; `spikes.source.offset_s` records what was applied.
 5. **No spike file is not the same as no spikes.** `"spikes": null` means no spike file was
    paired. A paired cell with no events has `spikes` present with `n` 0.
 6. **Nothing is trimmed.** Traces cover the whole recording. Regions are markers, not cuts.
+7. **The reader never cleans.** It does not bridge, drop or filter anything for quality. It
+   reads `cleaning` only to know which frames are not data, so it can leave them, and any
+   spikes inside them, out of the kernel fit for the ROIs they apply to.
 
 ## Fields
 
 | Field | Required | Meaning |
 |---|---|---|
 | `format` | yes | `"colonel-lab-recording"` |
-| `version` | yes | `1`. A reader refuses any other value. |
+| `version` | yes | `2`. A reader refuses any other value, including `1`. |
 | `slice_id` | yes | interface2's canonical id, e.g. `20260917_411`. |
 | `cohort` | no | Free text, shown to the reader. |
 | `dt_nominal_s` | yes | The declared frame interval in seconds (`0.1` for the 10 Hz corpus). Parameters given in seconds are converted to samples with this number, never with `mean(diff(time))`. |
 | `n_frames`, `n_roi` | yes | Whole numbers. |
 | `time` | yes | Array object, `float64`, shape `[n_frames]`: frame times in seconds, strictly increasing. `time[0]` need not be 0. Its mean interval must be within 1% of `dt_nominal_s`. |
-| `rois` | yes | List of `n_roi` objects in column order, each with `label` (e.g. `"roi1"`). |
-| `target_roi` | yes | 1-based position in `rois` of the loose-patch cell, or `null` when not known. Stated, never implied by position. |
+| `rois` | yes | List of `n_roi` objects in column order, each with `label` (e.g. `"roi1"`). Labels are unique and keep the archive's ROI numbers: a ROI the producer dropped (duplicate, dead) is absent, and the ROIs after it keep their labels (`roi27` stays `roi27`). Review verdicts are keyed on the label. |
+| `target_roi` | yes | 1-based COLUMN position in `rois` of the loose-patch cell, or `null` when not known. Stated, never implied by position. If the producer would drop the target ROI, it refuses to write the file. |
 | `traces.raw_soma` | yes | Array object, shape `[n_frames, n_roi]`, `order: "column-major"`. |
 | `traces.raw_pen` | no | Same shape. Without it the penumbra variants are not offered. |
-| `traces.dff_production` | no | The producer's own stored dF/F0 of the raw soma trace (interface2 `ROIdata.dFoF0.ROI`), same shape. When present the validator reports how far the reader's recomputation is from it. |
+| `traces.dff_production` | no | The producer's production dF/F0, RECOMPUTED by the producer from the cleaned `raw_soma` (and `raw_pen`) with the production F0 and penumbra settings in `production`; same shape. It is not the archive's stored `ROIdata.dFoF0.ROI`, and `provenance.dff_production` says how it was made. When present the validator reports how far the reader's recomputation is from it, with no bridging on the reader's side. |
 | `production` | no | What the producer's pipeline used: `f0: {t1_s, t2_s, t4_s}` (`t2_s: null` for no limit) and `pensub_k`. Informational. |
 | `spikes` | yes | `null`, or the object below. |
 | `spikes.units` | yes | `"s"` |
@@ -67,8 +76,9 @@ Tony and the producer (see "Open points").
 | `spikes.gaps` | no | List of `{start_s, end_s}` on the imaging clock: stretches when the loose-patch recording was not running. The reader removes both the trace and any spikes inside them. |
 | `spikes.source` | yes | `cell`, `revision`, `file`, `sha256` (of the cerebro file's own `times`), `reviewed` (`true`, `false` or `null`, copied from cerebro's `review.reviewed`), `offset_s`, `triggered_series`. |
 | `regions` | no | List of `{name, start_s, end_s}` in seconds on the imaging clock, from db4. They must not overlap. An open-ended region ends at the last frame time. |
-| `exclusions` | no | List of `{start_s, end_s, reason}`, optionally with `rois` (`"ALL"`, the default, or a list of 1-based ROI numbers), `rule` and `called_by`: stretches whose fluorescence cannot be trusted (artifacts, blanked frames). The reader bridges them out of the raw traces with a straight line **before** F0 or any baseline is computed, then leaves them out of kernel recovery, together with any spikes inside them (Tony, 2026-11-16). A `rois` naming a ROI the file does not have is refused. |
-| `provenance` | yes | `tool`, the producer's `commit`, `created` (UTC), and the archive variant read. |
+| `cleaning` | yes | The producer's manifest of what it applied: a record, not instructions. A list, written even when empty (`[]`). Each entry: `method` (`"linear-bridge"` or `"roi-dropped"`), `rois` (`"ALL"` or a list of labels, e.g. `["roi1","roi2"]`), `reason`, `rule`, `called_by`; and for `linear-bridge` also `start_s`, `end_s`, `first_frame`, `last_frame` (1-based, inclusive, the frames actually replaced). For `roi-dropped`, `rois` names the dropped ROIs and the four span fields are `null`. The reader uses the `linear-bridge` frames to leave those frames, and any spikes whose time falls in `[start_s, end_s]`, out of the kernel fit for the ROIs named. Spikes stay in `spikes.times`: the ephys is unaffected. A `rois` label the file does not have (other than a dropped one) is refused. |
+| `exclusions` | never | The version-1 field. A file carrying it is refused, so nothing is ever cleaned twice. |
+| `provenance` | yes | `tool`, the producer's `commit`, `created` (UTC), the archive variant read, and `dff_production` (a sentence saying it was recomputed from the cleaned raw, with which code), when that trace is present. |
 | `truth` | never from a producer | Simulated files only: the planted kernel. |
 
 **Array object:** `{"dtype": "float32" | "float64", "shape": [..], "b64": "...", "sha256": "..."}`.
