@@ -15,6 +15,41 @@
 import { mulberry32, gaussian } from '../core/noise.js';
 import { encodeArray, LAB_FORMAT, LAB_VERSION } from './recording.js';
 
+/**
+ * THE PRODUCER'S cleaning step, modelled here so tests can build a version-2 file: frames
+ * first..last (0-based, inclusive) of a trace are replaced by a straight line between the good
+ * neighbours, held flat at the one neighbour at either end, as the archive's `blankfix` does.
+ * The page never calls this: interface2 cleans its own exports (contract v2).
+ * @param {ArrayLike<number>} x one trace, whole recording
+ * @param {{first:number, last:number}[]} runs
+ * @returns {Float64Array} a copy
+ */
+export function producerBridge(x, runs) {
+  const n = x.length;
+  const out = Float64Array.from(x);
+  const bad = new Uint8Array(n);
+  for (const r of runs) for (let i = r.first; i <= r.last; i++) bad[i] = 1;
+  if (bad.every((b) => b)) throw new Error('producerBridge: every frame is bridged');
+  let i = 0;
+  while (i < n) {
+    if (!bad[i]) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < n && bad[j]) j++;
+    const a = i - 1;
+    const b = j;
+    for (let k = i; k < j; k++) {
+      if (a < 0) out[k] = x[b];
+      else if (b >= n) out[k] = x[a];
+      else out[k] = x[a] + ((x[b] - x[a]) * (k - a)) / (b - a);
+    }
+    i = j;
+  }
+  return out;
+}
+
 export const SIM_DEFAULTS = Object.freeze({
   seed: 20261116,
   dt: 0.1,
@@ -133,7 +168,7 @@ export function simulateRaw(overrides = {}) {
   return { params: p, n, time, spikes: Float64Array.from(spikes), soma, pen, truth: { samples: truth, zeroIndex: ws, dt: p.dt } };
 }
 
-/** The simulated recording as a lab recording file object (contract version 1). */
+/** The simulated recording as a lab recording file object (contract version 2, nothing cleaned). */
 export async function simulatedLabRecording(overrides = {}) {
   const s = simulateRaw(overrides);
   const p = s.params;
@@ -162,7 +197,7 @@ export async function simulatedLabRecording(overrides = {}) {
       source: { cell: 'simulated', revision: null, file: null, reviewed: null, offset_s: 0 },
     },
     regions: p.regions,
-    exclusions: [],
+    cleaning: [],
     truth: {
       note: `planted: double exponential, tau rise ${p.tauRise} s, tau decay ${p.tauDecay} s, peak ${p.apAmp} dF/F0 per action potential; soma carries ${p.kTrue} x neuropil`,
       kernel: { samples: await encodeArray(s.truth.samples), zero_index: s.truth.zeroIndex, dt_s: s.truth.dt },

@@ -4,10 +4,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import { barF, minBarF, dFoverF0, prctFilt, f0Samples, buildVariants, bridgeSpans } from './extraction.js';
+import { barF, minBarF, dFoverF0, prctFilt, f0Samples, buildVariants } from './extraction.js';
 import { parseLabRecording, encodeArray, roiColumn, LAB_FORMAT } from './recording.js';
-import { simulateRaw, simulatedLabRecording } from './simulate.js';
-import { analyzeVariants, analysisWindows, windowIndices, exclusionSpans } from './compare.js';
+import { simulateRaw, simulatedLabRecording, producerBridge } from './simulate.js';
+import { analyzeVariants, analysisWindows, windowIndices, bridgedSpans } from './compare.js';
 import { verdictLine, parseVerdicts, currentVerdict, verdictKey, isStale, VERDICT_HEADER } from './verdicts.js';
 
 let passed = 0;
@@ -87,7 +87,7 @@ const file = await simulatedLabRecording();
   ok(rec.warnings.some((w) => /not reviewed/.test(w)), 'unreviewed spikes are warned about');
 
   const clone = () => JSON.parse(JSON.stringify(file));
-  await refuses(() => { const j = clone(); j.version = 2; return parseLabRecording(j); }, /version/, 'refuses another version');
+  await refuses(() => { const j = clone(); j.version = 1; return parseLabRecording(j); }, /version/, 'refuses version 1 (raw plus exclusions, cleaned by the reader)');
   await refuses(() => { const j = clone(); j.format = 'x'; return parseLabRecording(j); }, /not a lab recording/, 'refuses another format');
   await refuses(async () => {
     const j = clone();
@@ -137,58 +137,61 @@ const file = await simulatedLabRecording();
   ok(bv.map((v) => v.id).join(' ') === 'frozen dff dff-prct', 'without a penumbra trace the penumbra variants are absent');
 }
 
-// ---- exclusions are honoured before any baseline (Tony, 2026-11-16) -----------------------
+// ---- contract v2: the producer cleans, the page reads the manifest (2026-11-17) ------------
 {
-  const t = Float64Array.from({ length: 10 }, (_, i) => i);
+  // The modelled producer step (the page never calls it).
   const x = Float64Array.from([0, 1, 2, 99, 99, 99, 6, 7, 8, 9]);
-  const b = bridgeSpans(x, t, [{ startS: 3, endS: 5 }]);
-  ok(b.nBridged === 3 && b.x[3] === 3 && b.x[4] === 4 && b.x[5] === 5, 'an interior run is bridged by a straight line');
-  ok(x[3] === 99, 'bridging leaves the input untouched');
-  const e = bridgeSpans(x, t, [{ startS: 0, endS: 1 }, { startS: 8.5, endS: 20 }]);
-  ok(e.x[0] === 2 && e.x[1] === 2 && e.x[9] === 8, 'a run at either end is held at its one good neighbour');
-  await refuses(() => bridgeSpans(x, t, [{ startS: -1, endS: 20 }]), /every frame/, 'refuses to bridge a trace with no good frame');
+  const b = producerBridge(x, [{ first: 3, last: 5 }]);
+  ok(b[3] === 3 && b[4] === 4 && b[5] === 5 && x[3] === 99, 'producer bridge: an interior run becomes a straight line; input untouched');
+  const e = producerBridge(x, [{ first: 0, last: 1 }, { first: 9, last: 9 }]);
+  ok(e[0] === 2 && e[1] === 2 && e[9] === 8, 'producer bridge: a run at either end is held at its one good neighbour');
 
-  // Scope: "ALL" is every ROI; a list names 1-based ROIs; anything else is refused.
-  const scoped = JSON.parse(JSON.stringify(file));
-  scoped.exclusions = [
-    { start_s: 700, end_s: 720, reason: 'dip', rois: 'ALL' },
-    { start_s: 900, end_s: 910, reason: 'roi 2 only', rois: [2] },
+  const clone = () => JSON.parse(JSON.stringify(file));
+  const entry = (o) => ({ method: 'linear-bridge', reason: 'r', rule: '', called_by: 'test', rois: 'ALL', ...o });
+  // Frames are 1-based: time[i] = (i-1)*0.1 s in the simulation, so 700 s is frame 7001.
+  const scoped = clone();
+  scoped.cleaning = [
+    entry({ start_s: 700, end_s: 720, first_frame: 7001, last_frame: 7201 }),
+    entry({ start_s: 900, end_s: 910, first_frame: 9001, last_frame: 9101, rois: ['roi2'] }),
+    { method: 'roi-dropped', rois: ['roi7'], reason: 'duplicate pick', rule: '', called_by: 'test', start_s: null, end_s: null, first_frame: null, last_frame: null },
   ];
   const rs = await parseLabRecording(scoped);
-  ok(rs.exclusions[0].rois === null && rs.exclusions[1].rois.has(1) && rs.exclusions[1].rois.size === 1, 'exclusion scope: ALL is null, [2] is 0-based ROI index 1');
-  ok(exclusionSpans(rs, 0).length === 1 && exclusionSpans(rs, 1).length === 2, 'an exclusion naming ROI 2 applies to ROI 2 and not to ROI 1');
-  await refuses(() => { const j = JSON.parse(JSON.stringify(scoped)); j.exclusions[1].rois = [9]; return parseLabRecording(j); }, /rois must be/, 'refuses an exclusion naming a ROI the file does not have');
+  ok(rs.bridged.length === 2 && rs.bridged[0].rois === null && rs.bridged[1].rois.has(1) && rs.bridged[0].firstFrame === 7000, 'cleaning: ALL is null, ["roi2"] is column 1, frames read 0-based');
+  ok(rs.dropped.length === 1 && rs.dropped[0].labels[0] === 'roi7', 'a roi-dropped entry is carried');
+  ok(bridgedSpans(rs, 0).length === 1 && bridgedSpans(rs, 1).length === 2, 'a stretch naming roi2 applies to roi2 and not to roi1');
   const m0 = analyzeVariants(rs, { roiIndex: 0, startS: 600, endS: 1200 }).masked.nFrames;
   const m1 = analyzeVariants(rs, { roiIndex: 1, startS: 600, endS: 1200 }).masked.nFrames;
-  ok(m1 - m0 === 101, `the ROI-2 window masks ROI 2's frames and not ROI 1's (${m0} vs ${m1})`);
+  ok(m0 === 201 && m1 === 302, `bridged frames are left out of the fit by exact frame (${m0}, ${m1})`);
 
-  // A deep artifact inside an exclusion window must not reach F0. The running minimum carries
-  // a dip forward, so without the bridge it would pull F0 down for the rest of the window.
+  await refuses(() => { const j = clone(); j.exclusions = []; return parseLabRecording(j); }, /version-1 field/, 'refuses a file carrying exclusions');
+  await refuses(() => { const j = clone(); delete j.cleaning; return parseLabRecording(j); }, /cleaning missing/, 'refuses a file with no cleaning manifest');
+  await refuses(() => { const j = clone(); j.cleaning = [entry({ start_s: 700, end_s: 720, first_frame: 7001, last_frame: 7201, rois: ['roi9'] })]; return parseLabRecording(j); }, /does not have/, 'refuses a stretch naming a ROI the file does not have');
+  await refuses(() => { const j = clone(); j.cleaning = [entry({ start_s: 700, end_s: 720, first_frame: 5001, last_frame: 5201 })]; return parseLabRecording(j); }, /not inside/, 'refuses frames that disagree with the seconds');
+  await refuses(() => { const j = clone(); j.cleaning = [{ method: 'roi-dropped', rois: ['roi1'], reason: 'x' }]; return parseLabRecording(j); }, /dropped but is in the file/, 'refuses a dropped ROI that is still in the file');
+  await refuses(() => { const j = clone(); j.cleaning = [entry({ method: 'nan-fill', start_s: 1, end_s: 2, first_frame: 11, last_frame: 21 })]; return parseLabRecording(j); }, /method/, 'refuses an unknown cleaning method');
+  await refuses(() => { const j = clone(); j.rois[1].label = 'roi1'; return parseLabRecording(j); }, /appears twice/, 'refuses duplicate ROI labels');
+
+  // The page uses the cleaned trace as given: an artifact the producer bridged never reaches F0.
   const sim = simulateRaw();
-  const dipped = new Float32Array(sim.soma);
-  for (let i = 7000; i <= 7200; i++) dipped[i] *= 0.3; // ROI 1, 700-720 s
-  const dj = JSON.parse(JSON.stringify(file));
-  const enc = await encodeArray(dipped);
-  dj.traces.raw_soma.b64 = enc.b64;
-  dj.traces.raw_soma.sha256 = enc.sha256;
-  dj.exclusions = [{ start_s: 700, end_s: 720, reason: 'artifact', rois: 'ALL' }];
-  const cj = JSON.parse(JSON.stringify(file));
-  cj.exclusions = dj.exclusions;
-  const dip = await parseLabRecording(dj);
-  const clean = await parseLabRecording(cj);
+  const dipped = Float64Array.from(sim.soma);
+  for (let i = 7000; i <= 7200; i++) dipped[i] *= 0.3; // roi1, 700-720 s
+  const cleaned = new Float32Array(sim.soma);
+  cleaned.set(producerBridge(dipped.subarray(0, sim.n), [{ first: 7000, last: 7200 }]), 0);
+  const ref = new Float32Array(sim.soma);
+  ref.set(producerBridge(Float64Array.from(sim.soma.subarray(0, sim.n)), [{ first: 7000, last: 7200 }]), 0);
+  const mk = async (arr) => {
+    const j = clone();
+    const enc = await encodeArray(arr, [sim.n, 4]);
+    j.traces.raw_soma = { ...enc, order: 'column-major' };
+    j.cleaning = [entry({ start_s: 700, end_s: 720, first_frame: 7001, last_frame: 7201 })];
+    return parseLabRecording(j);
+  };
   const o = { roiIndex: 0, startS: 600, endS: 1200 };
-  const f0 = (r, extra = {}) => analyzeVariants(r, { ...o, ...extra }).variants.find((v) => v.id === 'dff').f0;
-  const fClean = f0(clean);
-  const fDip = f0(dip);
-  const fOld = f0(dip, { bridgeExclusions: false });
-  let worstNew = 0;
-  let worstOld = 0;
-  for (let i = 0; i < fClean.length; i++) {
-    worstNew = Math.max(worstNew, Math.abs(fDip[i] - fClean[i]) / fClean[i]);
-    worstOld = Math.max(worstOld, Math.abs(fOld[i] - fClean[i]) / fClean[i]);
-  }
-  ok(worstNew < 1e-6, `an excluded artifact leaves F0 unchanged (largest relative change ${worstNew.toExponential(1)})`);
-  ok(worstOld > 0.3, `without the bridge the same artifact drags F0 down (${(100 * worstOld).toFixed(0)}%): the bug this guards`);
+  const fA = analyzeVariants(await mk(cleaned), o).variants.find((v) => v.id === 'dff').f0;
+  const fB = analyzeVariants(await mk(ref), o).variants.find((v) => v.id === 'dff').f0;
+  let worst = 0;
+  for (let i = 0; i < fA.length; i++) worst = Math.max(worst, Math.abs(fA[i] - fB[i]) / fB[i]);
+  ok(worst < 1e-6, `a producer-bridged artifact leaves F0 as if it had never happened (${worst.toExponential(1)})`);
 }
 
 // ---- the review log ---------------------------------------------------------------------

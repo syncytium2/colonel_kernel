@@ -74,6 +74,19 @@ on all 25 ROIs by up to 0.019: its `1/mean(diff(time))` is 9.9999999979, so MATL
 A half-width of 4 removes most of the difference; the rest (typically under 1e-3) fits the
 same quirk in the slope-fill threshold. The port is not tuned to it.
 
+## Update, 2026-11-17: contract version 2, the producer cleans
+
+Tony, 2026-11-17: interface2 makes every export decision and ships clean data; consumers only
+run checks (interface2 ADR-0031). The bridging described above moved to interface2. Files are
+now version 2: `raw_soma` and `raw_pen` arrive already bridged, `dff_production` is recomputed
+from the cleaned raw, dropped ROIs keep their labels, and a `cleaning` manifest replaces
+`exclusions`. The page only reads that manifest to leave bridged frames (by exact frame) and the
+spikes inside them out of the fit. The validator now checks the bridged frames lie on a straight
+line and compares dF/F0 with no bridging of its own. The reader refuses version 1, so **the four
+male files are unreadable until interface2 rewrites them**; the DI files (418, 423, 427, 431)
+come in the same form. Baseline results on the version-1 male files (0-1200 s, 0-1620 s on 458)
+were sent to Tony on 2026-11-17 before the change.
+
 ## What was in flight when this was first written
 
 The session "065 interface2 cerebro" was asked to write the exporter. It did; see the

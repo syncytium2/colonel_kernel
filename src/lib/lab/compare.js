@@ -12,7 +12,7 @@ import { nextPow2 } from '../core/deconvolve.js';
 import { recoverRegion } from '../core/region-recovery.js';
 import { recoverKernelShaped } from '../core/deconvolve-shaped.js';
 import { kernelDiagnostics } from '../core/kernel-diagnostics.js';
-import { buildVariants, bridgeSpans } from './extraction.js';
+import { buildVariants } from './extraction.js';
 import { roiColumn } from './recording.js';
 
 const WIN_S = 5; // kernel half-window, as region-recovery.js
@@ -36,29 +36,28 @@ export function analysisWindows(rec) {
 }
 
 /**
- * The file's exclusion windows that apply to one ROI (an exclusion with `rois` null applies
- * to every ROI). These are the stretches whose FLUORESCENCE cannot be trusted, so they are
- * bridged out of the raw trace before any baseline is computed (Tony, 2026-11-16: "The
- * blanking exists because of serious issues in the calcium signal in those regions").
+ * The stretches the PRODUCER bridged for one ROI (contract v2, `cleaning`, method
+ * `linear-bridge`; `rois` null = every ROI). The traces arrive already cleaned: this page
+ * never bridges or drops anything (interface2 ADR-0031; Tony, 2026-11-17). Bridged frames are
+ * a straight line, not data, so they are left out of the kernel fit, by exact frame.
  * @param {import('./recording.js').LabRecording} rec
  * @param {number} roiIndex 0-based
  */
-export function exclusionSpans(rec, roiIndex) {
-  return rec.exclusions
+export function bridgedSpans(rec, roiIndex) {
+  return rec.bridged
     .filter((e) => e.rois == null || e.rois.has(roiIndex))
-    .map((e) => ({ startS: e.startS, endS: e.endS, why: e.reason || 'excluded' }));
+    .map((e) => ({ startS: e.startS, endS: e.endS, firstFrame: e.firstFrame, lastFrame: e.lastFrame, why: e.reason || 'bridged by the producer' }));
 }
 
 /**
- * Stretches left out of kernel recovery for one ROI: its exclusion windows, and the
- * stretches the loose-patch recording was not running (`spikes.gaps`). A silence in a gap is
- * not a silence, so both the trace and the spikes are removed there. Gaps are NOT bridged
- * before F0: the fluorescence in a gap is sound, only the spike train is missing.
+ * Stretches left out of kernel recovery for one ROI: the producer's bridged stretches, and
+ * the stretches the loose-patch recording was not running (`spikes.gaps`). A silence in a
+ * gap is not a silence, so both the trace and the spikes are removed there.
  * @param {import('./recording.js').LabRecording} rec
  * @param {number} roiIndex 0-based
  */
 export function maskedSpans(rec, roiIndex) {
-  const out = exclusionSpans(rec, roiIndex);
+  const out = bridgedSpans(rec, roiIndex);
   for (const g of rec.spikes?.gaps ?? []) {
     if (Number.isFinite(g.start_s) && Number.isFinite(g.end_s)) {
       out.push({ startS: g.start_s, endS: g.end_s, why: 'no loose-patch recording' });
@@ -69,6 +68,14 @@ export function maskedSpans(rec, roiIndex) {
 
 function inAny(spans, t) {
   for (const s of spans) if (t >= s.startS && t <= s.endS) return true;
+  return false;
+}
+
+/** Is frame i (0-based, whole recording) inside a span? Bridged spans by exact frame, gaps by time. */
+function frameInAny(spans, i, t) {
+  for (const s of spans) {
+    if (s.firstFrame != null ? i >= s.firstFrame && i <= s.lastFrame : t >= s.startS && t <= s.endS) return true;
+  }
   return false;
 }
 
@@ -114,20 +121,15 @@ function againstTruth(kernel, truth) {
  * @returns {object} { window, times, spikeTimes, masked, variants:[...] }
  */
 export function analyzeVariants(rec, o) {
-  const { roiIndex, startS, endS, lambda = 0.002, pensubK, bridgeExclusions = true } = o;
+  const { roiIndex, startS, endS, lambda = 0.002, pensubK } = o;
   const { i0, i1 } = windowIndices(rec.time, startS, endS);
   if (i1 - i0 < 2 * Math.round(WIN_S / rec.dt) + 2) {
     throw new Error(`window ${startS}-${endS} s holds ${i1 - i0} frames: too short for a +/-${WIN_S} s kernel`);
   }
-  const rawSoma = roiColumn(rec.traces.raw_soma, rec.nFrames, roiIndex);
-  const rawPen = rec.traces.raw_pen ? roiColumn(rec.traces.raw_pen, rec.nFrames, roiIndex) : null;
+  // The traces arrive cleaned by the producer (contract v2); they are used as they are.
+  const soma = roiColumn(rec.traces.raw_soma, rec.nFrames, roiIndex);
+  const pen = rec.traces.raw_pen ? roiColumn(rec.traces.raw_pen, rec.nFrames, roiIndex) : null;
   const fileDff = rec.traces.dff_production ? roiColumn(rec.traces.dff_production, rec.nFrames, roiIndex) : null;
-
-  // Exclusions come out of the raw traces BEFORE F0 and the percentile baseline see them.
-  // `bridgeExclusions: false` reproduces the page before 2026-11-16, for comparison only.
-  const ex = bridgeExclusions ? exclusionSpans(rec, roiIndex) : [];
-  const soma = ex.length ? bridgeSpans(rawSoma, rec.time, ex).x : rawSoma;
-  const pen = rawPen && ex.length ? bridgeSpans(rawPen, rec.time, ex).x : rawPen;
 
   const variants = buildVariants({ soma, pen, dt: rec.dt, i0, i1, pensubK, fileDff });
 
@@ -148,7 +150,7 @@ export function analyzeVariants(rec, o) {
   const maskIdx = [];
   if (spans.length) {
     for (let i = 0; i < times.length; i++) {
-      if (inAny(spans, times[i])) {
+      if (frameInAny(spans, i0 + i, times[i])) {
         maskIdx.push(i);
         nMasked++;
       }

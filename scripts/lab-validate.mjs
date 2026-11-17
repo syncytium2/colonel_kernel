@@ -9,7 +9,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { parseLabRecording, roiColumn } from '../src/lib/lab/recording.js';
-import { f0RunningMin, dFoverF0, bridgeSpans } from '../src/lib/lab/extraction.js';
+import { f0RunningMin, dFoverF0 } from '../src/lib/lab/extraction.js';
 
 const args = process.argv.slice(2);
 const files = [];
@@ -41,24 +41,44 @@ for (const f of files) {
     }
     console.log(`     regions: ${r.regions.map((g) => `${g.name} ${g.startS}-${g.endS}`).join('; ') || 'none'}`);
 
-    console.log(`     exclusions: ${r.exclusions.map((e) => `${e.startS}-${e.endS} s${e.rois ? ` (ROIs ${[...e.rois].map((i) => i + 1).join(',')})` : ''}`).join('; ') || 'none'}`);
+    // The producer's cleaning manifest (contract v2). Printed in full: a person confirms it.
+    const roiNames = (s) => (s ? [...s].map((i) => r.rois[i].label).join(',') : 'ALL');
+    console.log(`     cleaning: ${r.bridged.length} bridged stretch(es), ${r.dropped.length} roi-dropped entr(ies)`);
+    for (const b of r.bridged) {
+      console.log(`       bridged ${b.startS}-${b.endS} s, frames ${b.firstFrame + 1}-${b.lastFrame + 1}, ROIs ${roiNames(b.rois)}: ${b.reason}${b.rule ? ` [${b.rule}]` : ''}${b.calledBy ? ` (${b.calledBy})` : ''}`);
+    }
+    for (const d of r.dropped) console.log(`       dropped ${d.labels.join(', ')}: ${d.reason}${d.calledBy ? ` (${d.calledBy})` : ''}`);
 
-    // Where the producer shipped its own dF/F0, say how far this reader's recomputation is
-    // from it, on EVERY ROI (Tony, 2026-11-16: "all rois should be tested"). Reported, not
-    // judged: a difference is information.
-    //
-    // Parity bridges exactly the frames production bridged (the archive's blankfix frames,
-    // `provenance.archive_notes.blank_frames`, 1-based) and nothing else: the stored dF/F0
-    // was computed before the reviewer's blank windows existed, so bridging those too would
-    // manufacture a difference. The lab page itself bridges every exclusion window.
+    // Check, do not repair: every bridged frame of every trace it applies to should lie on the
+    // straight line between its neighbours. Reported per stretch; nothing is changed.
+    const offLine = [];
+    for (const b of r.bridged) {
+      const cols = b.rois ? [...b.rois] : r.rois.map((_, i) => i);
+      for (const name of ['raw_soma', 'raw_pen']) {
+        if (!r.traces[name]) continue;
+        let worst = 0;
+        for (const k of cols) {
+          const x = roiColumn(r.traces[name], r.nFrames, k);
+          const a = b.firstFrame - 1;
+          const c = b.lastFrame + 1;
+          for (let i = b.firstFrame; i <= b.lastFrame; i++) {
+            const want = a < 0 ? x[c] : c >= r.nFrames ? x[a] : x[a] + ((x[c] - x[a]) * (i - a)) / (c - a);
+            worst = Math.max(worst, Math.abs(x[i] - want) / Math.max(1, Math.abs(want)));
+          }
+        }
+        if (worst > 1e-5) offLine.push(`${name} ${b.startS}-${b.endS} s: largest relative departure ${worst.toExponential(2)}`);
+      }
+    }
+    console.log(`     bridged frames on a straight line: ${offLine.length ? `NO, ${offLine.length} case(s)` : 'yes, every stretch'}`);
+    for (const m of offLine) console.log(`       ${m}`);
+
+    // Where the producer shipped its dF/F0 (v2: recomputed from the cleaned raw), say how far
+    // this reader's recomputation is from it, on EVERY ROI (Tony, 2026-11-16: "all rois should
+    // be tested"). No bridging on this side. Reported, not judged: a difference is information.
     if (r.traces.dff_production) {
-      const blank = r.provenance?.archive_notes?.blank_frames ?? [];
-      const blankSpans = blank.map((f) => ({ startS: r.time[f - 1], endS: r.time[f - 1] }));
-      const bridgeNote = blank.length ? `, archive blank frames ${blank[0]}-${blank[blank.length - 1]} bridged as production did` : '';
       const rows = [];
       for (let k = 0; k < r.nRoi; k++) {
-        const raw = roiColumn(r.traces.raw_soma, r.nFrames, k);
-        const soma = blankSpans.length ? bridgeSpans(raw, r.time, blankSpans).x : raw;
+        const soma = roiColumn(r.traces.raw_soma, r.nFrames, k);
         const mine = dFoverF0(soma, f0RunningMin(soma, r.dt));
         const theirs = roiColumn(r.traces.dff_production, r.nFrames, k);
         let worst = 0;
@@ -75,7 +95,7 @@ for (const f of files) {
         rows.push({ k, nBig, worst, worstAt });
       }
       const bad = rows.filter((x) => x.nBig > 0);
-      console.log(`     dF/F0 recomputed from raw_soma vs dff_production, all ${r.nRoi} ROIs${bridgeNote}:`);
+      console.log(`     dF/F0 recomputed from raw_soma vs dff_production, all ${r.nRoi} ROIs:`);
       console.log(`       ${r.nRoi - bad.length} of ${r.nRoi} ROIs agree to 1e-5 on every sample; largest difference anywhere ${Math.max(...rows.map((x) => x.worst)).toExponential(2)}`);
       for (const x of bad) {
         console.log(`       ROI ${x.k + 1}: ${x.nBig} of ${r.nFrames} samples differ by more than 1e-5, largest ${x.worst.toExponential(3)} at ${r.time[x.worstAt].toFixed(2)} s`);

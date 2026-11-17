@@ -8,7 +8,7 @@
 // Works in the browser and in Node (both have atob/btoa and crypto.subtle).
 
 export const LAB_FORMAT = 'colonel-lab-recording';
-export const LAB_VERSION = 1;
+export const LAB_VERSION = 2;
 
 const DTYPES = {
   float32: { bytes: 4, make: (buf) => new Float32Array(buf) },
@@ -92,8 +92,10 @@ export async function encodeArray(typed, shape) {
  * @property {(Float64Array|null)} spikeTimes seconds on the imaging clock; null = no spike file
  * @property {object} spikes the file's `spikes` object without the array (provenance)
  * @property {{name:string, startS:number, endS:number}[]} regions
- * @property {{startS:number, endS:number, reason:string, rois:(Set<number>|null), rule:string, calledBy:string}[]} exclusions
- *   `rois` null = every ROI; otherwise the 0-based ROI indices the window applies to
+ * @property {{startS:number, endS:number, firstFrame:number, lastFrame:number, reason:string, rois:(Set<number>|null), rule:string, calledBy:string}[]} bridged
+ *   the producer's `linear-bridge` cleaning entries: frames that are not data. `firstFrame` and
+ *   `lastFrame` are 0-based and inclusive; `rois` null = every ROI, else 0-based column indices
+ * @property {{labels:string[], reason:string, rule:string, calledBy:string}[]} dropped the producer's `roi-dropped` entries
  * @property {object} production the producer's stated F0 and penumbra parameters
  * @property {(object|null)} truth simulation only: the planted kernel
  * @property {object} provenance
@@ -133,6 +135,11 @@ export async function parseLabRecording(input) {
 
   if (!Array.isArray(j.rois) || j.rois.length !== nRoi) throw new Error(`rois: need ${nRoi} entries`);
   const rois = j.rois.map((r, i) => ({ label: String(r?.label ?? `roi${i + 1}`) }));
+  const labelIndex = new Map();
+  rois.forEach((r, i) => {
+    if (labelIndex.has(r.label)) throw new Error(`rois: label '${r.label}' appears twice`);
+    labelIndex.set(r.label, i);
+  });
 
   let targetIndex = null;
   if (j.target_roi != null) {
@@ -197,18 +204,48 @@ export async function parseLabRecording(input) {
       throw new Error(`regions '${regions[i - 1].name}' and '${regions[i].name}' overlap`);
     }
   }
-  // `rois` is "ALL" (or absent) for every ROI, or a list of 1-based ROI numbers. Kept as
-  // null (every ROI) or a Set of 0-based indices; anything else is refused.
-  const exclusions = span(j.exclusions, 'exclusions', (r) => {
-    let rois = null;
-    if (r.rois != null && r.rois !== 'ALL') {
-      const list = Array.isArray(r.rois) ? r.rois : [r.rois];
-      if (!list.every((v) => Number.isInteger(v) && v >= 1 && v <= nRoi)) {
-        throw new Error(`exclusions: rois must be "ALL" or ROI numbers 1..${nRoi}, got ${JSON.stringify(r.rois)}`);
+  // Version 2: the producer has cleaned the traces, and `cleaning` is its manifest. The reader
+  // never cleans. It reads the `linear-bridge` entries only to know which frames are not data.
+  if (j.exclusions !== undefined) {
+    throw new Error('exclusions is a version-1 field: a version-2 file is cleaned by its producer and lists what it did in `cleaning`');
+  }
+  if (!Array.isArray(j.cleaning)) throw new Error('cleaning missing: a version-2 file lists what its producer cleaned, [] when nothing');
+  const bridged = [];
+  const dropped = [];
+  j.cleaning.forEach((c, i) => {
+    const where = `cleaning[${i}]`;
+    const meta = { reason: String(c.reason ?? ''), rule: String(c.rule ?? ''), calledBy: String(c.called_by ?? '') };
+    const list = c.rois == null ? null : Array.isArray(c.rois) ? c.rois.map(String) : [String(c.rois)];
+    if (c.method === 'roi-dropped') {
+      if (!list || !list.length || list.includes('ALL')) throw new Error(`${where}: roi-dropped must name the dropped ROIs by label`);
+      for (const l of list) if (labelIndex.has(l)) throw new Error(`${where}: '${l}' is listed as dropped but is in the file`);
+      dropped.push({ labels: list, ...meta });
+    } else if (c.method === 'linear-bridge') {
+      if (!(Number.isFinite(c.start_s) && Number.isFinite(c.end_s) && c.end_s >= c.start_s)) {
+        throw new Error(`${where}: start_s and end_s must be finite, end not before start`);
       }
-      rois = new Set(list.map((v) => v - 1));
+      const f0 = c.first_frame;
+      const f1 = c.last_frame;
+      if (!(Number.isInteger(f0) && Number.isInteger(f1) && f0 >= 1 && f1 >= f0 && f1 <= nFrames)) {
+        throw new Error(`${where}: first_frame and last_frame must be 1-based frames with first <= last <= ${nFrames}`);
+      }
+      // The frames must be the ones the seconds name, to within one frame.
+      const tol = j.dt_nominal_s;
+      if (time.data[f0 - 1] < c.start_s - tol || time.data[f1 - 1] > c.end_s + tol) {
+        throw new Error(`${where}: frames ${f0}-${f1} (${time.data[f0 - 1]} to ${time.data[f1 - 1]} s) are not inside ${c.start_s}-${c.end_s} s`);
+      }
+      let rs = null;
+      if (list && !(list.length === 1 && list[0] === 'ALL')) {
+        rs = new Set();
+        for (const l of list) {
+          if (!labelIndex.has(l)) throw new Error(`${where}: rois names '${l}', which the file does not have`);
+          rs.add(labelIndex.get(l));
+        }
+      }
+      bridged.push({ startS: c.start_s, endS: c.end_s, firstFrame: f0 - 1, lastFrame: f1 - 1, rois: rs, ...meta });
+    } else {
+      throw new Error(`${where}: method '${c.method}' is not linear-bridge or roi-dropped`);
     }
-    return { reason: String(r.reason ?? ''), rois, rule: String(r.rule ?? ''), calledBy: String(r.called_by ?? '') };
   });
 
   let truth = null;
@@ -232,7 +269,8 @@ export async function parseLabRecording(input) {
     spikeTimes,
     spikes,
     regions,
-    exclusions,
+    bridged,
+    dropped,
     production: j.production ?? {},
     truth,
     provenance: j.provenance ?? {},
