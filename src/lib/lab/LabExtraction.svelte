@@ -12,28 +12,13 @@
   import { parseLabRecording, roiColumn } from './recording.js';
   import { analyzeVariants, analysisWindows } from './compare.js';
   import { PENSUB_K } from './extraction.js';
+  import { VARIANT_COLORS_LIGHT, VARIANT_COLORS_DARK, METHODS } from './colors.js';
   import { VERDICTS, VERDICT_FILE, parseVerdicts, currentVerdict, verdictKey, isStale } from './verdicts.js';
 
-  // One hue per variant (Okabe-Ito), fixed, so a variant keeps its colour on every panel.
-  // The app follows the system colour scheme (app.css), and uPlot draws to a canvas, so the
-  // series colours cannot come from CSS alone: the dark set is the same hues, lifted to read
-  // against the dark surface. Plots are keyed on the scheme so a switch redraws them.
-  const LIGHT = {
-    frozen: '#0072B2',
-    dff: '#D55E00',
-    'frozen-pensub': '#56B4E9',
-    'dff-pensub': '#E69F00',
-    'dff-prct': '#CC79A7',
-    'file-dff': '#009E73',
-  };
-  const DARK = {
-    frozen: '#3D8FD6',
-    dff: '#F0843C',
-    'frozen-pensub': '#9BDCFF',
-    'dff-pensub': '#F2B63A',
-    'dff-prct': '#E39BC4',
-    'file-dff': '#2CC59A',
-  };
+  // One hue per variant (colors.js), shared with the review page. Plots are keyed on the
+  // scheme so a switch redraws them.
+  const LIGHT = VARIANT_COLORS_LIGHT;
+  const DARK = VARIANT_COLORS_DARK;
   const scheme = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   let dark = $state(!!scheme?.matches);
   $effect(() => {
@@ -47,11 +32,6 @@
   const TRUTH_COLOR = 'var(--series-truth)';
   const SOMA_COLOR = 'var(--text-h)';
   const PEN_COLOR = 'var(--text)';
-  const METHODS = [
-    { id: 'fv', label: 'free-vector (method 1)' },
-    { id: 'shaped', label: 'shaped, with drift term (method 3)' },
-    { id: 'pm', label: 'parametric (method 2)' },
-  ];
 
   let files = $state([]);
   let dirLabel = $state('');

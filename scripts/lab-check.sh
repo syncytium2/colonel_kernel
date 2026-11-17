@@ -22,7 +22,8 @@ FOUND=0
 # name and a string only its extraction module carries.
 for marker in 'LabPicker' '__lab/recordings' '__lab/file' 'lab-recordings-on-serve' \
               'LabExtraction' '__lab/raw-recordings' '__lab/raw-file' 'colonel-lab-recording' \
-              'F0 held constant' '__lab/raw-verdicts' 'kernel_review.tsv'; do
+              'F0 held constant' '__lab/raw-verdicts' 'kernel_review.tsv' \
+              'LabReview' 'every recording, one scale'; do
   if grep -rqF "$marker" dist/; then
     echo "  LEAKED: '$marker' is present in dist/" >&2
     grep -rlF "$marker" dist/ | sed 's/^/    /' >&2
@@ -37,6 +38,10 @@ if compgen -G 'dist/assets/*LabPicker*' >/dev/null; then
 fi
 if compgen -G 'dist/assets/*LabExtraction*' >/dev/null; then
   echo "  LEAKED: a LabExtraction chunk was emitted" >&2
+  FOUND=1
+fi
+if compgen -G 'dist/assets/*LabReview*' >/dev/null; then
+  echo "  LEAKED: a LabReview chunk was emitted" >&2
   FOUND=1
 fi
 

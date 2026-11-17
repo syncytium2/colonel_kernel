@@ -27,10 +27,12 @@
   // users. Direct/screenshot links still work: #tab1 / #tab2 / #tab3 (and #tab0/#help)
   // pick their tab explicitly.
   const LAB_TAB = 9;
+  const LAB_REVIEW_TAB = 10;
   function initialTab() {
     if (typeof location === 'undefined') return 0;
     const h = location.hash.replace('#', '');
     if (h === 'lab' && import.meta.env.DEV) return LAB_TAB;
+    if (h === 'lab-review' && import.meta.env.DEV) return LAB_REVIEW_TAB;
     if (h === 'tab3') return 3;
     if (h === 'tab2') return 2;
     if (h === 'tab1') return 1;
@@ -45,6 +47,9 @@
   // build, so no chunk is emitted and `npm run lab-check` proves it. Never import it statically.
   let LabExtraction = $state(null);
   if (import.meta.env.DEV) import('./lib/lab/LabExtraction.svelte').then((m) => (LabExtraction = m.default));
+  // The review page (every recording, one scale): the same arrangement, the same rule.
+  let LabReview = $state(null);
+  if (import.meta.env.DEV) import('./lib/lab/LabReview.svelte').then((m) => (LabReview = m.default));
 
   // --- controls (FOUNDATIONS §11) ---
   // Surfaced by default: place spikes, shape the kernel, see the output.
@@ -308,6 +313,9 @@
     {#if LabExtraction}
       <button class="labbtn" class:active={tab === LAB_TAB} onclick={() => (tab = LAB_TAB)} title="Lab only, dev server only: kernels from raw fluorescence">LAB · Extraction</button>
     {/if}
+    {#if LabReview}
+      <button class="labbtn" class:active={tab === LAB_REVIEW_TAB} onclick={() => (tab = LAB_REVIEW_TAB)} title="Lab only, dev server only: every recording's kernel and STA on one scale">LAB · Review</button>
+    {/if}
     <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
     <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
       {wide ? '▥ Fit width' : '▤ Full width'}
@@ -319,7 +327,7 @@
        (`calcium = spikes ⊗ kernel`) is assumed by all three of them, so the means of
        breaking it should not have to be hunted for on any of them. Hidden on Tab 0, whose
        premise figure is a composed argument rather than a signal this governs. -->
-  {#if tab !== 0 && tab !== LAB_TAB}
+  {#if tab !== 0 && tab !== LAB_TAB && tab !== LAB_REVIEW_TAB}
     <ApIndependentBar bind:mix={apIndepMix} {tab} />
   {/if}
 
@@ -327,6 +335,8 @@
     <Help onNavigate={navFromHelp} />
   {:else if tab === LAB_TAB}
     {#if LabExtraction}<LabExtraction />{/if}
+  {:else if tab === LAB_REVIEW_TAB}
+    {#if LabReview}<LabReview />{/if}
   {:else if tab === 2}
     {#if challenge2}
       <BeatTheColonel {wide} {apIndepMix} />
