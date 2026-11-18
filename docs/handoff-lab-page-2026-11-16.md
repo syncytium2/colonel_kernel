@@ -87,6 +87,28 @@ male files are unreadable until interface2 rewrites them**; the DI files (418, 4
 come in the same form. Baseline results on the version-1 male files (0-1200 s, 0-1620 s on 458)
 were sent to Tony on 2026-11-17 before the change.
 
+## PAUSED 2026-11-18 for a reboot of 065: where to resume
+
+- **Files:** all eight v2 files (DI 418, 423, 427, 431; male 439, 452, 455, 458) are in
+  `rawF_kernel_test` and read under `npm run lab-validate` (8 of 8). interface2's v2 exporter
+  is on its branch `kernel-di-export-handoff`, not yet on its `main`.
+- **Baseline run done** (target ROI 1, baseline region, all variants and methods) and sent to
+  Tony on 2026-11-17 as observations. The male numbers equal the version-1 run. The scratch
+  script and TSVs were in the session scratchpad and may not survive the reboot; they are
+  reproducible from the files with `analyzeVariants`.
+- **New: LAB · Review** (`#lab-review`, `src/lib/lab/LabReview.svelte`, 1411c94). Every
+  recording on one page, a kernel column and an STA column, one lag axis and one amplitude
+  axis (automatic or typed; a row crossing a typed range says "clipped"). Tony has not yet
+  reviewed it.
+- **Next, after Tony's review:** the timing question. The kernel rises before the spike on
+  458, and the STA peaks before the spike on 423, 431 and 452. Compare timing landmarks
+  (10 % and 50 % crossings, peak lag) across recordings and ROIs.
+- **Still open:** ADR-0054 acceptance; `/murderboard` on ADR-0053 and the contract (v2);
+  whether to PR `lab-exclusions` into `claude/kernel-viewer-fluorescence-a68sg6`; raw region
+  markers vs ADR-0035 protocol windows.
+- **Restart the page:** `$env:CK_LAB_RAW_DIR = "<Dropbox data root>\rawF_kernel_test"; npm run lab-dev`
+  from this worktree.
+
 ## What was in flight when this was first written
 
 The session "065 interface2 cerebro" was asked to write the exporter. It did; see the
