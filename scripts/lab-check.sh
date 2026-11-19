@@ -20,9 +20,14 @@ cd "$(dirname "$0")/.."
 FOUND=0
 # ADR-0053 adds the raw-fluorescence lab page: its component, its endpoints, its file format
 # name and a string only its extraction module carries.
+# ADR-0054 adds the review page's engine, jsMLspike (private, licence unsettled): strings only
+# jsMLspike's code carries that survive minification (its result format, refusal and R1 codes, its F0
+# method name), the serve-only plugin's name, and the repository name from the engine pin.
 for marker in 'LabPicker' '__lab/recordings' '__lab/file' 'lab-recordings-on-serve' \
               'LabExtraction' '__lab/raw-recordings' '__lab/raw-file' 'colonel-lab-recording' \
-              'F0 held constant' '__lab/raw-verdicts' 'kernel_review.tsv'; do
+              'F0 held constant' '__lab/raw-verdicts' 'kernel_review.tsv' \
+              'jsmlspike-result/1' 'DRIVER.F0_LOW' 'DRIVER.MASK_NOT_SUPPORTED' 'R1.T0_UNREVIEWED' \
+              'prctile10-unmasked' 'review-engine-on-serve' 'syncytium2/jsMLspike'; do
   if grep -rqF "$marker" dist/; then
     echo "  LEAKED: '$marker' is present in dist/" >&2
     grep -rlF "$marker" dist/ | sed 's/^/    /' >&2
@@ -37,6 +42,11 @@ if compgen -G 'dist/assets/*LabPicker*' >/dev/null; then
 fi
 if compgen -G 'dist/assets/*LabExtraction*' >/dev/null; then
   echo "  LEAKED: a LabExtraction chunk was emitted" >&2
+  FOUND=1
+fi
+if compgen -G 'dist/assets/*[Rr]eview[Pp]age*' >/dev/null || compgen -G 'dist/assets/*jsmlspike*' >/dev/null \
+   || compgen -G 'dist/assets/*worker*' >/dev/null; then
+  echo "  LEAKED: a review-page, jsMLspike or worker chunk was emitted (ADR-0054)" >&2
   FOUND=1
 fi
 

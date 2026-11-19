@@ -11,6 +11,7 @@
     "deploy": "bash scripts/deploy.sh",
     "test:core": "node src/lib/core/core.test.mjs",
     "lab-check": "bash scripts/lab-check.sh",
+    "review-engine-check": "node scripts/review-engine-check.mjs",
     "test:lab": "node src/lib/lab/lab.test.mjs",
     "lab-fixture": "node scripts/lab-fixture.mjs",
     "lab-validate": "node scripts/lab-validate.mjs",

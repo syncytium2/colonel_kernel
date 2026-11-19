@@ -151,6 +151,13 @@ interrogate.** Keeping inference in a separate app keeps each tool honest about 
 This is the canonical answer to *"why isn't OASIS / MLspike / CASCADE a button in this tool"* — it
 is **not an omission, it is the boundary.**
 
+> **Amended 2026-11-19 ([ADR-0054](docs/adr/0054-lab-only-review-page-hosts-jsmlspike.md), Tony:
+> *"yes for now"*).** The boundary above holds for the **public app**. A **lab-only page** (dev
+> server only, gated like `#lab`, ADR-0048 and ADR-0053) now hosts dedicated inference: jsMLspike,
+> the lab's JavaScript port of MLspike, imported as a package, for the lab's own human review of
+> inferred events. No jsMLspike code ships in the public artifact or is committed here until its
+> licence is settled with MLspike's author; any public use needs a new ADR.
+
 **Relation to the parametric foil ([ADR-0021](docs/adr/0021-kernel-recovery-three-parallel-methods.md),
 method 2).** The double-exponential parametric fit in ADR-0021 is **not spike inference** and **not
 a deconvolution** — it is a deliberately minimal **linear reference shape (a "foil")** that the

@@ -183,6 +183,41 @@ function labRecordingsOnServe() {
   }
 }
 
+// ADR-0054: the review page's engine, jsMLspike, on the DEV SERVER ONLY. jsMLspike is private and
+// its licence is not settled, so it is not a package.json dependency (that would make `npm ci` fail
+// for anyone without access, including CI) and nothing of it is committed here. Instead the dev
+// server resolves `jsmlspike` and its subpaths to a local checkout named by CK_JSMLSPIKE_DIR, which
+// must be at the commit pinned in src/lib/review/engine-pin.json (CK_JSMLSPIKE_ALLOW_UNPINNED=1
+// overrides, loudly). `apply: 'serve'`: a build never sees it, and lab-check proves nothing of
+// jsMLspike reaches dist/. Without CK_JSMLSPIKE_DIR the dev server runs as before.
+function reviewEngineOnServe() {
+  return {
+    name: 'review-engine-on-serve',
+    apply: 'serve',
+    config() {
+      const dir = process.env.CK_JSMLSPIKE_DIR
+      if (!dir) return
+      const here = path.dirname(fileURLToPath(import.meta.url))
+      const root = path.resolve(dir)
+      const pin = JSON.parse(readFileSync(path.join(here, 'src/lib/review/engine-pin.json'), 'utf8'))
+      let head = null
+      try { head = execSync('git rev-parse HEAD', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch {}
+      if (head !== pin.commit) {
+        const msg = `CK_JSMLSPIKE_DIR (${root}) is at ${head ?? 'no git commit'}, not the pinned ${pin.commit} (src/lib/review/engine-pin.json)`
+        if (process.env.CK_JSMLSPIKE_ALLOW_UNPINNED !== '1') throw new Error(`${msg}. Check out the pin, or set CK_JSMLSPIKE_ALLOW_UNPINNED=1.`)
+        console.warn(`\n  !! ${msg}. Running UNPINNED because CK_JSMLSPIKE_ALLOW_UNPINNED=1.\n`)
+      }
+      const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
+      const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const alias = Object.entries(pkg.exports ?? {}).map(([sub, file]) => ({
+        find: new RegExp(`^jsmlspike${sub === '.' ? '' : esc(sub.slice(1))}$`),
+        replacement: path.join(root, file),
+      }))
+      return { resolve: { alias }, server: { fs: { allow: [here, root] } } }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   // Pin the dev port. The `k2` bookmark/agent (scripts/k2-agent.sh) hard-codes 5173, and
@@ -191,7 +226,7 @@ export default defineConfig({
   // second `npm run dev` into a loud "port in use" instead of a second server nobody
   // asked for on a port nobody bookmarked.
   server: { port: 5173, strictPort: true },
-  plugins: [svelte(), injectCspOnBuild(), assertFullHistoryOnBuild(), labRecordingsOnServe()],
+  plugins: [svelte(), injectCspOnBuild(), assertFullHistoryOnBuild(), labRecordingsOnServe(), reviewEngineOnServe()],
   define: {
     __BUILD_BORN__: JSON.stringify(BUILD_BORN),
     __BUILD_UPDATED__: JSON.stringify(BUILD_UPDATED),
