@@ -27,7 +27,8 @@ for marker in 'LabPicker' '__lab/recordings' '__lab/file' 'lab-recordings-on-ser
               'LabExtraction' '__lab/raw-recordings' '__lab/raw-file' 'colonel-lab-recording' \
               'F0 held constant' '__lab/raw-verdicts' 'kernel_review.tsv' \
               'jsmlspike-result/1' 'DRIVER.F0_LOW' 'DRIVER.MASK_NOT_SUPPORTED' 'R1.T0_UNREVIEWED' \
-              'prctile10-unmasked' 'review-engine-on-serve' 'syncytium2/jsMLspike'; do
+              'prctile10-unmasked' 'review-engine-on-serve' 'syncytium2/jsMLspike' \
+              'ReviewPage' '__review/' 'jsmlspike_review.jsonl' 'review-page/0.1.0' 'jsmlspike-review/1'; do
   if grep -rqF "$marker" dist/; then
     echo "  LEAKED: '$marker' is present in dist/" >&2
     grep -rlF "$marker" dist/ | sed 's/^/    /' >&2

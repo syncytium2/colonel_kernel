@@ -5,6 +5,8 @@ import { appendFileSync, existsSync, readdirSync, readFileSync, statSync, writeF
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { VERDICT_FILE, VERDICT_HEADER, verdictLine } from './src/lib/lab/verdicts.js'
+import { indexEntry } from './src/lib/review/model.js'
+const REVIEW_LOG = 'jsmlspike_review.jsonl'
 
 // Build-time git dates for the Tab 0 "born on / last updated" line. Baked in at
 // build (NOT fetched at runtime) — the strict CSP (connect-src 'none', §6) forbids
@@ -214,6 +216,77 @@ function reviewEngineOnServe() {
         replacement: path.join(root, file),
       }))
       return { resolve: { alias }, server: { fs: { allow: [here, root] } } }
+    },
+    // The review page's data (jsMLspike ADR 3ca2). The results folder is CK_REVIEW_DIR, else the
+    // gitignored exports/review/. Endpoints: an index of every result (what the queue needs, built from
+    // the result JSONs), each result file by basename out of the listing (never a joined path), the
+    // optional blind-key file, and the decision log: the SECOND write path of lab mode, allowed by Tony
+    // (ADR 3ca2 decision 6). It appends one JSON line to jsmlspike_review.jsonl, never changes a line,
+    // and replies with the file as read back.
+    configureServer(server) {
+      const here = path.dirname(fileURLToPath(import.meta.url))
+      const dir = process.env.CK_REVIEW_DIR ? path.resolve(process.env.CK_REVIEW_DIR) : path.join(here, 'exports', 'review')
+      const keyPath = process.env.CK_REVIEW_KEY ? path.resolve(process.env.CK_REVIEW_KEY) : path.join(dir, 'review_key.json')
+      const logPath = path.join(dir, REVIEW_LOG)
+      const cache = new Map()
+      const files = () => { try { return readdirSync(dir) } catch { return null } }
+      const send = (res, code, type, body) => { res.statusCode = code; res.setHeader('Content-Type', type); res.end(body) }
+
+      server.middlewares.use('/__review/index', (_req, res) => {
+        const all = files()
+        if (all === null) return send(res, 200, 'application/json', JSON.stringify({ dir: dir, missing: true, entries: [], key: false }))
+        const entries = [], problems = []
+        for (const f of all.filter((n) => n.endsWith('.json') && n !== path.basename(keyPath)).sort()) {
+          const full = path.join(dir, f), m = statSync(full).mtimeMs
+          let hit = cache.get(f)
+          if (!hit || hit.m !== m) {
+            try {
+              const rec = JSON.parse(readFileSync(full, 'utf8'))
+              hit = { m, entry: rec.format === 'jsmlspike-result/1' ? indexEntry(f.replace(/\.json$/, ''), rec) : null }
+            } catch (e) { hit = { m, entry: null, problem: `${f}: ${e.message}` } }
+            cache.set(f, hit)
+          }
+          if (hit.entry) entries.push(hit.entry)
+          if (hit.problem) problems.push(hit.problem)
+        }
+        send(res, 200, 'application/json', JSON.stringify({ dir: process.env.CK_REVIEW_DIR ? 'CK_REVIEW_DIR' : 'exports/review', missing: false, entries, problems, key: existsSync(keyPath) }))
+      })
+
+      server.middlewares.use('/__review/file', (req, res) => {
+        const name = path.basename(new URL(req.url, 'http://review').searchParams.get('name') || '')
+        if (!/\.(json|bin)$/.test(name) || !(files() ?? []).includes(name)) return send(res, 404, 'text/plain', 'not a result file here')
+        const full = path.join(dir, name)
+        res.setHeader('Content-Length', statSync(full).size)
+        send(res, 200, name.endsWith('.json') ? 'application/json' : 'application/octet-stream', readFileSync(full))
+      })
+
+      server.middlewares.use('/__review/key', (_req, res) => {
+        if (!existsSync(keyPath)) return send(res, 404, 'text/plain', 'no key file')
+        send(res, 200, 'application/json', readFileSync(keyPath))
+      })
+
+      server.middlewares.use('/__review/decisions', (req, res) => {
+        const readLog = () => (existsSync(logPath) ? readFileSync(logPath, 'utf8') : '')
+        if (req.method === 'GET') return send(res, 200, 'text/plain; charset=utf-8', readLog())
+        if (req.method !== 'POST') return send(res, 405, 'text/plain', 'GET or POST')
+        let body = ''
+        req.on('data', (c) => { body += c; if (body.length > 200000) req.destroy() })
+        req.on('end', () => {
+          try {
+            if (files() === null) throw new Error('the results folder does not exist')
+            const recs = JSON.parse(body)
+            const lines = (Array.isArray(recs) ? recs : [recs]).map((r) => {
+              if (r?.format !== 'jsmlspike-review/1' || !r.id || !r.kind) throw new Error('not a jsmlspike-review/1 record')
+              return JSON.stringify(r)
+            })
+            const text = lines.join('\n') + '\n'
+            appendFileSync(logPath, text)
+            const after = readLog()
+            if (!after.endsWith(text)) throw new Error('written, but the record did not read back')
+            send(res, 200, 'text/plain; charset=utf-8', after)
+          } catch (e) { send(res, 400, 'text/plain', String(e?.message ?? e)) }
+        })
+      })
     },
   }
 }
