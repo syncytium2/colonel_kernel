@@ -414,9 +414,13 @@
                   {yRange} xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
               {/key}
             {:else}<p class="muted nob">autocalibration did not reach this step, so there is no B for this window</p>{/if}
-            <Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} ys={spikeYs} kind="stems" color="var(--series-spikes, #2f6db5)" height={80} yAxisSize={56} padRight={16} syncKey="review"
-              xLabel="window time (s)" yLabel={tryResult ? 'events (tried)' : 'events'} yRange={[0, Math.max(1, ...spikeYs)]} barSize={[0.6, 3]}
-              xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
+            <!-- no yLabel here: a y-axis title widens this plot's left gutter only, which shifts its time axis against A and B -->
+            <div class="cap">inferred spikes{tryResult ? ' with the tried kernel' : ''} (height = spikes in that frame) · {spikeYs.reduce((s, c) => s + c, 0)} in this window</div>
+            {#key !!tryResult}
+              <Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} ys={spikeYs} kind="stems" color={tryResult ? '#e8590c' : '#2f6db5'} height={140} yAxisSize={56} padRight={16} syncKey="review"
+                xLabel="window time (s)" yRange={[0, Math.max(1, ...spikeYs)]} barSize={[0.6, 3]}
+                xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
+            {/key}
           </div>
           <div class="band pair">
             <div>
