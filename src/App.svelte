@@ -285,10 +285,20 @@
     return { t, v, winSeconds: win * grid.dt };
   });
   const kernelXRange = $derived([-kernelDisplay.winSeconds, kernelDisplay.winSeconds]);
+
+  // Lab pages only: the nav can fold. Never true in a production build (the lab tabs are
+  // unreachable there), so the public app's nav is unchanged.
+  const onLabPage = $derived(import.meta.env.DEV && (tab === LAB_TAB || tab === LAB_REVIEW_TAB));
+  let navFolded = $state(false);
 </script>
 
 <main class="appmain">
   <!-- The way back to the parent site, the same on every tonydefazio.com destination. -->
+  <!-- Lab pages only (dev server only): the nav folds away to give the plots the screen
+       (Tony, 2026-11-20). The public tabs never show the fold and never lose the nav. -->
+  {#if onLabPage && navFolded}
+    <button class="navunfold" onclick={() => (navFolded = false)} title="Show the tabs">▾ tabs</button>
+  {:else}
   <p class="home"><a href="https://tonydefazio.com/">&larr; tonydefazio.com</a></p>
   <nav class="tabs">
     <button class:active={tab === 0} onclick={() => (tab = 0)} title="What this tool is + the mathematical reference">0 · Start here</button>
@@ -320,7 +330,11 @@
     <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
       {wide ? '▥ Fit width' : '▤ Full width'}
     </button>
+    {#if onLabPage}
+      <button class="navfoldbtn" onclick={() => (navFolded = true)} title="Fold the tabs away">▴ hide tabs</button>
+    {/if}
   </nav>
+  {/if}
 
   <!-- The AP-independent dial: app chrome, not a rail control, so it is in the SAME place on
        every tab that carries a signal and never behind a fold. The premise it breaks
@@ -644,6 +658,21 @@
     margin-left: auto; /* push the width toggle to the right edge of the nav */
     font-family: var(--mono) !important;
     font-size: 13px !important;
+  }
+  /* Lab pages only: fold and unfold the nav. */
+  .navfoldbtn {
+    font-family: var(--mono) !important;
+    font-size: 13px !important;
+  }
+  .navunfold {
+    align-self: flex-start;
+    font: 12px var(--mono);
+    color: var(--text-h);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 8px;
+    cursor: pointer;
   }
 
   /* --- rail (tools) --- */

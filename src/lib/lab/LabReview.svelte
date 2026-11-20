@@ -30,6 +30,19 @@
   const COLORS = $derived(dark ? VARIANT_COLORS_DARK : VARIANT_COLORS_LIGHT);
   const VARIANT_IDS = Object.keys(VARIANT_COLORS_LIGHT);
   const LAG_RANGE = [-5, 5];
+  // Short names for the table rows and the legend; the full description is the legend's
+  // second line and its tooltip.
+  const SHORT = {
+    frozen: 'soma, F0 fixed',
+    dff: 'soma dF/F0',
+    'frozen-pensub': 'soma−pen, F0 fixed',
+    'dff-pensub': 'soma−pen dF/F0',
+    'dff-prct': 'soma dF/F0 − p10',
+    'file-dff': 'producer dF/F0',
+  };
+  const T50_HELP = 'lag where the curve last crosses half its peak height (from zero) on the way up to the peak; — when it never falls below half inside the window';
+  let showSettings = $state(true);
+  let showLegend = $state(true);
 
   // Parsed recordings are large; they live outside reactive state.
   const recs = new Map();
@@ -234,8 +247,14 @@
 
 <div class="review">
   <header class="bar">
-    <span class="tag">lab only · dev server only</span>
-    <h2>Review: every recording, one scale</h2>
+    <div class="titlerow">
+      <h2>Kernel review</h2>
+      <button class="fold" class:on={showSettings} onclick={() => (showSettings = !showSettings)}>{showSettings ? '▾' : '▸'} settings</button>
+      <button class="fold" class:on={showLegend} onclick={() => (showLegend = !showLegend)}>{showLegend ? '▾' : '▸'} legend</button>
+      {#if loading || computing}<span class="busy">{loading || computing}…</span>{/if}
+    </div>
+    {#if showSettings}
+    <div class="settings">
     <label>window
       <select bind:value={windowName}>{#each windowNames as n (n)}<option value={n}>{n}</option>{/each}</select>
     </label>
@@ -256,24 +275,22 @@
       </select>
     </label>
     <label class="check"><input type="checkbox" bind:checked={unitPeak} /> unit peak (shape only)</label>
-    <span class="legend">
+    {#if dirLabel}<span class="where">{dirLabel}</span>{/if}
+    </div>
+    {/if}
+    {#if showLegend}
+    <div class="legend">
       {#each VARIANT_IDS as id (id)}
         {@const label = Object.values(results).find((x) => x.result)?.result.variants.find((v) => v.id === id)?.label ?? id}
-        <label class="check">
+        <label class="check" title={label}>
           <input type="checkbox" checked={!hidden[id]} onchange={(e) => (hidden = { ...hidden, [id]: !e.currentTarget.checked })} />
-          <span class="swatch" style:--c={COLORS[id]}></span>{label}
+          <span class="swatch" style:--c={COLORS[id]}></span><b>{SHORT[id] ?? id}</b><span class="full">{label}</span>
         </label>
       {/each}
-    </span>
-    {#if loading || computing}<span class="busy">{loading || computing}…</span>{/if}
-    {#if dirLabel}<span class="where">{dirLabel}</span>{/if}
+    </div>
+    {/if}
   </header>
   {#if listError}<p class="err">{listError}</p>{/if}
-  <p class="note">
-    Every panel shares the lag axis (−5 to 5 s) and one amplitude axis
-    {#if yRange}({fmt(yRange[0], 4)} to {fmt(yRange[1], 4)}{unitPeak ? ', peak = 1' : ' dF/F₀'}){/if},
-    {#if yManual}as typed; rows marked "clipped" have a curve outside it.{:else if scaleRow && bands[scaleFrom]}set by the largest and smallest value drawn in {scaleRow.sliceId}'s row; rows marked "clipped" have a curve outside it.{:else}set by the largest and smallest value drawn anywhere on the page.{/if} The STA is computed to ±2 s. <strong>t50</strong> is the lag at which the curve last crosses half its peak height (from zero) on the way up to that peak, interpolated between samples; "—" when it never falls below half inside the window. Numbers are reported, not judged.
-  </p>
 
   <div class="grid">
     <div class="colhead">Recovered kernel, {METHODS.find((m) => m.id === method).label}</div>
@@ -318,10 +335,13 @@
           {/key}
           </div>
           <table class="mini">
+            <thead>
+              <tr><th></th><th title={T50_HELP}>t50 (s)</th><th title="causal-lobe maximum, lag ≥ 0">peak (dF/F₀)</th><th title="exponential fit to the tail after the peak">τ decay (s)</th><th title="negative-lag energy ÷ causal energy">acausal</th></tr>
+            </thead>
             <tbody>
               {#each shownOf(res) as v (v.id)}
                 {@const m = mOf(v)}
-                <tr><td><span class="swatch" style:--c={COLORS[v.id]}></span></td><td>t50 {fmt(kernelT50(v), 2)} s</td><td>peak {fmt(m.peakAmp, 4)}</td><td>τ {fmt(m.tauDecayS)} s</td><td>acausal {fmt(m.acausalRatio, 2)}</td></tr>
+                <tr><td class="name"><span class="swatch" style:--c={COLORS[v.id]}></span>{SHORT[v.id] ?? v.id}</td><td>{fmt(kernelT50(v), 2)}</td><td>{fmt(m.peakAmp, 4)}</td><td>{fmt(m.tauDecayS)}</td><td>{fmt(m.acausalRatio, 2)}</td></tr>
               {/each}
             </tbody>
           </table>
@@ -336,9 +356,12 @@
           {/key}
           </div>
           <table class="mini">
+            <thead>
+              <tr><th></th><th title={T50_HELP}>t50 (s)</th><th title="maximum over ±2 s">peak (dF/F₀)</th></tr>
+            </thead>
             <tbody>
               {#each shownOf(res) as v (v.id)}
-                <tr><td><span class="swatch" style:--c={COLORS[v.id]}></span></td><td>t50 {fmt(staT50(v), 2)} s</td><td>peak {fmt(v.agreement.staPeakAmp, 4)}</td></tr>
+                <tr><td class="name"><span class="swatch" style:--c={COLORS[v.id]}></span>{SHORT[v.id] ?? v.id}</td><td>{fmt(staT50(v), 2)}</td><td>{fmt(v.agreement.staPeakAmp, 4)}</td></tr>
               {/each}
             </tbody>
           </table>
@@ -352,13 +375,18 @@
 
 <style>
   .review { flex: 1; min-height: 0; overflow: auto; font-size: 14px; color: var(--text-h); display: flex; flex-direction: column; gap: 6px; }
-  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 8px 10px; border: 1px dashed var(--text); border-radius: 8px; position: sticky; top: 0; z-index: 2; background: var(--bg); }
+  .bar { display: flex; flex-direction: column; gap: 6px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; position: sticky; top: 0; z-index: 2; background: var(--bg); }
+  .titlerow { display: flex; align-items: center; gap: 10px; }
+  .settings { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
   .bar label { display: flex; align-items: center; gap: 5px; font-size: 12.5px; }
   .bar select, .bar input[type='number'] { font: inherit; color: var(--text-h); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
   .bar input[type='number'] { width: 70px; }
-  .tag { font: 11px var(--mono); text-transform: uppercase; letter-spacing: 1px; }
-  h2 { margin: 0; font-size: 17px; }
-  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .fold { font: 12.5px inherit; color: var(--text-h); background: transparent; border: 1px solid var(--border); border-radius: 4px; padding: 1px 8px; cursor: pointer; }
+  .fold.on { background: var(--border); }
+  h2 { margin: 0; font-size: 16px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .legend b { font-weight: 600; }
+  .legend .full { color: var(--text); font-size: 11.5px; margin-left: 4px; }
   .check { display: flex; align-items: center; gap: 5px; font-size: 12.5px; }
   .swatch { display: inline-block; flex: none; width: 18px; height: 0; border-top: 3px solid var(--c); vertical-align: middle; }
   .busy { font-style: italic; font-size: 12.5px; }
@@ -380,6 +408,13 @@
   .plotbox { flex: 1 1 auto; min-width: 0; }
   .cell .mini { flex: none; margin-top: 4px; }
   @media (max-width: 1300px) { .cell { flex-direction: column; align-items: stretch; } }
-  .mini { border-collapse: collapse; font-size: 11.5px; }
-  .mini td { padding: 0 8px 0 0; white-space: nowrap; }
+  .mini { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .mini th { font-weight: 600; font-size: 11px; text-align: right; padding: 0 0 2px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: help; }
+  .mini td { text-align: right; padding: 1px 0 1px 12px; line-height: 1.25; white-space: nowrap; }
+  /* One width for both tables, so the kernel plot and the STA plot are the same width. */
+  .cell .mini { width: 350px; }
+  .cell .mini th:first-child { width: 100%; }
+  .mini td.name { text-align: left; padding-left: 0; }
+  .mini td.name .swatch { margin-right: 6px; }
+  .mini tbody tr + tr td { border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
 </style>
