@@ -175,10 +175,15 @@
     const hi = Number(yMaxIn);
     return yMinIn !== '' && yMaxIn !== '' && Number.isFinite(lo) && Number.isFinite(hi) && hi > lo ? [lo, hi] : null;
   });
+  // Or the range can come from ONE chosen recording's curves (Tony, 2026-11-20: "418 has no
+  // kernel relevant to our work. so it should not set the scale"). The reviewer picks the row;
+  // nothing is excluded by rule. Every row is still drawn on that one range.
+  let scaleFrom = $state(''); // '' = every row; otherwise a row's file name
   const yAuto = $derived.by(() => {
     let lo = 0;
     let hi = 0;
-    for (const b of Object.values(bands)) {
+    const from = scaleFrom && bands[scaleFrom] ? [bands[scaleFrom]] : Object.values(bands);
+    for (const b of from) {
       for (const band of [b.kernel, b.sta]) {
         for (const sr of band?.series ?? []) {
           for (const v of sr.ys) {
@@ -194,14 +199,17 @@
     return [lo - pad, hi + pad];
   });
   const yRange = $derived(yManual ?? yAuto);
-  // Where the curves cross a typed range, say so in the row: a clipped curve is not hidden data.
+  // The range is set by something other than every row: typed, or one chosen row.
+  const yRestricted = $derived(!!yManual || (!!scaleFrom && !!bands[scaleFrom]));
+  // Where the curves cross a restricted range, say so in the row: a clipped curve is not hidden data.
   const clippedIn = (b) => {
-    if (!yManual || !b) return false;
+    if (!yRestricted || !yRange || !b) return false;
     for (const band of [b.kernel, b.sta]) {
-      for (const sr of band?.series ?? []) for (const v of sr.ys) if (Number.isFinite(v) && (v < yManual[0] || v > yManual[1])) return true;
+      for (const sr of band?.series ?? []) for (const v of sr.ys) if (Number.isFinite(v) && (v < yRange[0] || v > yRange[1])) return true;
     }
     return false;
   };
+  const scaleRow = $derived(rows.find((r) => r.name === scaleFrom));
   const yKey = $derived(yRange ? `${yRange[0].toPrecision(6)}:${yRange[1].toPrecision(6)}` : 'auto');
 
   const fmt = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
@@ -232,6 +240,12 @@
       <input type="number" step="0.005" placeholder="auto" bind:value={yMinIn} /> to
       <input type="number" step="0.005" placeholder="auto" bind:value={yMaxIn} />
     </label>
+    <label title="With the amplitude boxes blank, the axis is fitted to this recording's curves; every row is drawn on it">scale from
+      <select bind:value={scaleFrom} disabled={!!yManual}>
+        <option value="">every row</option>
+        {#each rows as r (r.name)}<option value={r.name} disabled={!bands[r.name]}>{r.sliceId}</option>{/each}
+      </select>
+    </label>
     <label class="check"><input type="checkbox" bind:checked={unitPeak} /> unit peak (shape only)</label>
     <span class="legend">
       {#each VARIANT_IDS as id (id)}
@@ -249,7 +263,7 @@
   <p class="note">
     Every panel shares the lag axis (−5 to 5 s) and one amplitude axis
     {#if yRange}({fmt(yRange[0], 4)} to {fmt(yRange[1], 4)}{unitPeak ? ', peak = 1' : ' dF/F₀'}){/if},
-    {#if yManual}as typed; rows marked "clipped" have a curve outside it.{:else}set by the largest and smallest value drawn anywhere on the page.{/if} The STA is computed to ±2 s. Numbers are reported, not judged.
+    {#if yManual}as typed; rows marked "clipped" have a curve outside it.{:else if scaleRow && bands[scaleFrom]}set by the largest and smallest value drawn in {scaleRow.sliceId}'s row; rows marked "clipped" have a curve outside it.{:else}set by the largest and smallest value drawn anywhere on the page.{/if} The STA is computed to ±2 s. Numbers are reported, not judged.
   </p>
 
   <div class="grid">
@@ -279,7 +293,7 @@
           <span>{rr.spikeTimes.length} spikes</span>
           {#if rr.masked.nFrames}<span>{rr.masked.nFrames} frames masked</span>{/if}
           {#if a}<span>STA events {a.nAccepted} of {a.nEvents}</span>{/if}
-          {#if clippedIn(b)}<span class="err">clipped by the typed amplitude axis</span>{/if}
+          {#if clippedIn(b)}<span class="err">clipped by the {yManual ? 'typed amplitude axis' : `axis set from ${scaleRow?.sliceId}`}</span>{/if}
           <span class="verdict">verdict: {vd ? `${vd.verdict}${vd.stale ? ' (stale)' : ''}` : 'none'}</span>
           {#if !rr.variants.some((v) => v.analyzable)}<span class="err">{rr.variants[0]?.reason}</span>{/if}
         {:else}
