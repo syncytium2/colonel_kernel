@@ -10,7 +10,7 @@
   import { calibEnergy, AUTOCAL_DEFAULTS } from 'jsmlspike/autocal';
   import {
     PAGE_VERSION, split, burstFlags, flagsOf, orderItems, suggestionsFor, neighbours, preselect, inForce,
-    makeRecord, bulkPlan, progress, mss, wellDetermined, THRESHOLDS, lastReviewer, rangeOf, meanOf,
+    makeRecord, bulkPlan, progress, mss, wellDetermined, THRESHOLDS, lastReviewer, rangeOf, meanOf, kernelCurves,
   } from './model.js';
   import pin from './engine-pin.json';
 
@@ -130,6 +130,15 @@
     return s;
   });
 
+  // Shading on B: the events autocalibration fitted its kernel on (stage 4's kept events), 1 s either side.
+  // Elsewhere B's fit has no event, so its slow drift term bends round any peak it was not given.
+  const keptRegions = $derived.by(() => {
+    if (!loaded) return [];
+    const ff = loaded.record.identity.frame_first ?? 0;
+    return (loaded.record.autocal?.events ?? []).map((e) => xs[e.frame - ff]).filter((x) => Number.isFinite(x))
+      .map((x) => ({ x0: x - 1, x1: x + 1, color: 'rgba(47, 109, 181, 0.16)' }));
+  });
+
   // One y-axis for both trace rows: this window's range, or a range the reviewer fixed (kept across windows)
   let yMode = $state('auto');                  // 'auto' | 'fixed'
   let yLo = $state(''), yHi = $state('');
@@ -139,6 +148,21 @@
   function fixYHere() { if (yAuto) { yLo = yAuto[0].toPrecision(4); yHi = yAuto[1].toPrecision(4); yMode = 'fixed'; } }
   // one x-axis: drag on any row zooms all three, double-click resets; a new window starts unzoomed
   let xZoom = $state(null);
+
+  // ---------------------------------------------------------------- one screen
+  // The page covers the app (its tab bar included) unless the reviewer asks for the tabs back; the tools
+  // column folds to a strip, and its sections fold one by one.
+  let showAppNav = $state(false), railOpen = $state(true);
+  // The kernel panel: every kernel on offer as a single-spike response, on one shared scale. The chosen
+  // one is drawn thick; each keeps its own colour, matching its swatch in the chooser.
+  const KCOLOUR = { own: '#2f6db5', 'neighbour-A': '#2a9d8f', 'neighbour-B': '#7b5ea7', slice: '#b5651d', default: '#888888', 'hand-set': '#c2185b' };
+  const handKernel = $derived.by(() => { const a = Number(handA), t = Number(handTau); return handA !== '' && handTau !== '' && a > 0 && t > 0 ? { source: 'hand-set', a, tau: t } : null; });
+  const kernelPanel = $derived.by(() => {
+    const ks = [...suggestions.filter((s) => s.a != null).map((s) => ({ key: s.source, a: s.a, tau: s.tau })), ...(handKernel ? [{ key: 'hand-set', a: handKernel.a, tau: handKernel.tau }] : [])];
+    const { t, curves } = kernelCurves(ks);
+    return { t, series: curves.map((c) => ({ ys: c.ys, stroke: KCOLOUR[c.key] ?? '#888', width: c.key === selected ? 3.5 : 1.25, ...(c.key === 'default' ? { dash: [5, 4] } : {}) })),
+             sig: curves.map((c) => c.key + (c.key === selected ? '*' : '')).join(',') };
+  });
 
   // ---------------------------------------------------------------- try (the worker)
   let worker = null, reqId = 0;
@@ -303,16 +327,21 @@
   const etaText = $derived(prog.etaMs == null ? '—' : prog.etaMs > 3600e3 ? `${(prog.etaMs / 3600e3).toFixed(1)} h` : `${Math.round(prog.etaMs / 60e3)} min`);
 </script>
 
-<div class="review">
+<div class="review" class:cover={!showAppNav}>
+  {#if !railOpen}
+    <aside class="rail folded">
+      <button class="fold" onclick={() => (railOpen = true)} title="open the tools">▸</button>
+      <span class="vert">tools · {prog.decided}/{prog.total} decided</span>
+    </aside>
+  {:else}
   <aside class="rail">
-    <h2>Review inferred events</h2>
+    <div class="railhead">
+      <h2>Review inferred events</h2>
+      <button class="fold" onclick={() => (railOpen = false)} title="fold the tools away">◂</button>
+    </div>
     <p class="lab">LAB · dev server only · blind</p>
-    {#if missingFolder}
-      <p class="err">No results folder ({folder}). Set CK_REVIEW_DIR to a folder of jsMLspike results.</p>
-    {:else}
-      <p class="muted">{index.length} results · {parts.items.length} to review · {parts.misses.length} screening misses{hasKey ? ' · key file present' : ''}</p>
-    {/if}
-    {#if engineError}<p class="err">{engineError}</p>{:else}<p class="muted">engine jsMLspike {engineVersion ?? '…'} @ {pin.commit.slice(0, 7)}</p>{/if}
+    {#if missingFolder}<p class="err">No results folder ({folder}). Set CK_REVIEW_DIR to a folder of jsMLspike results.</p>{/if}
+    {#if engineError}<p class="err">{engineError}</p>{/if}
     {#each problems as p}<p class="err">{p}</p>{/each}
 
     <div class="views">
@@ -321,34 +350,49 @@
       <button class:on={view === 'log'} onclick={() => (view = 'log')}>Review the review</button>
     </div>
 
-    <label>order
-      <select bind:value={orderMode} onchange={() => (pos = 0)}>
-        <option value="worst-first">worst first</option><option value="priority">priority</option>
-        <option value="datecode">datecode</option><option value="random">random</option>
-      </select>
-    </label>
-    <label>seed <input type="number" bind:value={seed} onchange={() => (pos = 0)} style="width:8em" /></label>
-    <p class="muted small">Nothing is filtered out. Windows of one ROI are shuffled{revealedOrder ? ' (order revealed this session)' : ''}.</p>
-    <label class="chk"><input type="checkbox" bind:checked={excludeLimit} /> slice: exclude range-limit kernels</label>
-    <label class="chk"><input type="checkbox" bind:checked={excludeBurst} /> slice: exclude kernels resting mostly on burst events</label>
-
     <label>reviewer <input type="text" bind:value={reviewer} oninput={() => (reviewerFromLog = false)} placeholder="initials" style="width:6em" /></label>
     {#if reviewerFromLog}
       <p class="muted small">From the last decision saved in this folder. Not you? Type your initials.</p>
     {:else if !reviewer.trim()}
       <p class="muted small">Type your initials once; they are saved with each decision and filled in next time.</p>
     {/if}
-
     <div class="progress">
       <b>{prog.decided}</b> of {prog.total} decided · {prog.left} left · ETA {etaText}
       <div class="bar"><div style={`width:${prog.total ? (100 * prog.decided) / prog.total : 0}%`}></div></div>
     </div>
 
-    <button onclick={planBulk}>Bulk-accept well-determined units…</button>
-    <button onclick={() => (revealAsk = 'identity')} disabled={!item}>Reveal identity…</button>
-    <button onclick={() => (revealAsk = 'order')}>Reveal window order…</button>
-    <p class="muted small">Keys: 1–7 choose · T try · N note · Enter save &amp; next · ←/→ move</p>
+    <details>
+      <summary>Order and slice</summary>
+      <label>order
+        <select bind:value={orderMode} onchange={() => (pos = 0)}>
+          <option value="worst-first">worst first</option><option value="priority">priority</option>
+          <option value="datecode">datecode</option><option value="random">random</option>
+        </select>
+      </label>
+      <label>seed <input type="number" bind:value={seed} onchange={() => (pos = 0)} style="width:8em" /></label>
+      <p class="muted small">Nothing is filtered out. Windows of one ROI are shuffled{revealedOrder ? ' (order revealed this session)' : ''}.</p>
+      <label class="chk"><input type="checkbox" bind:checked={excludeLimit} /> slice: exclude range-limit kernels</label>
+      <label class="chk"><input type="checkbox" bind:checked={excludeBurst} /> slice: exclude kernels resting mostly on burst events</label>
+    </details>
+    <details>
+      <summary>Bulk accept and reveal</summary>
+      <button onclick={planBulk}>Bulk-accept well-determined units…</button>
+      <button onclick={() => (revealAsk = 'identity')} disabled={!item}>Reveal identity…</button>
+      <button onclick={() => (revealAsk = 'order')}>Reveal window order…</button>
+    </details>
+    <details>
+      <summary>Keys</summary>
+      <p class="muted small">1–7 choose a kernel · T try it · N note · Enter save &amp; next · ←/→ move · Esc leave a text box.
+        Drag on a trace to zoom time; double-click to reset.</p>
+    </details>
+    <details>
+      <summary>About this set</summary>
+      <p class="muted small">{index.length} results · {parts.items.length} to review · {parts.misses.length} screening misses{hasKey ? ' · key file present' : ''}</p>
+      <p class="muted small">engine jsMLspike {engineVersion ?? '…'} @ {pin.commit.slice(0, 7)}</p>
+    </details>
+    <button class="linkish" onclick={() => (showAppNav = !showAppNav)}>{showAppNav ? 'Hide the app tabs (full screen)' : 'Show the app tabs'}</button>
   </aside>
+  {/if}
 
   <section class="main">
     {#if revealAsk}
@@ -383,6 +427,15 @@
           {#each flags as f}<span class="flag">⚠ {f.replaceAll('-', ' ')}</span>{/each}
           {#if item.autocal?.flatness != null}<span>flatness {(100 * item.autocal.flatness).toFixed(1)}%</span>{/if}
           {#if current}<span class="tag">decided: {current.choice?.source ?? current.action}{current.bulk ? ' (bulk)' : ''}</span>{/if}
+          <span class="yctl">
+            y:
+            <label class="chk"><input type="radio" bind:group={yMode} value="auto" /> this window</label>
+            <label class="chk"><input type="radio" bind:group={yMode} value="fixed" /> fixed</label>
+            <input type="number" step="any" bind:value={yLo} oninput={() => (yMode = 'fixed')} placeholder="min" aria-label="y min" />
+            –<input type="number" step="any" bind:value={yHi} oninput={() => (yMode = 'fixed')} placeholder="max" aria-label="y max" />
+            <button onclick={fixYHere} title="fix the y scale at this window's range, and keep it for the next windows">fix here</button>
+            {#if yMode === 'fixed' && !yFixedOk}<span class="err small">min must be below max</span>{/if}
+          </span>
           {#if revealedIdentity}
             <span class="reveal">REVEALED: {item.identity.recording} · ROI {item.identity.roi_viewer_id} · frames {item.identity.frame_first}–{item.identity.frame_last}
               {#if keyMap.get(item.stem)} · {keyMap.get(item.stem).window_name ?? ''} (position {keyMap.get(item.stem).window_position ?? '?'}) · {keyMap.get(item.stem).treatment ?? ''} · {keyMap.get(item.stem).group ?? ''}{/if}</span>
@@ -390,86 +443,99 @@
         </header>
         {#if loadError}<p class="err">{loadError}</p>{/if}
         {#if loaded}
-          <div class="band">
-            <div class="yctl">
-              <span>y scale (both traces):</span>
-              <label class="chk"><input type="radio" bind:group={yMode} value="auto" /> this window</label>
-              <label class="chk"><input type="radio" bind:group={yMode} value="fixed" /> fixed</label>
-              <input type="number" step="any" bind:value={yLo} oninput={() => (yMode = 'fixed')} placeholder="min" aria-label="y min" />
-              to <input type="number" step="any" bind:value={yHi} oninput={() => (yMode = 'fixed')} placeholder="max" aria-label="y max" />
-              <button onclick={fixYHere} title="fix the scale at this window's range, and keep it for the next windows">fix at this window's range</button>
-              {#if yMode === 'fixed' && !yFixedOk}<span class="err small">min must be below max (showing this window's range)</span>{/if}
-              <span class="muted small">drag on a trace to zoom time; double-click to reset</span>
-            </div>
-            <div class="cap">A · the trace MLspike received · <span style="color:#2f6db5">fit</span> · <span style="color:#999">drift</span>{#if tryResult} · <span style="color:#e8590c">tried kernel</span>{/if}</div>
-            {#key traceSeries.length}
-              <Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} seriesList={traceSeries} height={200} yAxisSize={56} padRight={16} showXAxis={false} syncKey="review"
-                {yRange} xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
-            {/key}
-            <div class="cap">B · the same trace with the other events removed, as autocalibration fitted it ·
-              <span style="color:#2f6db5">fit at its own kernel</span>{#if chosen?.a != null} · <span style="color:#e8590c">fit at the chosen kernel</span>{/if}</div>
-            {#if panelB}
-              {#key panelB.length}
-                <Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} seriesList={panelB} height={200} yAxisSize={56} padRight={16} showXAxis={false} syncKey="review"
+          <div class="traces">
+            <div class="trow">
+              <span class="ocap">A · the trace MLspike received · <span style="color:#2f6db5">fit</span> · <span style="color:#999">drift</span>{#if tryResult} · <span style="color:#e8590c">tried kernel</span>{/if}</span>
+              {#key traceSeries.length}
+                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} seriesList={traceSeries} fill height={160} yAxisSize={56} padRight={16} showXAxis={false} syncKey="review"
                   {yRange} xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
               {/key}
-            {:else}<p class="muted nob">autocalibration did not reach this step, so there is no B for this window</p>{/if}
-            <!-- no yLabel here: a y-axis title widens this plot's left gutter only, which shifts its time axis against A and B -->
-            <div class="cap">inferred spikes{tryResult ? ' with the tried kernel' : ''} (height = spikes in that frame) · {spikeYs.reduce((s, c) => s + c, 0)} in this window</div>
-            {#key !!tryResult}
-              <Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} ys={spikeYs} kind="stems" color={tryResult ? '#e8590c' : '#2f6db5'} height={140} yAxisSize={56} padRight={16} syncKey="review"
-                xLabel="window time (s)" yRange={[0, Math.max(1, ...spikeYs)]} barSize={[0.6, 3]}
-                xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
-            {/key}
-          </div>
-          <div class="band pair">
-            <div>
-              <div class="cap">C · how well each kernel fits trace B (● own fit, ○ chosen)</div>
-              {#if loaded.arrays.autocal_surface}
-                <Heatmap surface={loaded.arrays.autocal_surface} aAxis={loaded.record.autocal.surface_a} tauAxis={loaded.record.autocal.surface_tau}
-                  own={item.autocal?.ok ? { a: item.autocal.a, tau: item.autocal.tau } : null} chosen={chosen} capPct={THRESHOLDS.surfaceCapPct} />
-              {:else}<p class="muted">no surface (autocalibration gave up)</p>{/if}
             </div>
-            <div class="howto small">
-              <b>Reading C.</b> Each square is one kernel: amplitude <i>a</i> across, decay τ up. Its colour is how much worse
-              that kernel fits trace B than the best one does: dark blue fits as well as the best, pale yellow is
-              {THRESHOLDS.surfaceCapPct}% worse or more.
-              <ul>
-                <li><b>A small dark spot</b> around ●: the data pin the kernel down. Trust the own fit.</li>
-                <li><b>A large dark area</b>, or a dark streak: many kernels fit about as well; the data barely choose.
-                  A neighbour's or the slice's kernel is as defensible as the own fit.</li>
-                <li><b>● on the edge</b>: the best fit wanted to go past the allowed range.</li>
-              </ul>
-              A streak running diagonally means <i>a</i> and τ trade off: a bigger, faster event fits about as well as a
-              smaller, slower one.
+            <div class="trow">
+              <span class="ocap">B · the trace as autocalibration fitted it, other events removed · <span class="keptkey">shaded</span>: the events it used ·
+                <span style="color:#2f6db5">fit at its own kernel</span>{#if chosen?.a != null} · <span style="color:#e8590c">at the chosen kernel</span>{/if}</span>
+              {#if panelB}
+                {#key panelB.length + ':' + keptRegions.length}
+                  <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} seriesList={panelB} fill height={160} yAxisSize={56} padRight={16} showXAxis={false} syncKey="review"
+                    regions={keptRegions} {yRange} xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
+                {/key}
+              {:else}<p class="muted nob">autocalibration did not reach this step, so there is no B for this window</p>{/if}
+            </div>
+            <!-- no yLabel here: a y-axis title widens this plot's left gutter only, which shifts its time axis against A and B -->
+            <div class="srow">
+              <span class="ocap">inferred spikes{tryResult ? ' with the tried kernel' : ''} (height = spikes in that frame) · {spikeYs.reduce((s, c) => s + c, 0)} in this window</span>
+              {#key !!tryResult}
+                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} ys={spikeYs} kind="stems" color={tryResult ? '#e8590c' : '#2f6db5'} height={115} yAxisSize={56} padRight={16} syncKey="review"
+                  xLabel="window time (s)" yRange={[0, Math.max(1, ...spikeYs)]} barSize={[0.6, 3]}
+                  xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
+              {/key}
             </div>
           </div>
 
-          <div class="choose">
-            <div class="cap">Choose a kernel — each is a suggestion; the choice is saved with its source</div>
-            {#each suggestions as s, k}
-              <label class:dim={s.a == null && s.source !== 'none'}>
-                <input type="radio" name="k" value={s.source} bind:group={selected} disabled={s.a == null && s.source !== 'none'} />
-                <kbd>{k + 1}</kbd> {s.label}{#if revealedNb && (s.source === 'neighbour-A' || s.source === 'neighbour-B')} <i>({revealedNb[s.source.slice(-1)] ?? 'none'})</i>{/if}
-                {#if s.a != null}<span class="num">a {fmt(s.a, 3)} · τ {fmt(s.tau, 3)} s</span>{/if}
-                {#if s.source === 'slice' && s.range?.a}<span class="num">a [{fmt(s.range.a.min, 2)}–{fmt(s.range.a.max, 2)}] · τ [{fmt(s.range.tau.min, 2)}–{fmt(s.range.tau.max, 2)}]</span>{/if}
-                <span class="muted">{s.detail}</span>
+          <div class="krow">
+            <div class="choose">
+              {#each suggestions as s, k}
+                <label class="kopt" class:dim={s.a == null && s.source !== 'none'} class:sel={selected === s.source}
+                  title={s.source === 'slice' && s.range?.a ? `${s.detail}; a ${fmt(s.range.a.min, 2)}–${fmt(s.range.a.max, 2)}, τ ${fmt(s.range.tau.min, 2)}–${fmt(s.range.tau.max, 2)} s` : s.detail}>
+                  <input type="radio" name="k" value={s.source} bind:group={selected} disabled={s.a == null && s.source !== 'none'} />
+                  <kbd>{k + 1}</kbd>
+                  <span class="sw" style={`background:${KCOLOUR[s.source] ?? 'transparent'}`}></span>
+                  <span class="klabel">{s.label}{#if revealedNb && (s.source === 'neighbour-A' || s.source === 'neighbour-B')} <i>({revealedNb[s.source.slice(-1)] ?? 'none'})</i>{/if}</span>
+                  <span class="num">{s.a != null ? `a ${fmt(s.a, 3)} · τ ${fmt(s.tau, 3)} s` : ''}</span>
+                  <span class="muted ell">{s.detail}</span>
+                </label>
+              {/each}
+              <label class="kopt" class:sel={selected === 'hand-set'}>
+                <input type="radio" name="k" value="hand-set" bind:group={selected} /> <kbd>7</kbd>
+                <span class="sw" style={`background:${KCOLOUR['hand-set']}`}></span>
+                <span class="klabel">your own</span>
+                a <input type="number" step="0.001" bind:value={handA} style="width:5.5em" onfocus={() => (selected = 'hand-set')} />
+                τ <input type="number" step="0.05" bind:value={handTau} style="width:4.5em" onfocus={() => (selected = 'hand-set')} /> s
               </label>
-            {/each}
-            <label>
-              <input type="radio" name="k" value="hand-set" bind:group={selected} /> <kbd>7</kbd> hand-set by reviewer
-              a <input type="number" step="0.001" bind:value={handA} style="width:6em" onfocus={() => (selected = 'hand-set')} />
-              τ (s) <input type="number" step="0.05" bind:value={handTau} style="width:5em" onfocus={() => (selected = 'hand-set')} />
-            </label>
-            <div class="actions">
-              <button onclick={tryKernel} disabled={!chosen || chosen.a == null || trying || !!engineError}>{trying ? 'trying…' : 'Try (T)'}</button>
-              {#each tried as t}<span class="muted small">tried {t.source} a {fmt(t.a, 3)} τ {fmt(t.tau, 3)}: {t.n_events} events, {t.n_spikes} spikes</span>{/each}
+              <div class="actions">
+                <input bind:this={noteEl} class="note" type="text" bind:value={note} placeholder="note (N)" />
+                {#if current}<input class="note" type="text" bind:value={overrideReason} placeholder="reason for changing the decision in force (required)" />{/if}
+              </div>
+              <div class="actions">
+                <button onclick={tryKernel} disabled={!chosen || chosen.a == null || trying || !!engineError}>{trying ? 'trying…' : 'Try (T)'}</button>
+                <button class="save" onclick={save} disabled={!chosen || saving}>{saving ? 'saving…' : 'Save & next (Enter)'}</button>
+                <button onclick={prev}>← previous</button><button onclick={() => next()}>skip →</button>
+                {#if tried.length}{@const t = tried[tried.length - 1]}<span class="muted small ell" title={tried.map((x) => `${x.source} a ${fmt(x.a, 3)} τ ${fmt(x.tau, 3)}: ${x.n_events} events, ${x.n_spikes} spikes`).join('\n')}>tried {t.source}: {t.n_events} events, {t.n_spikes} spikes{tried.length > 1 ? ` (+${tried.length - 1} earlier)` : ''}</span>{/if}
+              </div>
             </div>
-            <input bind:this={noteEl} class="note" type="text" bind:value={note} placeholder="note (N)" />
-            {#if current}<input class="note" type="text" bind:value={overrideReason} placeholder="reason for overriding the decision in force (required)" />{/if}
-            <div class="actions">
-              <button class="save" onclick={save} disabled={!chosen || saving}>{saving ? 'saving…' : 'Save & next (Enter)'}</button>
-              <button onclick={prev}>← previous</button> <button onclick={() => next()}>skip →</button>
+
+            <div class="kshape">
+              <span class="cap">The kernels on offer, one spike each, on one scale (thick: chosen)</span>
+              {#if kernelPanel.series.length}
+                {#key kernelPanel.sig}
+                  <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={kernelPanel.t} seriesList={kernelPanel.series} height={215} yAxisSize={56} padRight={12}
+                    xLabel="time after the spike (s)" />
+                {/key}
+              {:else}<p class="muted">no kernel on offer has an amplitude and a decay</p>{/if}
+            </div>
+
+            <div class="cpanel">
+              <span class="cap">C · how well each kernel fits trace B (● own fit, ○ chosen)
+                <details class="help"><summary title="how to read C">?</summary>
+                  <div class="howto small">
+                    <b>Reading C.</b> Each square is one kernel: amplitude <i>a</i> across, decay τ up. Its colour is how much worse
+                    that kernel fits trace B than the best one does: dark blue fits as well as the best, pale yellow is
+                    {THRESHOLDS.surfaceCapPct}% worse or more.
+                    <ul>
+                      <li><b>A small dark spot</b> around ●: the data pin the kernel down. Trust the own fit.</li>
+                      <li><b>A large dark area</b>, or a dark streak: many kernels fit about as well; the data barely choose.
+                        A neighbour's or the slice's kernel is as defensible as the own fit.</li>
+                      <li><b>● on the edge</b>: the best fit wanted to go past the allowed range.</li>
+                    </ul>
+                    A streak running diagonally means <i>a</i> and τ trade off: a bigger, faster event fits about as well as a
+                    smaller, slower one. C rests only on the events shaded in B.
+                  </div>
+                </details>
+              </span>
+              {#if loaded.arrays.autocal_surface}
+                <Heatmap surface={loaded.arrays.autocal_surface} aAxis={loaded.record.autocal.surface_a} tauAxis={loaded.record.autocal.surface_tau}
+                  own={item.autocal?.ok ? { a: item.autocal.a, tau: item.autocal.tau } : null} chosen={chosen} capPct={THRESHOLDS.surfaceCapPct} width={340} height={215} />
+              {:else}<p class="muted">no surface (autocalibration gave up)</p>{/if}
             </div>
           </div>
         {:else if !loadError}<p class="muted">loading…</p>{/if}
@@ -519,35 +585,60 @@
 </div>
 
 <style>
-  .review { display: flex; gap: 16px; align-items: flex-start; padding: 8px 12px; color: var(--text); }
-  .rail { flex: 0 0 260px; display: flex; flex-direction: column; gap: 8px; border: 2px dashed var(--border); padding: 10px; border-radius: 6px; position: sticky; top: 8px; }
-  .rail h2 { margin: 0; font-size: 1.05rem; color: var(--text-h); }
+  /* one screen: the page fills the window (covering the app's tab bar unless asked for), nothing scrolls in Review */
+  .review { display: flex; gap: 10px; height: 100vh; box-sizing: border-box; padding: 6px 10px; color: var(--text); text-align: left; }
+  .review.cover { position: fixed; inset: 0; z-index: 40; background: var(--bg); }
+  .rail { flex: 0 0 240px; display: flex; flex-direction: column; gap: 6px; border: 2px dashed var(--border); padding: 8px; border-radius: 6px; overflow-y: auto; }
+  .rail.folded { flex: 0 0 28px; padding: 4px 2px; align-items: center; }
+  .railhead { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .fold { padding: 0 6px; line-height: 1.4; }
+  .vert { writing-mode: vertical-rl; font-size: 0.75rem; opacity: 0.7; margin-top: 8px; }
+  .rail details { border-top: 1px solid var(--border); padding-top: 4px; }
+  .rail details > :not(summary) { display: block; margin-top: 6px; }
+  .rail summary { cursor: pointer; font-size: 0.85rem; color: var(--text-h); }
+  .linkish { font-size: 0.78rem; margin-top: auto; }
+  .rail h2 { margin: 0; font-size: 1rem; color: var(--text-h); }
   .lab { margin: 0; font-size: 0.75rem; letter-spacing: 0.05em; color: #b5651d; }
-  .main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-  .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; font-size: 0.9rem; }
+  .main { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; position: relative; }
+  .facts { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 0.85rem; flex: 0 0 auto; }
+  .traces { flex: 1 1 auto; min-height: 260px; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+  .trow { flex: 1 1 0; min-height: 70px; position: relative; }
+  .srow { flex: 0 0 auto; position: relative; }
+  .ocap { position: absolute; top: 0; left: 62px; z-index: 2; font-size: 0.75rem; color: var(--text-h); background: color-mix(in srgb, var(--bg) 80%, transparent); padding: 0 4px; border-radius: 3px; pointer-events: none; }
+  .keptkey { background: rgba(47, 109, 181, 0.22); padding: 0 3px; }
+  .krow { flex: 0 0 auto; display: flex; gap: 10px; align-items: stretch; }
+  .krow > div { border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+  .kshape { flex: 1 1 300px; min-width: 240px; }
+  .cpanel { flex: 0 0 auto; position: relative; }
+  .help { display: inline-block; margin-left: 6px; }
+  .help summary { list-style: none; cursor: pointer; border: 1px solid var(--border); border-radius: 50%; width: 1.3em; text-align: center; display: inline-block; }
+  .help[open] .howto { position: absolute; right: 0; bottom: 100%; z-index: 30; width: 34em; background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
   .big { font-size: 1.1rem; font-weight: 600; color: var(--text-h); }
   .flag { color: #b5651d; } .tag { background: var(--border); border-radius: 4px; padding: 0 6px; }
   .reveal { background: #fff3bf; color: #5c3c00; padding: 0 6px; border-radius: 4px; }
-  .band { border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
-  .pair { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; } .half { flex: 1 1 0; min-width: 0; }
-  .howto { flex: 1 1 280px; max-width: 46em; line-height: 1.4; } .howto ul { margin: 4px 0; padding-left: 1.2em; }
-  .yctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.85rem; margin-bottom: 6px; }
-  .yctl input[type='number'] { width: 7em; }
+  .howto { line-height: 1.4; } .howto ul { margin: 4px 0; padding-left: 1.2em; }
+  .yctl { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 0.8rem; margin-left: auto; }
+  .yctl input[type='number'] { width: 5.5em; }
   .nob { margin: 4px 0 8px 56px; }
   .cap { font-size: 0.8rem; color: var(--text-h); margin-bottom: 4px; }
-  .choose { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
-  .choose label { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .choose { flex: 1 1 420px; min-width: 360px; display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; }
+  .kopt { display: flex; gap: 6px; align-items: center; white-space: nowrap; min-width: 0; padding: 1px 2px; border-radius: 4px; }
+  .kopt.sel { background: color-mix(in srgb, #e8590c 14%, transparent); }
+  .klabel { min-width: 7.5em; color: var(--text-h); }
+  .sw { display: inline-block; width: 14px; height: 4px; border-radius: 2px; flex: 0 0 auto; }
+  .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
   .dim { opacity: 0.5; } .num { font-variant-numeric: tabular-nums; }
   kbd { border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: 0.75rem; }
-  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .note { width: 100%; }
+  .actions { display: flex; gap: 6px; align-items: center; margin-top: 3px; min-width: 0; }
+  .note { flex: 1 1 0; min-width: 0; }
   .save { font-weight: 600; }
   .muted { color: var(--text); opacity: 0.7; margin: 0; } .small { font-size: 0.78rem; }
   .err { color: #c92a2a; margin: 0; }
   .views { display: flex; flex-direction: column; gap: 4px; } .views .on { font-weight: 600; outline: 2px solid var(--accent); }
   .progress .bar { height: 6px; background: var(--border); border-radius: 3px; margin-top: 4px; } .progress .bar div { height: 6px; background: var(--accent); border-radius: 3px; }
   .chk { font-size: 0.85rem; }
-  .modal { border: 2px solid var(--accent); border-radius: 6px; padding: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .modal { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); z-index: 35; width: min(48em, 90%); background: var(--bg); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+           border: 2px solid var(--accent); border-radius: 6px; padding: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   table { border-collapse: collapse; font-size: 0.85rem; } td, th { border-bottom: 1px solid var(--border); padding: 3px 8px; text-align: left; }
   .superseded { opacity: 0.5; }
 </style>

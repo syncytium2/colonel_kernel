@@ -1,7 +1,7 @@
 // The review page's logic (src/lib/review/model.js), without a browser or jsMLspike.   npm run test:review
 import {
   indexEntry, split, burstFlags, flagsOf, wellDetermined, orderItems, neighbours, sliceSuggestion, suggestionsFor,
-  preselect, inForce, makeRecord, bulkPlan, progress, mss, shuffled, lastReviewer, rangeOf, meanOf,
+  preselect, inForce, makeRecord, bulkPlan, progress, mss, shuffled, lastReviewer, rangeOf, meanOf, kernelCurves,
 } from './model.js';
 
 let pass = 0, fail = 0;
@@ -114,6 +114,12 @@ const rp = rangeOf([[0, 10]]); check(Math.abs(rp[0] + 0.3) < 1e-12 && Math.abs(r
 check(rangeOf([[], null, [NaN]]) === null, 'rangeOf: nothing finite');
 check(rangeOf([[2, 2]], 0)[1] > rangeOf([[2, 2]], 0)[0], 'rangeOf: a constant trace still gets a span');
 check(meanOf([1, 2, NaN, 3]) === 2 && meanOf([]) === null, 'meanOf');
+
+// the kernel panel: every kernel on one time axis, the longest tau setting the span
+const kc = kernelCurves([{ key: 'own', a: 0.02, tau: 1 }, { key: 'nb', a: 0.01, tau: 2 }, { key: 'none', a: null, tau: null }], { n: 5 });
+check(kc.curves.length === 2 && kc.t.at(-1) === 8, 'kernelCurves: skips kernels without a and tau; span 4 x the longest tau');
+check(kc.curves[0].ys[0] === 0.02 && Math.abs(kc.curves[1].ys[2] - 0.01 * Math.exp(-2)) < 1e-15, 'kernelCurves: a exp(-t/tau)');
+check(kernelCurves([]).t.at(-1) === 1, 'kernelCurves: at least 1 s with nothing to draw');
 
 console.log(`review: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

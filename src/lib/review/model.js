@@ -268,5 +268,15 @@ export function meanOf(ys) {
   return n ? s / n : null;
 }
 
+/** The single-spike response a * exp(-t / tau) of each kernel, on one shared time axis from 0 to
+ *  `span` x the longest tau (at least 1 s), so the kernels on offer compare on the same scale.
+ *  kernels: [{ key, a, tau }]; the ones without a finite positive a and tau are skipped. */
+export function kernelCurves(kernels, { n = 200, span = 4 } = {}) {
+  const ok = kernels.filter((k) => Number.isFinite(k.a) && Number.isFinite(k.tau) && k.a > 0 && k.tau > 0);
+  const tMax = Math.max(1, span * Math.max(0, ...ok.map((k) => k.tau)));
+  const t = Array.from({ length: n }, (_, i) => (tMax * i) / (n - 1));
+  return { t, curves: ok.map((k) => ({ key: k.key, ys: t.map((x) => k.a * Math.exp(-x / k.tau)) })) };
+}
+
 /** m:ss from the start of the window (blind review shows window time only). */
 export function mss(s) { const t = Math.max(0, Math.round(s)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }

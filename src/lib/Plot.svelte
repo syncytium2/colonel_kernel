@@ -102,6 +102,9 @@
     // stay readable when the system colour scheme is dark.
     axisColor = null,
     gridColor = null,
+    // Vertical grid lines (the x-axis grid). On by default: every existing plot is unchanged. The lab
+    // review page turns them off on its time rows, where a vertical line reads as an inferred spike.
+    xGrid = true,
     // EDIT mode (challenge tabs): click empty space to ADD a spike, shift-click the
     // nearest to REMOVE it, drag one to MOVE it. Emits data-time (snapped to
     // editSnapDt when given). Disables zoom while on. Off by default — every existing
@@ -298,7 +301,7 @@
       ...(padRight != null ? { padding: [null, padRight, null, null] } : {}),
       hooks,
       axes: [
-        { show: showXAxis, label: xLabel || undefined, ...axisInk() },
+        { show: showXAxis, label: xLabel || undefined, ...axisInk(), ...(xGrid ? {} : { grid: { show: false } }) },
         {
           ...axisInk(),
           ...(yAxisSize != null ? { size: yAxisSize } : {}),
