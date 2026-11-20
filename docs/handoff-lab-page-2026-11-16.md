@@ -42,7 +42,7 @@ cerebro's, and other sessions run colonel_kernel servers from their own worktree
 on old commits. `lab-dev` probes each port before using it, binds with `--strictPort`, and
 prints the checkout, branch and commit it is serving.
 
-The `LAB · Extraction` button exists only on the dev server. `scripts/lab-shot.mjs OUTDIR`
+The `LAB · Kernel extraction` button exists only on the dev server. `scripts/lab-shot.mjs OUTDIR`
 screenshots the page (`LAB_URL` names the server; `LAB_SCHEME=dark`, `LAB_VERDICT=unsure` to
 exercise a save). On 065 Playwright's headless shell may be missing; pass a full Chromium as
 `PW_CHROMIUM`.
@@ -96,7 +96,7 @@ were sent to Tony on 2026-11-17 before the change.
   Tony on 2026-11-17 as observations. The male numbers equal the version-1 run. The scratch
   script and TSVs were in the session scratchpad and may not survive the reboot; they are
   reproducible from the files with `analyzeVariants`.
-- **New: LAB · Review** (`#lab-review`, `src/lib/lab/LabReview.svelte`, 1411c94). Every
+- **New: LAB · Kernel review** (`#lab-review`, `src/lib/lab/LabReview.svelte`, 1411c94). Every
   recording on one page, a kernel column and an STA column, one lag axis and one amplitude
   axis (automatic or typed; a row crossing a typed range says "clipped"). Tony has not yet
   reviewed it.

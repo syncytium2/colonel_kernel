@@ -311,10 +311,10 @@
       </button>
     {/if}
     {#if LabExtraction}
-      <button class="labbtn" class:active={tab === LAB_TAB} onclick={() => (tab = LAB_TAB)} title="Lab only, dev server only: kernels from raw fluorescence">LAB · Extraction</button>
+      <button class="labbtn" class:active={tab === LAB_TAB} onclick={() => (tab = LAB_TAB)} title="Lab only, dev server only: kernels from raw fluorescence">LAB · Kernel extraction</button>
     {/if}
     {#if LabReview}
-      <button class="labbtn" class:active={tab === LAB_REVIEW_TAB} onclick={() => (tab = LAB_REVIEW_TAB)} title="Lab only, dev server only: every recording's kernel and STA on one scale">LAB · Review</button>
+      <button class="labbtn" class:active={tab === LAB_REVIEW_TAB} onclick={() => (tab = LAB_REVIEW_TAB)} title="Lab only, dev server only: every recording's kernel and STA on one scale">LAB · Kernel review</button>
     {/if}
     <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
     <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">
