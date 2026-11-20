@@ -17,6 +17,7 @@
   import { PENSUB_K } from './extraction.js';
   import { VARIANT_COLORS_LIGHT, VARIANT_COLORS_DARK, METHODS, kernelFor } from './colors.js';
   import { parseVerdicts, currentVerdict, verdictKey, isStale } from './verdicts.js';
+  import { riseCrossingLag, indexAtLag } from './timing.js';
 
   const scheme = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   let dark = $state(!!scheme?.matches);
@@ -214,6 +215,14 @@
 
   const fmt = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
   const mOf = (v) => (method === 'fv' ? v.fv : method === 'pm' ? v.pm : v.shaped);
+  // t50 rise (timing.js): the lag where the curve last crosses half its reported peak on the
+  // way up to it. Shown in place of the peak lag (Tony, 2026-11-20).
+  const kernelT50 = (v) => {
+    const k = kernelFor(v, method);
+    const lag = k.times ?? Array.from(k.samples, (_, i) => (i - k.zeroIndex) * k.dt);
+    return riseCrossingLag(k.samples, lag, indexAtLag(lag, mOf(v).peakLagS));
+  };
+  const staT50 = (v) => (v.sta && !v.sta.empty ? riseCrossingLag(v.sta.samples, v.sta.times, indexAtLag(v.sta.times, v.agreement.staPeakLagS)) : NaN);
   const verdictFor = (r, res) => {
     const rec = recs.get(r.name);
     if (!rec || !res?.window) return null;
@@ -263,7 +272,7 @@
   <p class="note">
     Every panel shares the lag axis (−5 to 5 s) and one amplitude axis
     {#if yRange}({fmt(yRange[0], 4)} to {fmt(yRange[1], 4)}{unitPeak ? ', peak = 1' : ' dF/F₀'}){/if},
-    {#if yManual}as typed; rows marked "clipped" have a curve outside it.{:else if scaleRow && bands[scaleFrom]}set by the largest and smallest value drawn in {scaleRow.sliceId}'s row; rows marked "clipped" have a curve outside it.{:else}set by the largest and smallest value drawn anywhere on the page.{/if} The STA is computed to ±2 s. Numbers are reported, not judged.
+    {#if yManual}as typed; rows marked "clipped" have a curve outside it.{:else if scaleRow && bands[scaleFrom]}set by the largest and smallest value drawn in {scaleRow.sliceId}'s row; rows marked "clipped" have a curve outside it.{:else}set by the largest and smallest value drawn anywhere on the page.{/if} The STA is computed to ±2 s. <strong>t50</strong> is the lag at which the curve last crosses half its peak height (from zero) on the way up to that peak, interpolated between samples; "—" when it never falls below half inside the window. Numbers are reported, not judged.
   </p>
 
   <div class="grid">
@@ -312,7 +321,7 @@
             <tbody>
               {#each shownOf(res) as v (v.id)}
                 {@const m = mOf(v)}
-                <tr><td><span class="swatch" style:--c={COLORS[v.id]}></span></td><td>peak {fmt(m.peakLagS, 1)} s</td><td>{fmt(m.peakAmp, 4)}</td><td>τ {fmt(m.tauDecayS)} s</td><td>acausal {fmt(m.acausalRatio, 2)}</td></tr>
+                <tr><td><span class="swatch" style:--c={COLORS[v.id]}></span></td><td>t50 {fmt(kernelT50(v), 2)} s</td><td>peak {fmt(m.peakAmp, 4)}</td><td>τ {fmt(m.tauDecayS)} s</td><td>acausal {fmt(m.acausalRatio, 2)}</td></tr>
               {/each}
             </tbody>
           </table>
@@ -329,7 +338,7 @@
           <table class="mini">
             <tbody>
               {#each shownOf(res) as v (v.id)}
-                <tr><td><span class="swatch" style:--c={COLORS[v.id]}></span></td><td>peak {fmt(v.agreement.staPeakLagS, 1)} s</td><td>{fmt(v.agreement.staPeakAmp, 4)}</td></tr>
+                <tr><td><span class="swatch" style:--c={COLORS[v.id]}></span></td><td>t50 {fmt(staT50(v), 2)} s</td><td>peak {fmt(v.agreement.staPeakAmp, 4)}</td></tr>
               {/each}
             </tbody>
           </table>

@@ -9,6 +9,7 @@ import { parseLabRecording, encodeArray, roiColumn, LAB_FORMAT } from './recordi
 import { simulateRaw, simulatedLabRecording, producerBridge } from './simulate.js';
 import { analyzeVariants, analysisWindows, windowIndices, bridgedSpans } from './compare.js';
 import { verdictLine, parseVerdicts, currentVerdict, verdictKey, isStale, VERDICT_HEADER } from './verdicts.js';
+import { riseCrossingLag, indexAtLag } from './timing.js';
 
 let passed = 0;
 let failed = 0;
@@ -213,6 +214,25 @@ const file = await simulatedLabRecording();
   await refuses(() => verdictLine({ ...base, verdict: 'maybe' }), /verdict must be/, 'refuses a verdict outside accept, reject, unsure');
   await refuses(() => verdictLine({ ...base, slice_id: '' }), /slice_id/, 'refuses a verdict with no slice');
   await refuses(() => parseVerdicts('a\tb\n' + l1 + '\n'), /header/, 'refuses a log with another header');
+}
+
+// ---- t50 rise ---------------------------------------------------------------------------
+{
+  const times = [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3, 0.4];
+  const ys = [0, 0, 0, 0, 0.2, 0.6, 1.0, 0.8];
+  const t = riseCrossingLag(ys, times, 6);
+  ok(Math.abs(t - 0.175) < 1e-12, `the half-height crossing is interpolated between samples (${t})`);
+  ok(Math.abs(riseCrossingLag(ys, times, 6, 0.1) - 0.05) < 1e-12, 'another fraction crosses where it should');
+  // A wiggle above half far before the rise must not be taken for it: walk back from the peak.
+  const wig = [0.9, 0, 0, 0, 0.2, 0.6, 1.0, 0.8];
+  ok(Math.abs(riseCrossingLag(wig, times, 6) - 0.175) < 1e-12, 'an earlier excursion above half is not the rise');
+  // A rise that crosses half before the spike gives a negative lag.
+  const early = [0, 0.2, 0.8, 1.0, 0.7, 0.4, 0.2, 0.1];
+  ok(Math.abs(riseCrossingLag(early, times, 3) - (-0.15)) < 1e-12, 'a crossing before the spike is a negative lag');
+  ok(Number.isNaN(riseCrossingLag([0.6, 0.8, 1.0], [0, 0.1, 0.2], 2)), 'never below half inside the window: no answer');
+  ok(Number.isNaN(riseCrossingLag([0, -0.5, -1], [0, 0.1, 0.2], 2)), 'a peak at or below zero: no answer');
+  ok(Number.isNaN(riseCrossingLag([0, NaN, 0.8, 1.0], [0, 0.1, 0.2, 0.3], 3)), 'a missing sample before the crossing: no answer');
+  ok(indexAtLag(times, 0.21) === 5 && indexAtLag(times, NaN) === -1, 'indexAtLag finds the nearest sample');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
