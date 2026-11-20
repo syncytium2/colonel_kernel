@@ -43,10 +43,18 @@ Nothing in it is real data.
 - **Review** shows one window. The header gives only a blind key (`K…`) and the window's own time
   (0:00 to 5:00). Warnings say why a kernel may be poorly determined (one event, on a range limit,
   flat error, resting mostly on burst events).
-- The **trace** is what MLspike received, with its fit and drift; the strip below it marks the
-  inferred events. **B** is the trace autocalibration fitted, with the fit at its own kernel (blue)
-  and at the kernel you have chosen (orange). **C** is how the fitting error changes across the
-  allowed amplitudes and decays: a pale, even square means the data barely choose a kernel.
+- **A** is the trace MLspike received, with its fit and drift. **B**, the same size beneath it, is
+  that trace with the other events removed, as autocalibration fitted it: the fit at its own
+  kernel (blue) and at the kernel you have chosen (orange). A and B share one time axis and one y
+  axis (B is shown in A's units), and the strip below marks the inferred events. Drag across any of
+  them to zoom time; double-click to go back.
+- **y scale**: "this window" fits each window's traces; "fixed" keeps the range you type (or
+  **fix at this window's range**) as you move between windows, so sizes compare across windows.
+- **C** shows how well each kernel fits trace B: amplitude across, decay up, coloured by how much
+  worse than the best kernel it fits (dark blue as good as the best, pale yellow 20% worse or more;
+  the 20% is provisional). A small dark spot around ● means the data pin the kernel down; a large
+  dark area or streak means many kernels fit about as well, so the data barely choose. ● on the
+  edge means the best fit wanted to go past the allowed range.
 - **Choose a kernel**: 1 own fit, 2 and 3 neighbouring windows of the same cell (A and B do not say
   which comes first), 4 the other cells of this recording in the same epoch (with how many cells and
   how many were weak), 5 the default, 6 no reliable kernel, 7 type your own.

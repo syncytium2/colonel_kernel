@@ -13,6 +13,7 @@ export const REVIEW_FORMAT = 'jsmlspike-review/1';
 /** Provisional thresholds (ADR 3dfe: Tony sets them after seeing the distributions). */
 export const THRESHOLDS = Object.freeze({
   flat: 0.02,            // flatness below this: the error barely changes across the allowed box
+  surfaceCapPct: 20,     // panel C's colour scale: 0% (the best kernel) to this % worse; worse is drawn at the top colour
   burstFraction: 0.30,   // a burst event: more than this share of the other ROIs have an event within the window
   burstWindowS: 1.0,
   mostlyBurst: 0.5,      // a kernel rests mostly on burst events when more than this share of its events are
@@ -246,6 +247,25 @@ export function lastReviewer(log) {
     if (r) return r;
   }
   return '';
+}
+
+/** [lo, hi] over every finite value of several series, padded by `pad` of the span on each side;
+ *  null if there is none. The review page's shared y-axis for the trace and panel B. */
+export function rangeOf(seriesList, pad = 0.03) {
+  let lo = Infinity, hi = -Infinity;
+  for (const ys of seriesList) if (ys) for (const v of ys) if (Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  if (lo > hi) return null;
+  if (hi === lo) { const h = Math.abs(hi) * 0.05 || 0.5; return [lo - h, hi + h]; }   // a constant trace still gets a span
+  const span = hi - lo;
+  return [lo - pad * span, hi + pad * span];
+}
+
+/** Mean of the finite values, or null. Autocalibration divides the trace by its mean (jsMLspike
+ *  autocal normalise), so panel B times this mean is in the trace's own units. */
+export function meanOf(ys) {
+  let s = 0, n = 0;
+  for (const v of ys ?? []) if (Number.isFinite(v)) { s += v; n++; }
+  return n ? s / n : null;
 }
 
 /** m:ss from the start of the window (blind review shows window time only). */

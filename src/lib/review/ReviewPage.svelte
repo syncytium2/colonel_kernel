@@ -10,7 +10,7 @@
   import { calibEnergy, AUTOCAL_DEFAULTS } from 'jsmlspike/autocal';
   import {
     PAGE_VERSION, split, burstFlags, flagsOf, orderItems, suggestionsFor, neighbours, preselect, inForce,
-    makeRecord, bulkPlan, progress, mss, wellDetermined, THRESHOLDS, lastReviewer,
+    makeRecord, bulkPlan, progress, mss, wellDetermined, THRESHOLDS, lastReviewer, rangeOf, meanOf,
   } from './model.js';
   import pin from './engine-pin.json';
 
@@ -88,7 +88,7 @@
   $effect(() => {
     const it = item;
     if (!it) { loaded = null; return; }
-    loaded = null; loadError = null; tried = []; tryResult = null; note = ''; overrideReason = ''; reveals = []; saveError = null;
+    loaded = null; loadError = null; tried = []; tryResult = null; note = ''; xZoom = null; overrideReason = ''; reveals = []; saveError = null;
     selected = preselect(it, bursts); handA = ''; handTau = ''; openedAt = performance.now();
     load(it.stem).then((l) => { if (item?.stem === l.stem) loaded = l; }).catch((e) => (loadError = String(e?.message ?? e)));
     for (const nx of queueSorted.slice(pos + 1, pos + 4)) load(nx.stem).catch(() => {});   // prepare the next windows
@@ -114,18 +114,31 @@
     for (const [f, c] of src) if (f - ff >= 0 && f - ff < n) y[f - ff] = c;
     return y;
   });
+  // Panel B: autocalibration's stage-2 trace (the trace over its mean, other events removed) and the
+  // fits, multiplied back by that mean so B shares the trace's y-axis (the fits are linear in it).
   const panelB = $derived.by(() => {
     if (!loaded?.arrays.autocal_mod) return null;
     const rec = loaded.record, dt = rec.timing.dt_s, ff = rec.identity.frame_first ?? 0, mod = Float64Array.from(loaded.arrays.autocal_mod);
+    const m = meanOf(loaded.arrays.values) ?? 1, scale = (ys) => Array.from(ys, (v) => v * m);
     const spikes = Float64Array.from((rec.autocal?.events ?? []).flatMap((e) => Array(e.count ?? 1).fill((e.frame - ff + 1) * dt)));
-    const s = [{ ys: Array.from(mod), stroke: 'var(--text)', width: 1 }];
-    if (loaded.arrays.autocal_mod_fit) s.push({ ys: Array.from(loaded.arrays.autocal_mod_fit), stroke: '#2f6db5', width: 1.5 });
+    const s = [{ ys: scale(mod), stroke: 'var(--text)', width: 1 }];
+    if (loaded.arrays.autocal_mod_fit) s.push({ ys: scale(loaded.arrays.autocal_mod_fit), stroke: '#2f6db5', width: 1.5 });
     if (chosen?.a != null && spikes.length) {
       const fit = calibEnergy(chosen.a, chosen.tau, spikes, mod, dt, AUTOCAL_DEFAULTS.tDrift, rec.provenance.event_placement ?? 'matlab').fit;
-      s.push({ ys: Array.from(fit), stroke: '#e8590c', width: 1.5 });
+      s.push({ ys: scale(fit), stroke: '#e8590c', width: 1.5 });
     }
     return s;
   });
+
+  // One y-axis for both trace rows: this window's range, or a range the reviewer fixed (kept across windows)
+  let yMode = $state('auto');                  // 'auto' | 'fixed'
+  let yLo = $state(''), yHi = $state('');
+  const yAuto = $derived(rangeOf([...traceSeries.map((s) => s.ys), ...(panelB ?? []).map((s) => s.ys)]));
+  const yFixedOk = $derived(Number.isFinite(Number(yLo)) && Number.isFinite(Number(yHi)) && yLo !== '' && yHi !== '' && Number(yHi) > Number(yLo));
+  const yRange = $derived(yMode === 'fixed' && yFixedOk ? [Number(yLo), Number(yHi)] : yAuto);
+  function fixYHere() { if (yAuto) { yLo = yAuto[0].toPrecision(4); yHi = yAuto[1].toPrecision(4); yMode = 'fixed'; } }
+  // one x-axis: drag on any row zooms all three, double-click resets; a new window starts unzoomed
+  let xZoom = $state(null);
 
   // ---------------------------------------------------------------- try (the worker)
   let worker = null, reqId = 0;
@@ -243,6 +256,8 @@
   function onKey(ev) {
     if (view !== 'queue' || revealAsk || bulkConfirm) return;
     const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(ev.target?.tagName);
+    // Enter in the y-scale boxes applies the scale (leaves the box), it never saves the decision
+    if (ev.key === 'Enter' && ev.target?.closest?.('.yctl')) { ev.target.blur(); ev.preventDefault(); return; }
     if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); save(); return; }
     if (typing) { if (ev.key === 'Escape') ev.target.blur(); return; }
     const keys = ['own', 'neighbour-A', 'neighbour-B', 'slice', 'default', 'none', 'hand-set'];
@@ -376,22 +391,53 @@
         {#if loadError}<p class="err">{loadError}</p>{/if}
         {#if loaded}
           <div class="band">
-            <div class="cap">Trace MLspike received · <span style="color:#2f6db5">fit</span> · <span style="color:#999">drift</span>{#if tryResult} · <span style="color:#e8590c">tried kernel</span>{/if}</div>
-            <Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} seriesList={traceSeries} height={190} yAxisSize={56} padRight={16} showXAxis={false} syncKey="review" />
-            <Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} ys={spikeYs} kind="stems" color="var(--series-spikes, #2f6db5)" height={95} yAxisSize={56} padRight={16} syncKey="review" xLabel="window time (s)" yLabel={tryResult ? 'events (tried)' : 'events'} yRange={[0, Math.max(1, ...spikeYs)]} barSize={[0.6, 3]} />
-          </div>
-          <div class="pair">
-            <div class="band half">
-              <div class="cap">B · stage 2's trace, the fit at the own kernel (<span style="color:#2f6db5">blue</span>){chosen?.a != null ? ' and at the chosen kernel (orange)' : ''}</div>
-              {#if panelB}<Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} seriesList={panelB} height={180} yAxisSize={56} padRight={16} xLabel="window time (s)" />
-              {:else}<p class="muted">autocalibration did not reach stage 2</p>{/if}
+            <div class="yctl">
+              <span>y scale (both traces):</span>
+              <label class="chk"><input type="radio" bind:group={yMode} value="auto" /> this window</label>
+              <label class="chk"><input type="radio" bind:group={yMode} value="fixed" /> fixed</label>
+              <input type="number" step="any" bind:value={yLo} oninput={() => (yMode = 'fixed')} placeholder="min" aria-label="y min" />
+              to <input type="number" step="any" bind:value={yHi} oninput={() => (yMode = 'fixed')} placeholder="max" aria-label="y max" />
+              <button onclick={fixYHere} title="fix the scale at this window's range, and keep it for the next windows">fix at this window's range</button>
+              {#if yMode === 'fixed' && !yFixedOk}<span class="err small">min must be below max (showing this window's range)</span>{/if}
+              <span class="muted small">drag on a trace to zoom time; double-click to reset</span>
             </div>
-            <div class="band half">
-              <div class="cap">C · stage-5 error surface (● own minimum, ○ chosen)</div>
+            <div class="cap">A · the trace MLspike received · <span style="color:#2f6db5">fit</span> · <span style="color:#999">drift</span>{#if tryResult} · <span style="color:#e8590c">tried kernel</span>{/if}</div>
+            {#key traceSeries.length}
+              <Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} seriesList={traceSeries} height={200} yAxisSize={56} padRight={16} showXAxis={false} syncKey="review"
+                {yRange} xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
+            {/key}
+            <div class="cap">B · the same trace with the other events removed, as autocalibration fitted it ·
+              <span style="color:#2f6db5">fit at its own kernel</span>{#if chosen?.a != null} · <span style="color:#e8590c">fit at the chosen kernel</span>{/if}</div>
+            {#if panelB}
+              {#key panelB.length}
+                <Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} seriesList={panelB} height={200} yAxisSize={56} padRight={16} showXAxis={false} syncKey="review"
+                  {yRange} xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
+              {/key}
+            {:else}<p class="muted nob">autocalibration did not reach this step, so there is no B for this window</p>{/if}
+            <Plot axisColor="var(--text-h)" gridColor="var(--border)" {xs} ys={spikeYs} kind="stems" color="var(--series-spikes, #2f6db5)" height={80} yAxisSize={56} padRight={16} syncKey="review"
+              xLabel="window time (s)" yLabel={tryResult ? 'events (tried)' : 'events'} yRange={[0, Math.max(1, ...spikeYs)]} barSize={[0.6, 3]}
+              xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
+          </div>
+          <div class="band pair">
+            <div>
+              <div class="cap">C · how well each kernel fits trace B (● own fit, ○ chosen)</div>
               {#if loaded.arrays.autocal_surface}
                 <Heatmap surface={loaded.arrays.autocal_surface} aAxis={loaded.record.autocal.surface_a} tauAxis={loaded.record.autocal.surface_tau}
-                  own={item.autocal?.ok ? { a: item.autocal.a, tau: item.autocal.tau } : null} chosen={chosen} />
+                  own={item.autocal?.ok ? { a: item.autocal.a, tau: item.autocal.tau } : null} chosen={chosen} capPct={THRESHOLDS.surfaceCapPct} />
               {:else}<p class="muted">no surface (autocalibration gave up)</p>{/if}
+            </div>
+            <div class="howto small">
+              <b>Reading C.</b> Each square is one kernel: amplitude <i>a</i> across, decay τ up. Its colour is how much worse
+              that kernel fits trace B than the best one does: dark blue fits as well as the best, pale yellow is
+              {THRESHOLDS.surfaceCapPct}% worse or more.
+              <ul>
+                <li><b>A small dark spot</b> around ●: the data pin the kernel down. Trust the own fit.</li>
+                <li><b>A large dark area</b>, or a dark streak: many kernels fit about as well; the data barely choose.
+                  A neighbour's or the slice's kernel is as defensible as the own fit.</li>
+                <li><b>● on the edge</b>: the best fit wanted to go past the allowed range.</li>
+              </ul>
+              A streak running diagonally means <i>a</i> and τ trade off: a bigger, faster event fits about as well as a
+              smaller, slower one.
             </div>
           </div>
 
@@ -479,7 +525,11 @@
   .flag { color: #b5651d; } .tag { background: var(--border); border-radius: 4px; padding: 0 6px; }
   .reveal { background: #fff3bf; color: #5c3c00; padding: 0 6px; border-radius: 4px; }
   .band { border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
-  .pair { display: flex; gap: 10px; } .half { flex: 1 1 0; min-width: 0; }
+  .pair { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; } .half { flex: 1 1 0; min-width: 0; }
+  .howto { flex: 1 1 280px; max-width: 46em; line-height: 1.4; } .howto ul { margin: 4px 0; padding-left: 1.2em; }
+  .yctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.85rem; margin-bottom: 6px; }
+  .yctl input[type='number'] { width: 7em; }
+  .nob { margin: 4px 0 8px 56px; }
   .cap { font-size: 0.8rem; color: var(--text-h); margin-bottom: 4px; }
   .choose { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
   .choose label { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }

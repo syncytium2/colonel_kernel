@@ -1,7 +1,7 @@
 // The review page's logic (src/lib/review/model.js), without a browser or jsMLspike.   npm run test:review
 import {
   indexEntry, split, burstFlags, flagsOf, wellDetermined, orderItems, neighbours, sliceSuggestion, suggestionsFor,
-  preselect, inForce, makeRecord, bulkPlan, progress, mss, shuffled, lastReviewer,
+  preselect, inForce, makeRecord, bulkPlan, progress, mss, shuffled, lastReviewer, rangeOf, meanOf,
 } from './model.js';
 
 let pass = 0, fail = 0;
@@ -107,6 +107,13 @@ check(lastReviewer([]) === '', 'lastReviewer: empty log');
 check(lastReviewer([{ reviewer: 'TD' }, { reviewer: 'AB' }]) === 'AB', 'lastReviewer: latest wins');
 check(lastReviewer([{ reviewer: 'TD' }, { reviewer: null }, { reviewer: '  ' }, {}]) === 'TD', 'lastReviewer: skips records without initials');
 check(lastReviewer([{ reviewer: ' TD ' }]) === 'TD', 'lastReviewer: trimmed');
+
+// the shared y-axis covers every series; panel B is rescaled by the trace's mean
+check(JSON.stringify(rangeOf([[1, 2], [0.5, NaN, 3]], 0)) === '[0.5,3]', 'rangeOf: union, NaN skipped');
+const rp = rangeOf([[0, 10]]); check(Math.abs(rp[0] + 0.3) < 1e-12 && Math.abs(rp[1] - 10.3) < 1e-12, 'rangeOf: 3% padding');
+check(rangeOf([[], null, [NaN]]) === null, 'rangeOf: nothing finite');
+check(rangeOf([[2, 2]], 0)[1] > rangeOf([[2, 2]], 0)[0], 'rangeOf: a constant trace still gets a span');
+check(meanOf([1, 2, NaN, 3]) === 2 && meanOf([]) === null, 'meanOf');
 
 console.log(`review: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
