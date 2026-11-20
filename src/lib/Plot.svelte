@@ -105,6 +105,8 @@
     // Vertical grid lines (the x-axis grid). On by default: every existing plot is unchanged. The lab
     // review page turns them off on its time rows, where a vertical line reads as an inferred spike.
     xGrid = true,
+    // Whole-number y ticks only (counts). Off by default: every existing plot is unchanged.
+    yIntegers = false,
     // EDIT mode (challenge tabs): click empty space to ADD a spike, shift-click the
     // nearest to REMOVE it, drag one to MOVE it. Emits data-time (snapped to
     // editSnapDt when given). Disables zoom while on. Off by default — every existing
@@ -305,18 +307,25 @@
         {
           ...axisInk(),
           ...(yAxisSize != null ? { size: yAxisSize } : {}),
+          ...(yIntegers ? { incrs: [1, 2, 5, 10, 20, 50, 100] } : {}),
           ...(yLabel ? { label: yLabel, labelSize: 22, labelFont: '12px ' + getComputedStyle(document.documentElement).getPropertyValue('--sans') } : {}),
         },
       ],
       series: seriesList
         ? [
             {},
-            ...seriesList.map((s) => ({
-              points: { show: false },
-              stroke: resolveColor(s.stroke),
-              width: s.width ?? 2,
-              ...(s.dash ? { dash: s.dash } : {}),
-            })),
+            ...seriesList.map((s) =>
+              // s.dots (px): points only, no line (the lab review page's stacked spike dots). Absent on
+              // every other caller, which keeps the line series exactly as before.
+              s.dots
+                ? { stroke: resolveColor(s.stroke), fill: resolveColor(s.stroke), width: 0, paths: () => null,
+                    points: { show: true, size: s.dots, width: 0, fill: resolveColor(s.stroke), stroke: resolveColor(s.stroke) } }
+                : {
+                    points: { show: false },
+                    stroke: resolveColor(s.stroke),
+                    width: s.width ?? 2,
+                    ...(s.dash ? { dash: s.dash } : {}),
+                  }),
           ]
         : [
             {},

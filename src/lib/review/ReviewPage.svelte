@@ -62,6 +62,7 @@
     const s = suggestions.find((x) => x.source === selected);
     return s ? { source: s.source, a: s.a, tau: s.tau } : null;
   });
+  const chosenLabel = $derived(chosen?.source === 'hand-set' ? 'your own' : (suggestions.find((s) => s.source === chosen?.source)?.label ?? chosen?.source ?? ''));
   const prog = $derived(progress(parts.items.length, parts.items.filter((e) => decided.has(e.stem)).length, durations));
 
   async function sha256(jsonText, bin) {
@@ -107,12 +108,11 @@
     if (tryResult?.fit) s.push({ ys: Array.from(tryResult.fit), stroke: '#e8590c', width: 1.5 });
     return s;
   });
-  // The strip draws each spike as a line 0 -> count -> 0 over its neighbouring frames, null elsewhere (no
-  // line between spikes). Bars were 0.6 of a frame wide: with ~3000 frames across ~800 px, a fifth of a pixel.
-  const spikeLine = $derived.by(() => {
-    const y = new Array(spikeYs.length).fill(null);
-    spikeYs.forEach((c, i) => { if (c > 0) { y[i] = c; if (i > 0 && y[i - 1] == null) y[i - 1] = 0; if (i + 1 < y.length && !(spikeYs[i + 1] > 0)) y[i + 1] = 0; } });
-    return y;
+  // The strip shows spikes as stacked dots, one dot per spike: a frame with 2 spikes has dots at heights 1
+  // and 2. MLspike's counts are whole numbers; a line or bar of height 2 read as "partial spikes".
+  const spikeDots = $derived.by(() => {
+    const maxC = Math.max(0, ...spikeYs);
+    return Array.from({ length: maxC }, (_, k) => spikeYs.map((c) => (c >= k + 1 ? k + 1 : null)));
   });
   const spikeYs = $derived.by(() => {
     if (!loaded) return [];
@@ -187,12 +187,19 @@
       t0_review: { source: 'db4', reviewed: true, note: 'rerun of a result that passed R1' },
     };
   }
+  // Try's progress is by the clock: the engine reports nothing until it finishes. The estimate is the
+  // last try's time per frame (this session) times this window's frames; before any try there is none.
+  let tryElapsedMs = $state(0), msPerFrame = $state(null), tryEstimateMs = $state(null);
   async function tryKernel() {
-    if (!chosen || chosen.a == null || !loaded?.arrays.signal_values || !worker) return;
+    if (!chosen || chosen.a == null || !loaded?.arrays.signal_values || !worker || trying) return;
     trying = true;
+    const nFrames = loaded.arrays.signal_values.length, t0 = performance.now();
+    tryElapsedMs = 0; tryEstimateMs = msPerFrame == null ? null : msPerFrame * nFrames;
+    const tick = setInterval(() => (tryElapsedMs = performance.now() - t0), 100);
     const opt = { ...(loaded.record.provenance.options ?? {}), kernel: { a: chosen.a, tau: chosen.tau } };
-    const r = await ask({ type: 'run', chunk: chunkOf(loaded), opt });
-    trying = false;
+    let r;
+    try { r = await ask({ type: 'run', chunk: chunkOf(loaded), opt }); } finally { clearInterval(tick); trying = false; }
+    msPerFrame = (performance.now() - t0) / Math.max(1, nFrames);
     if (!r.ok || r.result.status !== 'ok') { saveError = `try failed: ${r.error ?? r.result?.message}`; return; }
     tryResult = r.result;
     tried = [...tried, { source: chosen.source, a: chosen.a, tau: chosen.tau, n_events: r.result.events.length, n_spikes: r.result.spikeTimes.length }];
@@ -460,7 +467,7 @@
             </div>
             <div class="trow">
               <span class="ocap">B · the trace as autocalibration fitted it, other events removed · <span class="keptkey">shaded</span>: the events it used ·
-                <span style="color:#2f6db5">fit at its own kernel</span>{#if chosen?.a != null} · <span style="color:#e8590c">at the chosen kernel</span>{/if}</span>
+                <span style="color:#2f6db5">fit at its own kernel</span>{#if chosen?.a != null} · <span style="color:#e8590c">at the chosen kernel: {chosenLabel} (a {fmt(chosen.a, 3)}, τ {fmt(chosen.tau, 3)} s)</span>{/if}</span>
               {#if panelB}
                 {#key panelB.length + ':' + keptRegions.length}
                   <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} seriesList={panelB} fill height={160} yAxisSize={56} padRight={16} showXAxis={false} syncKey="review"
@@ -470,10 +477,10 @@
             </div>
             <!-- no yLabel here: a y-axis title widens this plot's left gutter only, which shifts its time axis against A and B -->
             <div class="srow">
-              <span class="ocap">inferred spikes{tryResult ? ' with the tried kernel' : ''} (height = spikes in that frame) · {spikeYs.reduce((s, c) => s + c, 0)} in this window</span>
-              {#key !!tryResult}
-                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} seriesList={[{ ys: spikeLine, stroke: tryResult ? '#e8590c' : '#2f6db5', width: 2 }]} height={135} yAxisSize={56} padRight={16} syncKey="review"
-                  xLabel="window time (s)" yRange={[0, Math.max(1, ...spikeYs) * 1.1]}
+              <span class="ocap">inferred spikes{tryResult ? ' with the tried kernel' : ''}: one dot per spike, stacked when a frame has several · {spikeYs.reduce((s, c) => s + c, 0)} spikes in {spikeYs.filter((c) => c > 0).length} events</span>
+              {#key (tryResult ? 't' : 'o') + spikeDots.length}
+                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} seriesList={(spikeDots.length ? spikeDots : [spikeYs.map(() => null)]).map((ys) => ({ ys, stroke: tryResult ? '#e8590c' : '#2f6db5', dots: 7 }))} yIntegers height={135} yAxisSize={56} padRight={16} syncKey="review"
+                  xLabel="window time (s)" yRange={[0.3, Math.max(1, spikeDots.length) + 0.7]}
                   xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
               {/key}
             </div>
@@ -505,6 +512,12 @@
               </div>
               <div class="actions">
                 <button onclick={tryKernel} disabled={!chosen || chosen.a == null || trying || !!engineError}>{trying ? 'trying…' : 'Try (T)'}</button>
+                {#if trying}
+                  <span class="tryprog" title={tryEstimateMs == null ? 'no estimate until the first try finishes' : 'estimated from your last try'}>
+                    <span class="tbar" class:indet={tryEstimateMs == null}><span style={tryEstimateMs == null ? '' : `width:${Math.min(97, (100 * tryElapsedMs) / tryEstimateMs)}%`}></span></span>
+                    <span class="small">{(tryElapsedMs / 1000).toFixed(1)} s{tryEstimateMs != null ? ` of ~${Math.max(1, Math.round(tryEstimateMs / 1000))} s` : ''}</span>
+                  </span>
+                {/if}
                 <button class="save" onclick={save} disabled={!chosen || saving}>{saving ? 'saving…' : 'Save & next (Enter)'}</button>
                 <button onclick={prev}>← previous</button><button onclick={() => next()}>skip →</button>
                 {#if tried.length}{@const t = tried[tried.length - 1]}<span class="muted small ell" title={tried.map((x) => `${x.source} a ${fmt(x.a, 3)} τ ${fmt(x.tau, 3)}: ${x.n_events} events, ${x.n_spikes} spikes`).join('\n')}>tried {t.source}: {t.n_events} events, {t.n_spikes} spikes{tried.length > 1 ? ` (+${tried.length - 1} earlier)` : ''}</span>{/if}
@@ -639,6 +652,11 @@
   kbd { border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: 0.75rem; }
   .actions { display: flex; gap: 6px; align-items: center; margin-top: 3px; min-width: 0; }
   .note { flex: 1 1 0; min-width: 0; }
+  .tryprog { display: inline-flex; align-items: center; gap: 4px; }
+  .tbar { position: relative; display: inline-block; width: 90px; height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+  .tbar > span { position: absolute; left: 0; top: 0; bottom: 0; background: #e8590c; transition: width 0.1s linear; }
+  .tbar.indet > span { width: 30%; animation: indet 1.1s ease-in-out infinite; }
+  @keyframes indet { from { left: -30%; } to { left: 100%; } }
   .save { font-weight: 600; }
   .muted { color: var(--text); opacity: 0.7; margin: 0; } .small { font-size: 0.78rem; }
   .err { color: #c92a2a; margin: 0; }
