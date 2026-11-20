@@ -1,5 +1,12 @@
 # Export request to interface2: every slice with human-confirmed spikes (2026-11-20)
 
+> **STATUS 2026-11-20: ON HOLD; nothing exported.** Per interface2, relaying Tony, most of these
+> slices are waiting on the final tracking and extraction run, and nothing is exported before it
+> lands. Only three have finished tracking and been reviewed clean: 411, 434 and 465. All three
+> are zero-spike slices (list B), so exporting them would add no kernels. 415 is not ready: Tony
+> set it aside on 2026-11-03 to review its tracking. Re-file this request against the final run
+> once Tony says it is in.
+
 > **DRAFT, 2026-11-20, from 065 kernel. Not murderboarded.** This is a request under the
 > existing file format, [lab-recording-contract.md](lab-recording-contract.md) version 2. It
 > does not change that format. It says **which** recordings to write, and adds four optional
