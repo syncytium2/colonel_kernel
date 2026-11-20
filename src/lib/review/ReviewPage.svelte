@@ -99,13 +99,25 @@
   // ---------------------------------------------------------------- plots (window time from 0: blind)
   const t0 = $derived(loaded?.arrays.times_s ? loaded.arrays.times_s[0] : 0);
   const xs = $derived(loaded?.arrays.times_s ? Array.from(loaded.arrays.times_s, (t) => t - t0) : []);
+  const FIT_BLUE = 'rgba(47, 109, 181, 0.5)', FIT_ORANGE = 'rgba(232, 89, 12, 0.55)';   // fits: wide and see-through, under the signal
   const traceSeries = $derived.by(() => {
     if (!loaded) return [];
+    // drawn in order, so the signal goes LAST (thin, dark, on top) and the fits underneath, semi-transparent:
+    // where they agree the signal shows through the fit, where they differ the gap shows
     const a = loaded.arrays, s = [];
-    if (a.values) s.push({ ys: Array.from(a.values), stroke: 'var(--text)', width: 1 });
-    if (a.fit) s.push({ ys: Array.from(a.fit), stroke: '#2f6db5', width: 1.5 });
     if (a.drift) s.push({ ys: Array.from(a.drift), stroke: '#999', width: 1, dash: [4, 3] });
-    if (tryResult?.fit) s.push({ ys: Array.from(tryResult.fit), stroke: '#e8590c', width: 1.5 });
+    if (a.fit) s.push({ ys: Array.from(a.fit), stroke: FIT_BLUE, width: 2 });
+    if (tryResult?.fit) s.push({ ys: Array.from(tryResult.fit), stroke: FIT_ORANGE, width: 2 });
+    if (a.values) s.push({ ys: Array.from(a.values), stroke: 'var(--text-h)', width: 0.8 });
+    return s;
+  });
+  // A's residual: the signal minus the fit (and minus the tried fit), on A's own y scale (see resRange)
+  const residSeries = $derived.by(() => {
+    if (!loaded?.arrays.values || !loaded.arrays.fit) return [];
+    const v = loaded.arrays.values, f = loaded.arrays.fit;
+    const s = [{ ys: Array.from(v, () => 0), stroke: '#999', width: 0.6 },
+               { ys: Array.from(v, (x, i) => x - f[i]), stroke: 'var(--text-h)', width: 0.8 }];
+    if (tryResult?.fit) { const g = tryResult.fit; s.push({ ys: Array.from(v, (x, i) => x - g[i]), stroke: '#e8590c', width: 0.8 }); }
     return s;
   });
   // The strip shows spikes as stacked dots, one dot per spike: a frame with 2 spikes has dots at heights 1
@@ -133,12 +145,13 @@
     const rec = loaded.record, dt = rec.timing.dt_s, ff = rec.identity.frame_first ?? 0, mod = Float64Array.from(loaded.arrays.autocal_mod);
     const m = meanOf(loaded.arrays.values) ?? 1, scale = (ys) => Array.from(ys, (v) => v * m);
     const spikes = Float64Array.from((rec.autocal?.events ?? []).flatMap((e) => Array(e.count ?? 1).fill((e.frame - ff + 1) * dt)));
-    const s = [{ ys: scale(mod), stroke: 'var(--text)', width: 1 }];
-    if (loaded.arrays.autocal_mod_fit) s.push({ ys: scale(loaded.arrays.autocal_mod_fit), stroke: '#2f6db5', width: 1.5 });
+    const s = [];   // fits first, semi-transparent; the trace last, thin, on top (as A)
+    if (loaded.arrays.autocal_mod_fit) s.push({ ys: scale(loaded.arrays.autocal_mod_fit), stroke: FIT_BLUE, width: 2 });
     if (chosen?.a != null && spikes.length) {
       const fit = calibEnergy(chosen.a, chosen.tau, spikes, mod, dt, AUTOCAL_DEFAULTS.tDrift, rec.provenance.event_placement ?? 'matlab').fit;
-      s.push({ ys: scale(fit), stroke: '#e8590c', width: 1.5 });
+      s.push({ ys: scale(fit), stroke: FIT_ORANGE, width: 2 });
     }
+    s.push({ ys: scale(mod), stroke: 'var(--text-h)', width: 0.8 });
     return s;
   });
 
@@ -157,6 +170,14 @@
   const yAuto = $derived(rangeOf([...traceSeries.map((s) => s.ys), ...(panelB ?? []).map((s) => s.ys)]));
   const yFixedOk = $derived(Number.isFinite(Number(yLo)) && Number.isFinite(Number(yHi)) && yLo !== '' && yHi !== '' && Number(yHi) > Number(yLo));
   const yRange = $derived(yMode === 'fixed' && yFixedOk ? [Number(yLo), Number(yHi)] : yAuto);
+  // the residual row has A's y scale: its range is A's range times (residual height / A's height), centred on 0
+  const RES_H = 64;
+  let hA = $state(0);
+  const resRange = $derived.by(() => {
+    const span = yRange ? yRange[1] - yRange[0] : 1;
+    const half = hA > 0 ? (span * RES_H) / hA / 2 : span / 6;
+    return [-half, half];
+  });
   function fixYHere() { if (yAuto) { yLo = yAuto[0].toPrecision(4); yHi = yAuto[1].toPrecision(4); yMode = 'fixed'; } }
   // one x-axis: drag on any row zooms all three, double-click resets; a new window starts unzoomed
   let xZoom = $state(null);
@@ -463,13 +484,22 @@
         {#if loadError}<p class="err">{loadError}</p>{/if}
         {#if loaded}
           <div class="traces">
-            <div class="trow">
-              <span class="ocap">A · the trace MLspike received · <span style="color:#2f6db5">fit</span> · <span style="color:#999">drift</span>{#if tryResult} · <span style="color:#e8590c">tried kernel</span>{/if}</span>
+            <div class="trow" bind:clientHeight={hA}>
+              <span class="ocap">A · the trace MLspike received (thin, on top) · <span style="color:#2f6db5">fit</span> · <span style="color:#999">drift</span>{#if tryResult} · <span style="color:#e8590c">tried kernel</span>{/if}</span>
               {#key traceSeries.length}
                 <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} seriesList={traceSeries} fill height={160} yAxisSize={56} padRight={16} showXAxis={false} syncKey="review"
                   {yRange} xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
               {/key}
             </div>
+            {#if residSeries.length}
+              <div class="rrow">
+                <span class="ocap">A − fit (residual, same y scale as A): up = signal the fit left out, down = fit with no signal{#if tryResult} · <span style="color:#e8590c">− tried fit</span>{/if}</span>
+                {#key residSeries.length}
+                  <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} seriesList={residSeries} height={RES_H} yAxisSize={56} padRight={16} showXAxis={false} syncKey="review"
+                    yRange={resRange} xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
+                {/key}
+              </div>
+            {/if}
             <div class="trow">
               <span class="ocap">B · the trace as autocalibration fitted it, other events removed · <span class="keptkey">shaded</span>: the events it used ·
                 <span style="color:#2f6db5">fit at its own kernel</span>{#if chosen?.a != null} · <span style="color:#e8590c">at the chosen kernel: {chosenLabel} (a {fmt(chosen.a, 3)}, τ {fmt(chosen.tau, 3)} s)</span>{/if}</span>
@@ -629,6 +659,7 @@
   .traces { flex: 1 1 auto; min-height: 260px; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
   .trow { flex: 1 1 0; min-height: 70px; position: relative; }
   .srow { flex: 0 0 auto; position: relative; }
+  .rrow { flex: 0 0 auto; position: relative; }
   .ocap { position: absolute; top: 0; left: 62px; z-index: 2; font-size: 0.75rem; color: var(--text-h); background: color-mix(in srgb, var(--bg) 80%, transparent); padding: 0 4px; border-radius: 3px; pointer-events: none; }
   .keptkey { background: rgba(47, 109, 181, 0.22); padding: 0 3px; }
   .krow { flex: 0 0 auto; display: flex; gap: 10px; align-items: stretch; }
