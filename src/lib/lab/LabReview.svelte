@@ -288,10 +288,12 @@
       </div>
       <div class="cell">
         {#if b}
+          <div class="plotbox">
           {#key `${b.kernel.series.length}-${method}-${dark}-${plotHeight}-${yKey}-${unitPeak}`}
             <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={b.kernel.lag} seriesList={b.kernel.series} xRange={LAG_RANGE} {yRange} yAxisSize={60} padRight={12}
               cursorPoints={false} zeroLine xLabel="lag (s)" yLabel={unitPeak ? 'peak = 1' : 'dF/F₀ per spike'} height={plotHeight} />
           {/key}
+          </div>
           <table class="mini">
             <tbody>
               {#each shownOf(res) as v (v.id)}
@@ -304,10 +306,12 @@
       </div>
       <div class="cell">
         {#if b?.sta}
+          <div class="plotbox">
           {#key `${b.sta.series.length}-${dark}-${plotHeight}-${yKey}-${unitPeak}`}
             <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={b.sta.lag} seriesList={b.sta.series} xRange={LAG_RANGE} {yRange} yAxisSize={60} padRight={12}
               cursorPoints={false} zeroLine xLabel="lag (s)" yLabel={unitPeak ? 'peak = 1' : 'dF/F₀'} height={plotHeight} />
           {/key}
+          </div>
           <table class="mini">
             <tbody>
               {#each shownOf(res) as v (v.id)}
@@ -344,7 +348,13 @@
   .rowhead { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-top: 10px; padding-top: 6px; border-top: 2px solid var(--border); font-size: 13px; }
   .rowhead select { font: inherit; color: var(--text-h); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
   .verdict { font-style: italic; }
-  .cell { min-width: 0; }
+  /* Each plot's numbers sit beside it, not under it (Tony, 2026-11-20): stacked, the tables
+     made every row about twice the plot's height. Below 1300 px two columns of plot + table
+     get too narrow, so the table drops back under its plot. */
+  .cell { min-width: 0; display: flex; align-items: flex-start; gap: 10px; }
+  .plotbox { flex: 1 1 auto; min-width: 0; }
+  .cell .mini { flex: none; margin-top: 4px; }
+  @media (max-width: 1300px) { .cell { flex-direction: column; align-items: stretch; } }
   .mini { border-collapse: collapse; font-size: 11.5px; }
   .mini td { padding: 0 8px 0 0; white-space: nowrap; }
 </style>
