@@ -107,6 +107,13 @@
     if (tryResult?.fit) s.push({ ys: Array.from(tryResult.fit), stroke: '#e8590c', width: 1.5 });
     return s;
   });
+  // The strip draws each spike as a line 0 -> count -> 0 over its neighbouring frames, null elsewhere (no
+  // line between spikes). Bars were 0.6 of a frame wide: with ~3000 frames across ~800 px, a fifth of a pixel.
+  const spikeLine = $derived.by(() => {
+    const y = new Array(spikeYs.length).fill(null);
+    spikeYs.forEach((c, i) => { if (c > 0) { y[i] = c; if (i > 0 && y[i - 1] == null) y[i - 1] = 0; if (i + 1 < y.length && !(spikeYs[i + 1] > 0)) y[i + 1] = 0; } });
+    return y;
+  });
   const spikeYs = $derived.by(() => {
     if (!loaded) return [];
     const n = xs.length, y = new Array(n).fill(0), ff = loaded.record.identity.frame_first ?? 0;
@@ -465,8 +472,8 @@
             <div class="srow">
               <span class="ocap">inferred spikes{tryResult ? ' with the tried kernel' : ''} (height = spikes in that frame) · {spikeYs.reduce((s, c) => s + c, 0)} in this window</span>
               {#key !!tryResult}
-                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} ys={spikeYs} kind="stems" color={tryResult ? '#e8590c' : '#2f6db5'} height={115} yAxisSize={56} padRight={16} syncKey="review"
-                  xLabel="window time (s)" yRange={[0, Math.max(1, ...spikeYs)]} barSize={[0.6, 3]}
+                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} seriesList={[{ ys: spikeLine, stroke: tryResult ? '#e8590c' : '#2f6db5', width: 2 }]} height={135} yAxisSize={56} padRight={16} syncKey="review"
+                  xLabel="window time (s)" yRange={[0, Math.max(1, ...spikeYs) * 1.1]}
                   xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
               {/key}
             </div>
@@ -610,6 +617,7 @@
   .krow > div { border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
   .kshape { flex: 1 1 300px; min-width: 240px; }
   .cpanel { flex: 0 0 auto; position: relative; }
+  .cpanel > .cap, .kshape > .cap { display: block; }
   .help { display: inline-block; margin-left: 6px; }
   .help summary { list-style: none; cursor: pointer; border: 1px solid var(--border); border-radius: 50%; width: 1.3em; text-align: center; display: inline-block; }
   .help[open] .howto { position: absolute; right: 0; bottom: 100%; z-index: 30; width: 34em; background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
