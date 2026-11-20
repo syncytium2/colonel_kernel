@@ -27,7 +27,7 @@
   // users. Direct/screenshot links still work: #tab1 / #tab2 / #tab3 (and #tab0/#help)
   // pick their tab explicitly.
   const LAB_TAB = 9;
-  const REVIEW_TAB = 10;
+  const REVIEW_TAB = 11; // 10 is LAB · Kernel review (#lab-review) on the lab-exclusions branch
   function initialTab() {
     if (typeof location === 'undefined') return 0;
     const h = location.hash.replace('#', '');
@@ -311,10 +311,10 @@
       </button>
     {/if}
     {#if LabExtraction}
-      <button class="labbtn" class:active={tab === LAB_TAB} onclick={() => (tab = LAB_TAB)} title="Lab only, dev server only: kernels from raw fluorescence">LAB · Extraction</button>
+      <button class="labbtn" class:active={tab === LAB_TAB} onclick={() => (tab = LAB_TAB)} title="Lab only, dev server only: kernels from raw fluorescence">LAB · Kernel extraction</button>
     {/if}
     {#if ReviewPage}
-      <button class="labbtn" class:active={tab === REVIEW_TAB} onclick={() => (tab = REVIEW_TAB)} title="Lab only, dev server only: review jsMLspike's inferred events, blind">LAB · Review</button>
+      <button class="labbtn" class:active={tab === REVIEW_TAB} onclick={() => (tab = REVIEW_TAB)} title="Lab only, dev server only: review jsMLspike's inferred events, blind">LAB · jsMLspike review</button>
     {/if}
     <!-- Shared plot-width preference — both tabs obey it (2026-07-03 layout unification). -->
     <button class="widthbtn" onclick={() => (wide = !wide)} title="Toggle plot width">

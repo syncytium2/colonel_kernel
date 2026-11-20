@@ -1,5 +1,5 @@
 {
   "_comment": "ADR-0054. The jsMLspike commit the review page is built against. The dev server resolves `jsmlspike/*` to the checkout named by CK_JSMLSPIKE_DIR and refuses one at another commit. Read only by vite.config.js and the dev-only review page; never in dist/.",
   "repo": "syncytium2/jsMLspike",
-  "commit": "9b9090988f2373ca85237cac7545ba78b60bab6d"
+  "commit": "42c01aca7c76f97fb8f1766a70830c2f6497a31e"
 }

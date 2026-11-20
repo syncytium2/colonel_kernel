@@ -63,7 +63,7 @@ In Git Bash:
 CK_LAB_RAW_DIR="C:/Users/defazio/University of Michigan Dropbox/Richard DeFazio/data/rawF_kernel_test" npm run dev
 ```
 
-The `LAB · Extraction` button exists only on the dev server. `scripts/lab-shot.mjs OUTDIR`
+The `LAB · Kernel extraction` button exists only on the dev server. `scripts/lab-shot.mjs OUTDIR`
 screenshots the page (`LAB_SCHEME=dark`, `LAB_VERDICT=unsure` to exercise a save); the cloud
 session needed `PW_CHROMIUM` to name a browser, 065 may not.
 

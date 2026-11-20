@@ -31,7 +31,7 @@ CK_JSMLSPIKE_DIR=~/jsmlspike-for-review npm run review-fixture
 CK_JSMLSPIKE_DIR=~/jsmlspike-for-review npm run dev
 ```
 
-Then open **http://localhost:5173/#review** (or click **LAB · Review**).
+Then open **http://localhost:5173/#review** (or click **LAB · jsMLspike review**).
 
 The simulated recording is made to show every kind of window you will meet: a cell with a
 clear kernel, a cell calibrated on one event, a cell where autocalibration gave up, a cell with a
