@@ -64,6 +64,10 @@ Nothing in it is real data.
 Decisions are saved, as you make them, in `jsmlspike_review.jsonl` in the results folder
 (`exports/review/`). The format is `jsmlspike-review/1`, in jsMLspike `docs/result-format.md`.
 
+Type your initials in **reviewer** once. Each decision carries them, and next time the page fills them
+in from the last decision in that folder's log (the page stores nothing in the browser). If someone
+else reviewed last, type over them.
+
 ## Real results
 
 Point the page at a folder of jsMLspike results (made with jsMLspike's `tools/run.mjs`) instead of the

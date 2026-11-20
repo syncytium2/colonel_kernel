@@ -1,7 +1,7 @@
 // The review page's logic (src/lib/review/model.js), without a browser or jsMLspike.   npm run test:review
 import {
   indexEntry, split, burstFlags, flagsOf, wellDetermined, orderItems, neighbours, sliceSuggestion, suggestionsFor,
-  preselect, inForce, makeRecord, bulkPlan, progress, mss, shuffled,
+  preselect, inForce, makeRecord, bulkPlan, progress, mss, shuffled, lastReviewer,
 } from './model.js';
 
 let pass = 0, fail = 0;
@@ -101,6 +101,12 @@ for (const mode of ['worst-first', 'priority', 'datecode', 'random']) {
   check(mss(0) === '0:00' && mss(299.9) === '5:00' && mss(61) === '1:01', 'window time as m:ss from 0');
   check(shuffled([1, 2, 3, 4, 5], 9).slice().sort().join() === '1,2,3,4,5', 'shuffle is a permutation');
 }
+
+// the reviewer's initials come back from the log: the latest record that has any
+check(lastReviewer([]) === '', 'lastReviewer: empty log');
+check(lastReviewer([{ reviewer: 'TD' }, { reviewer: 'AB' }]) === 'AB', 'lastReviewer: latest wins');
+check(lastReviewer([{ reviewer: 'TD' }, { reviewer: null }, { reviewer: '  ' }, {}]) === 'TD', 'lastReviewer: skips records without initials');
+check(lastReviewer([{ reviewer: ' TD ' }]) === 'TD', 'lastReviewer: trimmed');
 
 console.log(`review: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

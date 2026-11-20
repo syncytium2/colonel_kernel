@@ -10,7 +10,7 @@
   import { calibEnergy, AUTOCAL_DEFAULTS } from 'jsmlspike/autocal';
   import {
     PAGE_VERSION, split, burstFlags, flagsOf, orderItems, suggestionsFor, neighbours, preselect, inForce,
-    makeRecord, bulkPlan, progress, mss, wellDetermined, THRESHOLDS,
+    makeRecord, bulkPlan, progress, mss, wellDetermined, THRESHOLDS, lastReviewer,
   } from './model.js';
   import pin from './engine-pin.json';
 
@@ -26,6 +26,7 @@
   let seed = $state((Date.now() % 1e9) >>> 0);
   let excludeLimit = $state(false), excludeBurst = $state(false);
   let reviewer = $state('');
+  let reviewerFromLog = $state(false);         // the initials were filled in from the decision log, not typed
   let revealedOrder = $state(false);           // reveal 'order' used this session
 
   const parts = $derived(split(index));
@@ -262,6 +263,8 @@
       try { const k = await (await fetch('/__review/key')).json(); keyMap = new Map((k.entries ?? []).map((e) => [e.stem, e])); } catch { keyMap = new Map(); }
     }
     try { log = parseLog(await (await fetch('/__review/decisions')).text()); } catch (e) { logError = String(e); }
+    // remember the reviewer from the folder's own log (no browser storage: the privacy rule); never over typed initials
+    if (!reviewer.trim()) { const r = lastReviewer(log); if (r) { reviewer = r; reviewerFromLog = true; } }
   }
   onMount(() => {
     refresh();
@@ -314,7 +317,12 @@
     <label class="chk"><input type="checkbox" bind:checked={excludeLimit} /> slice: exclude range-limit kernels</label>
     <label class="chk"><input type="checkbox" bind:checked={excludeBurst} /> slice: exclude kernels resting mostly on burst events</label>
 
-    <label>reviewer <input type="text" bind:value={reviewer} placeholder="initials" style="width:6em" /></label>
+    <label>reviewer <input type="text" bind:value={reviewer} oninput={() => (reviewerFromLog = false)} placeholder="initials" style="width:6em" /></label>
+    {#if reviewerFromLog}
+      <p class="muted small">From the last decision saved in this folder. Not you? Type your initials.</p>
+    {:else if !reviewer.trim()}
+      <p class="muted small">Type your initials once; they are saved with each decision and filled in next time.</p>
+    {/if}
 
     <div class="progress">
       <b>{prog.decided}</b> of {prog.total} decided · {prog.left} left · ETA {etaText}

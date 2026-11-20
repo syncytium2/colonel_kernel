@@ -237,5 +237,16 @@ export function progress(total, decidedCount, durationsMs) {
   return { total, decided: decidedCount, left, etaMs: m === null ? null : left * m };
 }
 
+/** The initials on the most recent record in the decision log that has any, or ''. The log is
+ *  append-only, so the last line is the latest. This is how the page remembers the reviewer: from
+ *  the results folder's own log, with no browser storage (colonel_kernel's privacy rule). */
+export function lastReviewer(log) {
+  for (let i = log.length - 1; i >= 0; i--) {
+    const r = typeof log[i]?.reviewer === 'string' ? log[i].reviewer.trim() : '';
+    if (r) return r;
+  }
+  return '';
+}
+
 /** m:ss from the start of the window (blind review shows window time only). */
 export function mss(s) { const t = Math.max(0, Math.round(s)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }
