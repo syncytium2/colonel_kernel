@@ -110,6 +110,11 @@
   });
   // The strip shows spikes as stacked dots, one dot per spike: a frame with 2 spikes has dots at heights 1
   // and 2. MLspike's counts are whole numbers; a line or bar of height 2 read as "partial spikes".
+  // The spike row's height is fixed over the review set (most spikes in one frame in any of its windows),
+  // so it does not change from window to window; a tried kernel with more spikes than that stretches it.
+  const setMaxCount = $derived(Math.max(1, ...parts.items.map((e) => e.maxCount ?? 0)));
+  const rowMax = $derived(Math.max(setMaxCount, ...spikeYs));
+  const dotPx = $derived(Math.max(3, Math.min(8, Math.floor((60 / (rowMax + 0.4)) * 0.8))));   // ~60 px of plot area
   const spikeDots = $derived.by(() => {
     const maxC = Math.max(0, ...spikeYs);
     return Array.from({ length: maxC }, (_, k) => spikeYs.map((c) => (c >= k + 1 ? k + 1 : null)));
@@ -478,9 +483,9 @@
             <!-- no yLabel here: a y-axis title widens this plot's left gutter only, which shifts its time axis against A and B -->
             <div class="srow">
               <span class="ocap">inferred spikes{tryResult ? ' with the tried kernel' : ''}: one dot per spike, stacked when a frame has several · {spikeYs.reduce((s, c) => s + c, 0)} spikes in {spikeYs.filter((c) => c > 0).length} events</span>
-              {#key (tryResult ? 't' : 'o') + spikeDots.length}
-                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} seriesList={(spikeDots.length ? spikeDots : [spikeYs.map(() => null)]).map((ys) => ({ ys, stroke: tryResult ? '#e8590c' : '#2f6db5', dots: 7 }))} yIntegers height={135} yAxisSize={56} padRight={16} syncKey="review"
-                  xLabel="window time (s)" yRange={[0.3, Math.max(1, spikeDots.length) + 0.7]}
+              {#key (tryResult ? 't' : 'o') + spikeDots.length + ':' + dotPx}
+                <Plot axisColor="var(--text-h)" gridColor="var(--border)" xGrid={false} {xs} seriesList={(spikeDots.length ? spikeDots : [spikeYs.map(() => null)]).map((ys) => ({ ys, stroke: tryResult ? '#e8590c' : '#2f6db5', dots: dotPx }))} yBare height={135} yAxisSize={56} padRight={16} syncKey="review"
+                  xLabel="window time (s)" yRange={[0.4, rowMax + 0.6]}
                   xRange={xZoom} zoomable dblClickReset onZoom={(a, b) => (xZoom = a == null ? null : [a, b])} />
               {/key}
             </div>

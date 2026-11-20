@@ -121,5 +121,9 @@ check(kc.curves.length === 2 && kc.t.at(-1) === 8, 'kernelCurves: skips kernels 
 check(kc.curves[0].ys[0] === 0.02 && Math.abs(kc.curves[1].ys[2] - 0.01 * Math.exp(-2)) < 1e-15, 'kernelCurves: a exp(-t/tau)');
 check(kernelCurves([]).t.at(-1) === 1, 'kernelCurves: at least 1 s with nothing to draw');
 
+// the spike row's height over the set: most spikes in one frame, 0 with no events
+check(indexEntry('s', { status: 'ok', events: { columns: { jump_frame: [1, 5], count: [1, 3] } } }).maxCount === 3, 'indexEntry: maxCount');
+check(indexEntry('s', { status: 'refused' }).maxCount === 0, 'indexEntry: maxCount 0 without events');
+
 console.log(`review: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

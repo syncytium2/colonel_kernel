@@ -49,6 +49,7 @@ export function indexEntry(stem, rec) {
     autocal: ac ? { ok: ac.ok, reason: ac.reason ?? null, a: ac.a, tau: ac.tau, nEvents: d?.nEvents ?? (ac.events?.length ?? null),
       flatness: d?.flatness ?? null, onBound: d?.onBound ?? [], eventFrames: (ac.events ?? []).map(x => x.frame) } : null,
     eventFrames: rec.events?.columns?.jump_frame ?? [],
+    maxCount: Math.max(0, ...(rec.events?.columns?.count ?? [])),   // most spikes in one frame: the spike row's height over the set
     bounds: rec.provenance?.options?.autocal ?? null,
   };
 }

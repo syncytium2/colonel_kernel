@@ -107,6 +107,9 @@
     xGrid = true,
     // Whole-number y ticks only (counts). Off by default: every existing plot is unchanged.
     yIntegers = false,
+    // A bare y-axis: no tick labels, tick marks or horizontal grid, but the gutter keeps its width so
+    // stacked plots stay aligned. Off by default: every existing plot is unchanged.
+    yBare = false,
     // EDIT mode (challenge tabs): click empty space to ADD a spike, shift-click the
     // nearest to REMOVE it, drag one to MOVE it. Emits data-time (snapped to
     // editSnapDt when given). Disables zoom while on. Off by default — every existing
@@ -308,6 +311,7 @@
           ...axisInk(),
           ...(yAxisSize != null ? { size: yAxisSize } : {}),
           ...(yIntegers ? { incrs: [1, 2, 5, 10, 20, 50, 100] } : {}),
+          ...(yBare ? { values: () => [], ticks: { show: false }, grid: { show: false } } : {}),
           ...(yLabel ? { label: yLabel, labelSize: 22, labelFont: '12px ' + getComputedStyle(document.documentElement).getPropertyValue('--sans') } : {}),
         },
       ],
