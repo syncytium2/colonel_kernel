@@ -361,7 +361,9 @@
   .colhead { font-weight: 600; font-size: 13px; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
   .rowhead { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-top: 10px; padding-top: 6px; border-top: 2px solid var(--border); font-size: 13px; }
   .rowhead select { font: inherit; color: var(--text-h); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
-  .verdict { font-style: italic; }
+  /* Verdicts should pop (Tony, 2026-11-20): red and bold. */
+  .verdict { color: #c8102e; font-weight: 700; font-size: 14px; }
+  @media (prefers-color-scheme: dark) { .verdict { color: #ff6b6b; } }
   /* Each plot's numbers sit beside it, not under it (Tony, 2026-11-20): stacked, the tables
      made every row about twice the plot's height. Below 1300 px two columns of plot + table
      get too narrow, so the table drops back under its plot. */
