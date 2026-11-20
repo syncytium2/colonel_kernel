@@ -106,7 +106,7 @@
     // Every one is opt-in; the defaults leave every existing plot unchanged.
     //   grid       false hides the grid lines on both axes (tick marks stay)
     //   yZeroLine  a horizontal line at y = 0 (zeroLine is the vertical one at x = 0)
-    //   zeroLineColor  colour for both zero lines, solid; null keeps the dashed --border line
+    //   zeroLineColor  colour for both zero lines (thin, dashed); null keeps --border
     //   xTickStep  one x tick every this many units (e.g. 1 s), no skipping
     //   yTickSpace minimum px between y ticks (uPlot's default is 30); smaller = denser
     grid = true,
@@ -215,7 +215,8 @@
         const { ctx } = u;
         ctx.save();
         ctx.strokeStyle = resolveColor(zeroLineColor ?? 'var(--border)');
-        if (!zeroLineColor) ctx.setLineDash([3, 3]);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
         ctx.beginPath();
         ctx.moveTo(cx, u.bbox.top);
         ctx.lineTo(cx, u.bbox.top + u.bbox.height);
@@ -230,7 +231,8 @@
         const { ctx } = u;
         ctx.save();
         ctx.strokeStyle = resolveColor(zeroLineColor ?? 'var(--border)');
-        if (!zeroLineColor) ctx.setLineDash([3, 3]);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
         ctx.beginPath();
         ctx.moveTo(u.bbox.left, cy);
         ctx.lineTo(u.bbox.left + u.bbox.width, cy);
