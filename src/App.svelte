@@ -665,7 +665,7 @@
     font-size: 13px !important;
   }
   .navunfold {
-    align-self: flex-start;
+    align-self: flex-end; /* on the right, with the other fold controls */
     font: 12px var(--mono);
     color: var(--text-h);
     background: transparent;

@@ -29,7 +29,10 @@
   });
   const COLORS = $derived(dark ? VARIANT_COLORS_DARK : VARIANT_COLORS_LIGHT);
   const VARIANT_IDS = Object.keys(VARIANT_COLORS_LIGHT);
-  const LAG_RANGE = [-5, 5];
+  // Lag axis shown (Tony, 2026-11-20: "reset the x-axis -2s to 5 sec. one tick every sec").
+  // Kernels are still recovered over ±5 s; only the view and the amplitude scale use this.
+  const LAG_RANGE = [-2, 5];
+  const inView = (t) => t >= LAG_RANGE[0] && t <= LAG_RANGE[1];
   // Short names for the table rows and the legend; the full description is the legend's
   // second line and its tooltip.
   const SHORT = {
@@ -200,8 +203,9 @@
     for (const b of from) {
       for (const band of [b.kernel, b.sta]) {
         for (const sr of band?.series ?? []) {
-          for (const v of sr.ys) {
-            if (v == null || !Number.isFinite(v)) continue;
+          for (let i = 0; i < sr.ys.length; i++) {
+            const v = sr.ys[i];
+            if (v == null || !Number.isFinite(v) || !inView(band.lag[i])) continue;
             if (v < lo) lo = v;
             if (v > hi) hi = v;
           }
@@ -219,7 +223,12 @@
   const clippedIn = (b) => {
     if (!yRestricted || !yRange || !b) return false;
     for (const band of [b.kernel, b.sta]) {
-      for (const sr of band?.series ?? []) for (const v of sr.ys) if (Number.isFinite(v) && (v < yRange[0] || v > yRange[1])) return true;
+      for (const sr of band?.series ?? []) {
+        for (let i = 0; i < sr.ys.length; i++) {
+          const v = sr.ys[i];
+          if (Number.isFinite(v) && inView(band.lag[i]) && (v < yRange[0] || v > yRange[1])) return true;
+        }
+      }
     }
     return false;
   };
@@ -249,9 +258,10 @@
   <header class="bar">
     <div class="titlerow">
       <h2>Kernel review</h2>
-      <button class="fold" class:on={showSettings} onclick={() => (showSettings = !showSettings)}>{showSettings ? '▾' : '▸'} settings</button>
-      <button class="fold" class:on={showLegend} onclick={() => (showLegend = !showLegend)}>{showLegend ? '▾' : '▸'} legend</button>
       {#if loading || computing}<span class="busy">{loading || computing}…</span>{/if}
+      <!-- Fold controls on the right, where the tabs' fold is (Tony, 2026-11-20). -->
+      <button class="fold" class:on={showSettings} style="margin-left: auto" onclick={() => (showSettings = !showSettings)}>{showSettings ? '▾' : '▸'} settings</button>
+      <button class="fold" class:on={showLegend} onclick={() => (showLegend = !showLegend)}>{showLegend ? '▾' : '▸'} legend</button>
     </div>
     {#if showSettings}
     <div class="settings">
@@ -305,6 +315,8 @@
           <select value={r.roiIndex} onchange={(e) => setRoi(k, e.currentTarget.value)}>
             {#each r.rois as lab, i (i)}<option value={i}>{lab}{i === r.targetIndex ? ' (loose-patch)' : ''}</option>{/each}
           </select>
+        {:else}
+          <span></span>
         {/if}
         {#if r.loadError}
           <span class="err">{r.loadError}</span>
@@ -315,13 +327,16 @@
         {:else if res?.result}
           {@const rr = res.result}
           {@const a = rr.variants.find((v) => v.analyzable)?.agreement}
-          <span>{res.window.name} {fmt(rr.window.startS, 0)}–{fmt(rr.window.endS, 0)} s</span>
-          <span>{rr.spikeTimes.length} spikes</span>
-          {#if rr.masked.nFrames}<span>{rr.masked.nFrames} frames masked</span>{/if}
-          {#if a}<span>STA events {a.nAccepted} of {a.nEvents}</span>{/if}
-          {#if clippedIn(b)}<span class="err">clipped by the {yManual ? 'typed amplitude axis' : `axis set from ${scaleRow?.sliceId}`}</span>{/if}
+          <!-- Fixed slots, so the verdict sits in the same column on every row (Tony, 2026-11-20). -->
           <span class="verdict">verdict: {vd ? `${vd.verdict}${vd.stale ? ' (stale)' : ''}` : 'none'}</span>
-          {#if !rr.variants.some((v) => v.analyzable)}<span class="err">{rr.variants[0]?.reason}</span>{/if}
+          <span>{res.window.name} {fmt(rr.window.startS, 0)}–{fmt(rr.window.endS, 0)} s</span>
+          <span class="num">{rr.spikeTimes.length} spikes</span>
+          <span class="num">{rr.masked.nFrames ? `${rr.masked.nFrames} frames masked` : ''}</span>
+          <span class="num">{a ? `STA events ${a.nAccepted} of ${a.nEvents}` : ''}</span>
+          <span class="extra">
+            {#if clippedIn(b)}<span class="err">clipped by the {yManual ? 'typed amplitude axis' : `axis set from ${scaleRow?.sliceId}`}</span>{/if}
+            {#if !rr.variants.some((v) => v.analyzable)}<span class="err">{rr.variants[0]?.reason}</span>{/if}
+          </span>
         {:else}
           <span class="busy">queued</span>
         {/if}
@@ -331,7 +346,7 @@
           <div class="plotbox">
           {#key `${b.kernel.series.length}-${method}-${dark}-${plotHeight}-${yKey}-${unitPeak}`}
             <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={b.kernel.lag} seriesList={b.kernel.series} xRange={LAG_RANGE} {yRange} yAxisSize={60} padRight={12}
-              cursorPoints={false} zeroLine xLabel="lag (s)" yLabel={unitPeak ? 'peak = 1' : 'dF/F₀ per spike'} height={plotHeight} />
+              cursorPoints={false} zeroLine yZeroLine zeroLineColor="var(--text)" grid={false} xTickStep={1} yTickSpace={16} xLabel="lag (s)" yLabel={unitPeak ? 'peak = 1' : 'dF/F₀ per spike'} height={plotHeight} />
           {/key}
           </div>
           <table class="mini">
@@ -352,7 +367,7 @@
           <div class="plotbox">
           {#key `${b.sta.series.length}-${dark}-${plotHeight}-${yKey}-${unitPeak}`}
             <Plot axisColor="var(--text-h)" gridColor="var(--border)" xs={b.sta.lag} seriesList={b.sta.series} xRange={LAG_RANGE} {yRange} yAxisSize={60} padRight={12}
-              cursorPoints={false} zeroLine xLabel="lag (s)" yLabel={unitPeak ? 'peak = 1' : 'dF/F₀'} height={plotHeight} />
+              cursorPoints={false} zeroLine yZeroLine zeroLineColor="var(--text)" grid={false} xTickStep={1} yTickSpace={16} xLabel="lag (s)" yLabel={unitPeak ? 'peak = 1' : 'dF/F₀'} height={plotHeight} />
           {/key}
           </div>
           <table class="mini">
@@ -396,7 +411,11 @@
   @media (prefers-color-scheme: dark) { .err { color: #ff8a8a; } }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
   .colhead { font-weight: 600; font-size: 13px; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
-  .rowhead { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-top: 10px; padding-top: 6px; border-top: 2px solid var(--border); font-size: 13px; }
+  /* Fixed slots: recording, ROI, verdict, window, spikes, masked, STA events, then notes.
+     The verdict is the third slot on every row, so verdicts line up down the page. */
+  .rowhead { grid-column: 1 / -1; display: grid; grid-template-columns: 115px 165px 150px 150px 110px 150px 170px 1fr; align-items: baseline; column-gap: 12px; margin-top: 10px; padding-top: 6px; border-top: 2px solid var(--border); font-size: 13px; }
+  .rowhead > .err, .rowhead > .busy { grid-column: 3 / -1; }
+  .rowhead .extra { display: flex; flex-wrap: wrap; gap: 4px 12px; }
   .rowhead select { font: inherit; color: var(--text-h); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
   /* Verdicts should pop (Tony, 2026-11-20): red and bold. */
   .verdict { color: #c8102e; font-weight: 700; font-size: 14px; }

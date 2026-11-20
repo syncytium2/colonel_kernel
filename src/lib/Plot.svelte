@@ -102,6 +102,18 @@
     // stay readable when the system colour scheme is dark.
     axisColor = null,
     gridColor = null,
+    // Lab review page (Tony, 2026-11-20: "keep the zero line for x and y, but kill the rest").
+    // Every one is opt-in; the defaults leave every existing plot unchanged.
+    //   grid       false hides the grid lines on both axes (tick marks stay)
+    //   yZeroLine  a horizontal line at y = 0 (zeroLine is the vertical one at x = 0)
+    //   zeroLineColor  colour for both zero lines, solid; null keeps the dashed --border line
+    //   xTickStep  one x tick every this many units (e.g. 1 s), no skipping
+    //   yTickSpace minimum px between y ticks (uPlot's default is 30); smaller = denser
+    grid = true,
+    yZeroLine = false,
+    zeroLineColor = null,
+    xTickStep = null,
+    yTickSpace = null,
     // Long-time x axis (seconds): tick steps chosen from TIME_INCRS and labelled with their
     // unit, seconds up to 120 s steps and minutes from 5-minute steps (Tony, 2026-11-16).
     // False keeps uPlot's plain numeric ticks: every existing plot passes nothing.
@@ -159,6 +171,7 @@
       ink.ticks = { stroke: resolveColor(gridColor ?? axisColor) };
     }
     if (gridColor) ink.grid = { stroke: resolveColor(gridColor) };
+    if (!grid) ink.grid = { show: false };
     return ink;
   }
 
@@ -201,11 +214,26 @@
         if (cx < u.bbox.left || cx > u.bbox.left + u.bbox.width) return;
         const { ctx } = u;
         ctx.save();
-        ctx.strokeStyle = resolveColor('var(--border)');
-        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = resolveColor(zeroLineColor ?? 'var(--border)');
+        if (!zeroLineColor) ctx.setLineDash([3, 3]);
         ctx.beginPath();
         ctx.moveTo(cx, u.bbox.top);
         ctx.lineTo(cx, u.bbox.top + u.bbox.height);
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+    if (yZeroLine) {
+      drawClear.push((u) => {
+        const cy = u.valToPos(0, 'y', true);
+        if (cy < u.bbox.top || cy > u.bbox.top + u.bbox.height) return;
+        const { ctx } = u;
+        ctx.save();
+        ctx.strokeStyle = resolveColor(zeroLineColor ?? 'var(--border)');
+        if (!zeroLineColor) ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(u.bbox.left, cy);
+        ctx.lineTo(u.bbox.left + u.bbox.width, cy);
         ctx.stroke();
         ctx.restore();
       });
@@ -316,9 +344,10 @@
       ...(padRight != null ? { padding: [null, padRight, null, null] } : {}),
       hooks,
       axes: [
-        { show: showXAxis, label: xLabel || undefined, ...axisInk(), ...timeAxis() },
+        { show: showXAxis, label: xLabel || undefined, ...axisInk(), ...timeAxis(), ...(xTickStep ? { incrs: [xTickStep], space: 1 } : {}) },
         {
           ...axisInk(),
+          ...(yTickSpace != null ? { space: yTickSpace } : {}),
           ...(yAxisSize != null ? { size: yAxisSize } : {}),
           ...(yLabel ? { label: yLabel, labelSize: 22, labelFont: '12px ' + getComputedStyle(document.documentElement).getPropertyValue('--sans') } : {}),
         },
